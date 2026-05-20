@@ -1,65 +1,140 @@
-import Image from "next/image";
+import Link from "next/link"
+import { db } from "@/lib/db"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { ArrowRight, BookOpen, History, AlertTriangle } from "lucide-react"
 
-export default function Home() {
+export default async function HomePage() {
+  const categories = await db.category.findMany({
+    include: {
+      _count: { select: { tests: true } },
+    },
+    orderBy: { id: "asc" },
+  })
+
+  // Stats globales rápidos
+  const [totalAttempts, totalAnswers, recentAttempts] = await Promise.all([
+    db.examAttempt.count({ where: { finishedAt: { not: null } } }),
+    db.answer.count(),
+    db.examAttempt.findMany({
+      where: { finishedAt: { not: null } },
+      orderBy: { startedAt: "desc" },
+      take: 3,
+      include: { test: { include: { category: true } } },
+    }),
+  ])
+
+  // Errores pendientes (preguntas con última respuesta incorrecta)
+  const pendingErrors = await db.$queryRaw<{ count: bigint }[]>`
+    SELECT COUNT(*) as count FROM (
+      SELECT a.questionId, MAX(a.id) as lastId
+      FROM answers a
+      GROUP BY a.questionId
+    ) last
+    JOIN answers a ON a.id = last.lastId
+    WHERE a.isCorrect = 0
+  `
+  const errorsCount = Number(pendingErrors[0]?.count ?? 0)
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="space-y-10">
+      {/* Hero */}
+      <section>
+        <h1 className="text-3xl font-bold tracking-tight">¡Practica tus tests de la DGT!</h1>
+        <p className="text-slate-600 mt-2">
+          Elige una categoría, haz un test cuando quieras y revisa los errores recientes.
+        </p>
+      </section>
+
+      {/* Categorías */}
+      <section>
+        <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+          <BookOpen className="h-5 w-5" />
+          Categorías
+        </h2>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {categories.map((c) => (
+            <Link key={c.id} href={`/${c.slug}`} className="group">
+              <Card className="h-full transition hover:shadow-md hover:border-slate-300">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle>{c.name}</CardTitle>
+                    <Badge variant="secondary">{c.code}</Badge>
+                  </div>
+                  <CardDescription>{c.description}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between text-sm text-slate-600">
+                    <span>
+                      {c._count.tests} {c._count.tests === 1 ? "test" : "tests"} disponibles
+                    </span>
+                    <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      </section>
+
+      {/* Stats + accesos rápidos */}
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Link href="/test-errores" className="block">
+          <Card className={`h-full transition hover:shadow-md ${errorsCount > 0 ? "border-amber-200" : ""}`}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                Test de errores
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{errorsCount}</div>
+              <p className="text-sm text-slate-600 mt-1">
+                {errorsCount === 0 ? "Sin errores pendientes." : "preguntas falladas sin corregir"}
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Intentos completados</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{totalAttempts}</div>
+            <p className="text-sm text-slate-600 mt-1">{totalAnswers} respuestas registradas</p>
+          </CardContent>
+        </Card>
+
+        <Link href="/historial" className="block">
+          <Card className="h-full transition hover:shadow-md">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <History className="h-4 w-4" />
+                Historial reciente
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {recentAttempts.length === 0 ? (
+                <p className="text-sm text-slate-500">Aún no has hecho ningún test.</p>
+              ) : (
+                <ul className="space-y-1 text-sm">
+                  {recentAttempts.map((a) => (
+                    <li key={a.id} className="flex items-center justify-between">
+                      <span className="truncate">
+                        {a.test?.category?.name ?? "Errores"} – T{a.test?.testNumber ?? ""}
+                      </span>
+                      <span className="font-mono text-slate-600">
+                        {a.score}/{a.total}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        </Link>
+      </section>
     </div>
-  );
+  )
 }
