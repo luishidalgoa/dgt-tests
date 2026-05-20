@@ -1,6 +1,9 @@
 import Link from "next/link"
 import { db } from "@/lib/db"
 import { getTemaName } from "@/lib/temas"
+
+export const dynamic = "force-dynamic"
+
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
