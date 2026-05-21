@@ -2,11 +2,6 @@ import Link from "next/link"
 import { db } from "@/lib/db"
 import { requireUser } from "@/lib/auth"
 import { getTemaName } from "@/lib/temas"
-
-export const dynamic = "force-dynamic"
-
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import {
   ChevronLeft,
   ChartBar,
@@ -15,17 +10,18 @@ import {
   Target,
 } from "lucide-react"
 
+export const dynamic = "force-dynamic"
+
 interface TemaStatsRow {
-  prefix:           string
-  totalQuestions:   number
-  totalAnswers:     number
-  correctAnswers:   number
+  prefix:         string
+  totalQuestions: number
+  totalAnswers:   number
+  correctAnswers: number
 }
 
 export default async function StatsPage() {
   const user = await requireUser()
 
-  // Stats por prefijo de tema (TC X.Y) — scoped al usuario
   const raw = await db.$queryRaw<
     { prefix: string; totalQuestions: bigint; totalAnswers: bigint; correctAnswers: bigint }[]
   >`
@@ -54,7 +50,6 @@ export default async function StatsPage() {
     correctAnswers: Number(r.correctAnswers),
   }))
 
-  // Stats globales del usuario
   const [totalAttempts, totalAnswers, correctAnswers] = await Promise.all([
     db.examAttempt.count({ where: { userId: user.id, finishedAt: { not: null } } }),
     db.answer.count({ where: { attempt: { userId: user.id } } }),
@@ -63,11 +58,9 @@ export default async function StatsPage() {
 
   const globalAccuracy = totalAnswers > 0 ? (correctAnswers / totalAnswers) * 100 : 0
 
-  // Separar temas practicados vs no practicados
   const practiced = temas.filter((t) => t.totalAnswers > 0)
   const notPracticed = temas.filter((t) => t.totalAnswers === 0)
 
-  // Ordenar practicados por % acierto ASC (peores primero)
   practiced.sort((a, b) => {
     const accA = a.correctAnswers / a.totalAnswers
     const accB = b.correctAnswers / b.totalAnswers
@@ -75,113 +68,94 @@ export default async function StatsPage() {
   })
 
   return (
-    <div className="space-y-6">
-      <Link href="/" className="text-sm text-slate-600 hover:text-slate-900 inline-flex items-center gap-1">
+    <div>
+      <Link href="/" className="back-link">
         <ChevronLeft className="h-4 w-4" />
         Inicio
       </Link>
 
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-          <ChartBar className="h-7 w-7" />
-          Estadísticas
-        </h1>
-        <p className="text-slate-600 mt-1">
-          Tu rendimiento global y por tema del temario.
-        </p>
+      <header className="page-header">
+        <div>
+          <h1 style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <ChartBar className="h-7 w-7" />
+            Estadísticas
+          </h1>
+          <p className="lead">Tu rendimiento global y por tema del temario.</p>
+        </div>
+      </header>
+
+      {/* Stats globales — 4 cards */}
+      <div className="grid gap-3 sm:grid-cols-4 mb-6">
+        <StatCard label="Acierto global" value={`${globalAccuracy.toFixed(1)}%`} accent="green" />
+        <StatCard label="Intentos"       value={String(totalAttempts)} accent="ink" />
+        <StatCard label="Aciertos"        value={String(correctAnswers)} accent="green" />
+        <StatCard label="Fallos"          value={String(totalAnswers - correctAnswers)} accent="red" />
       </div>
 
-      {/* Stats globales */}
-      <div className="grid gap-3 sm:grid-cols-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-xs text-slate-500">Acierto global</div>
-            <div className="text-3xl font-bold mt-1">{globalAccuracy.toFixed(1)}%</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-xs text-slate-500">Intentos</div>
-            <div className="text-3xl font-bold mt-1">{totalAttempts}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-xs text-slate-500">Aciertos</div>
-            <div className="text-3xl font-bold mt-1 text-emerald-600">{correctAnswers}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-xs text-slate-500">Fallos</div>
-            <div className="text-3xl font-bold mt-1 text-red-500">{totalAnswers - correctAnswers}</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Temas practicados ordenados por acierto ASC */}
+      {/* Temas practicados */}
       {practiced.length > 0 && (
-        <section>
-          <h2 className="text-xl font-semibold flex items-center gap-2 mb-3">
-            <Target className="h-5 w-5" />
-            Rendimiento por tema
-          </h2>
-          <div className="space-y-2">
+        <section className="mb-8">
+          <div className="dash-section-title" style={{ margin: "0 4px 14px" }}>
+            <h3 style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Target className="h-5 w-5" />
+              Rendimiento por tema
+            </h3>
+            <span style={{ color: "var(--slate-500)", fontWeight: 600, fontSize: 13 }}>
+              {practiced.length} {practiced.length === 1 ? "tema" : "temas"}
+            </span>
+          </div>
+
+          <div className="card-soft" style={{ padding: 8 }}>
             {practiced.map((t) => {
               const acc = (t.correctAnswers / t.totalAnswers) * 100
-              const isWeak = acc < 70
+              const isWeak   = acc < 70
               const isStrong = acc >= 90
-              return (
-                <Card
-                  key={t.prefix}
-                  className={
-                    isWeak ? "border-red-200" : isStrong ? "border-emerald-200" : ""
-                  }
-                >
-                  <CardContent className="p-4 flex items-center justify-between gap-4">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className="font-mono text-xs">
-                          {t.prefix}
-                        </Badge>
-                        <span className="font-medium truncate">{getTemaName(t.prefix)}</span>
-                      </div>
-                      <div className="text-xs text-slate-500 mt-1">
-                        {t.totalQuestions} preguntas en el banco · {t.totalAnswers} respuestas dadas
-                      </div>
-                    </div>
+              const color    = isWeak ? "var(--red-500)" : isStrong ? "var(--green)" : "var(--amber)"
+              const barColor = isWeak
+                ? "linear-gradient(90deg, #fca5a5, var(--red-500))"
+                : isStrong
+                ? "linear-gradient(90deg, #86efac, var(--green-d))"
+                : "linear-gradient(90deg, #fcd34d, var(--amber))"
 
-                    <div className="flex items-center gap-3">
-                      <div className="hidden sm:block w-32 bg-slate-100 rounded-full h-2 overflow-hidden">
-                        <div
-                          className={`h-full ${
-                            isWeak ? "bg-red-400" : isStrong ? "bg-emerald-400" : "bg-amber-400"
-                          }`}
-                          style={{ width: `${acc}%` }}
-                        />
-                      </div>
-                      <div className="text-right min-w-[80px]">
-                        <div
-                          className={`text-xl font-bold ${
-                            isWeak ? "text-red-600" : isStrong ? "text-emerald-600" : ""
-                          }`}
-                        >
-                          {acc.toFixed(0)}%
-                        </div>
-                        <div className="text-xs text-slate-500 font-mono">
-                          {t.correctAnswers}/{t.totalAnswers}
-                        </div>
-                      </div>
-                      {isWeak ? (
-                        <TrendingDown className="h-5 w-5 text-red-500" />
-                      ) : isStrong ? (
-                        <TrendingUp className="h-5 w-5 text-emerald-500" />
-                      ) : (
-                        <TrendingUp className="h-5 w-5 text-amber-400" />
-                      )}
+              return (
+                <div
+                  key={t.prefix}
+                  className="dash-row-item"
+                  style={{ gridTemplateColumns: "auto 1fr auto auto", padding: "16px 18px" }}
+                >
+                  <span className="badge" style={{ fontSize: 11.5, padding: "4px 10px" }}>
+                    {t.prefix}
+                  </span>
+                  <div className="dash-row-title">
+                    {getTemaName(t.prefix)}
+                    <small>
+                      {t.totalQuestions} preguntas · {t.totalAnswers} respuestas
+                    </small>
+                  </div>
+                  <div className="hidden sm:flex items-center" style={{ width: 140 }}>
+                    <div style={{
+                      flex: 1,
+                      height: 8,
+                      borderRadius: 999,
+                      background: "var(--slate-100)",
+                      overflow: "hidden",
+                    }}>
+                      <div style={{ width: `${acc}%`, height: "100%", background: barColor }} />
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="font-mono-tabular" style={{ fontSize: 20, fontWeight: 800, color, minWidth: 56, textAlign: "right" }}>
+                      {acc.toFixed(0)}%
+                    </div>
+                    {isWeak ? (
+                      <TrendingDown className="h-5 w-5" style={{ color: "var(--red-500)" }} />
+                    ) : isStrong ? (
+                      <TrendingUp className="h-5 w-5" style={{ color: "var(--green)" }} />
+                    ) : (
+                      <TrendingUp className="h-5 w-5" style={{ color: "var(--amber)" }} />
+                    )}
+                  </div>
+                </div>
               )
             })}
           </div>
@@ -191,20 +165,49 @@ export default async function StatsPage() {
       {/* Temas sin practicar */}
       {notPracticed.length > 0 && (
         <section>
-          <h2 className="text-xl font-semibold mb-3 text-slate-600">
-            Temas sin practicar ({notPracticed.length})
-          </h2>
+          <div className="dash-section-title" style={{ margin: "0 4px 14px" }}>
+            <h3 style={{ color: "var(--slate-500)" }}>
+              Temas sin practicar ({notPracticed.length})
+            </h3>
+          </div>
           <div className="flex flex-wrap gap-2">
             {notPracticed.map((t) => (
-              <Badge key={t.prefix} variant="outline" className="px-3 py-1">
-                <span className="font-mono mr-2">{t.prefix}</span>
+              <Link
+                key={t.prefix}
+                href={`/temas/${encodeURIComponent(t.prefix)}`}
+                className="pill-ghost"
+                style={{ padding: "8px 14px", fontSize: 13, fontWeight: 600 }}
+              >
+                <span className="font-mono-tabular" style={{ marginRight: 8, color: "var(--orange-600)" }}>
+                  {t.prefix}
+                </span>
                 {getTemaName(t.prefix)}
-                <span className="ml-2 text-slate-500">({t.totalQuestions})</span>
-              </Badge>
+                <span style={{ marginLeft: 8, color: "var(--slate-400)" }}>
+                  ({t.totalQuestions})
+                </span>
+              </Link>
             ))}
           </div>
         </section>
       )}
+    </div>
+  )
+}
+
+
+function StatCard({ label, value, accent }: { label: string; value: string; accent: "green" | "red" | "ink" }) {
+  const color =
+    accent === "green" ? "var(--green)" :
+    accent === "red"   ? "var(--red-500)" :
+    "var(--ink)"
+  return (
+    <div className="card-soft" style={{ padding: 16 }}>
+      <div style={{ fontSize: 11.5, color: "var(--slate-500)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+        {label}
+      </div>
+      <div className="font-mono-tabular" style={{ fontSize: 28, fontWeight: 900, marginTop: 6, color, letterSpacing: "-0.02em" }}>
+        {value}
+      </div>
     </div>
   )
 }

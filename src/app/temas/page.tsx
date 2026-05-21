@@ -2,11 +2,6 @@ import Link from "next/link"
 import { db } from "@/lib/db"
 import { requireUser } from "@/lib/auth"
 import { getTemaName } from "@/lib/temas"
-
-export const dynamic = "force-dynamic"
-
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { ChevronLeft, BookMarked, ArrowRight } from "lucide-react"
 
 export default async function TemasPage() {
@@ -41,53 +36,80 @@ export default async function TemasPage() {
   }))
 
   return (
-    <div className="space-y-6">
-      <Link href="/" className="text-sm text-slate-600 hover:text-slate-900 inline-flex items-center gap-1">
+    <div>
+      <Link href="/" className="back-link">
         <ChevronLeft className="h-4 w-4" />
         Inicio
       </Link>
 
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-          <BookMarked className="h-7 w-7" />
-          Tests por tema
-        </h1>
-        <p className="text-slate-600 mt-1">
-          Practica preguntas de un tema concreto del temario.
-        </p>
-      </div>
+      <header className="page-header">
+        <div>
+          <h1 style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <BookMarked className="h-7 w-7" />
+            Tests por tema
+          </h1>
+          <p className="lead">Practica preguntas de un tema concreto del temario.</p>
+        </div>
+      </header>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {temas.map((t) => {
           const acc = t.totalAnswers > 0 ? (t.correctAnswers / t.totalAnswers) * 100 : null
+          const accColor = acc === null
+            ? "var(--slate-400)"
+            : acc < 70
+            ? "var(--red-500)"
+            : acc >= 90
+            ? "var(--green)"
+            : "var(--amber)"
           return (
-            <Link key={t.prefix} href={`/temas/${encodeURIComponent(t.prefix)}`}>
-              <Card className="h-full hover:shadow-md hover:border-slate-300 transition cursor-pointer">
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Badge variant="secondary" className="font-mono text-xs">
-                          {t.prefix}
-                        </Badge>
-                      </div>
-                      <h3 className="font-medium text-base leading-snug">{getTemaName(t.prefix)}</h3>
-                      <div className="text-xs text-slate-500 mt-2">
-                        {t.totalQuestions} preguntas
-                        {t.totalAnswers > 0 && (
-                          <>
-                            {" · "}
-                            <span className={acc !== null && acc < 70 ? "text-red-500" : "text-emerald-600"}>
-                              {acc?.toFixed(0)}% acierto
-                            </span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    <ArrowRight className="h-4 w-4 text-slate-400 flex-shrink-0 mt-1" />
+            <Link
+              key={t.prefix}
+              href={`/temas/${encodeURIComponent(t.prefix)}`}
+              className="card-soft"
+              style={{
+                padding: 18,
+                textDecoration: "none",
+                color: "inherit",
+                display: "block",
+                transition: "transform 0.15s, border-color 0.15s, box-shadow 0.15s",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <span
+                      className="font-mono-tabular"
+                      style={{
+                        padding: "3px 9px",
+                        borderRadius: 6,
+                        background: "rgba(249, 115, 22, 0.12)",
+                        color: "var(--orange-600)",
+                        fontSize: 11.5,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {t.prefix}
+                    </span>
+                    {acc !== null && (
+                      <span
+                        className="font-mono-tabular"
+                        style={{ marginLeft: "auto", fontSize: 14, fontWeight: 800, color: accColor }}
+                      >
+                        {acc.toFixed(0)}%
+                      </span>
+                    )}
                   </div>
-                </CardContent>
-              </Card>
+                  <h3 style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.35, margin: 0 }}>
+                    {getTemaName(t.prefix)}
+                  </h3>
+                  <div style={{ marginTop: 10, fontSize: 12, color: "var(--slate-500)", fontWeight: 500 }}>
+                    {t.totalQuestions} preguntas
+                    {t.totalAnswers > 0 && ` · ${t.correctAnswers}/${t.totalAnswers} aciertos`}
+                  </div>
+                </div>
+                <ArrowRight className="h-4 w-4" style={{ color: "var(--slate-400)", flexShrink: 0, marginTop: 2 }} />
+              </div>
             </Link>
           )
         })}

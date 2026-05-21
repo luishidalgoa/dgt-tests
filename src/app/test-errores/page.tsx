@@ -29,74 +29,77 @@ export default async function TestErroresPage({ searchParams }: PageProps) {
   // Caso 1: no se ha pedido tamaño todavía → mostrar pantalla de selección
   if (!requested) {
     return (
-      <div className="space-y-6">
-        <Link href="/" className="text-sm text-slate-600 hover:text-slate-900 inline-flex items-center gap-1">
+      <div>
+        <Link href="/" className="back-link">
           <ChevronLeft className="h-4 w-4" />
           Inicio
         </Link>
 
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-            <Lightbulb className="h-7 w-7 text-amber-500" />
-            Test de errores
-          </h1>
-          <p className="text-slate-600 mt-1">
-            Practica solo las preguntas que has fallado y no has vuelto a acertar.
-          </p>
-        </div>
+        <header className="page-header">
+          <div>
+            <h1 style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <Lightbulb className="h-7 w-7" style={{ color: "var(--amber)" }} />
+              Test de errores
+            </h1>
+            <p className="lead">
+              Practica solo las preguntas que has fallado y no has vuelto a acertar.
+            </p>
+          </div>
+        </header>
 
         {total === 0 ? (
-          <Card className="border-emerald-200 bg-emerald-50/30">
-            <CardContent className="p-10 text-center space-y-3">
-              <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto" />
-              <h2 className="text-xl font-semibold">¡Sin errores pendientes!</h2>
-              <p className="text-slate-600">
-                Haz algún test primero para que aparezcan tus fallos aquí.
-              </p>
-              <Button asChild>
-                <Link href="/">Ir a la página de inicio</Link>
-              </Button>
-            </CardContent>
-          </Card>
+          <div className="empty-state" style={{ borderColor: "rgba(34, 197, 94, 0.45)", color: "var(--green-d)" }}>
+            <CheckCircle2 className="h-12 w-12 mx-auto" style={{ color: "var(--green)" }} />
+            <h2 style={{ fontSize: 20, fontWeight: 800, margin: "12px 0 6px", color: "var(--ink)" }}>
+              ¡Sin errores pendientes!
+            </h2>
+            <p style={{ margin: "0 0 18px" }}>
+              Haz algún test primero para que aparezcan tus fallos aquí.
+            </p>
+            <Link href="/" className="btn-primary" style={{ display: "inline-flex" }}>
+              Ir a la página de inicio →
+            </Link>
+          </div>
         ) : (
-          <Card>
-            <CardContent className="p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm text-slate-500">Errores pendientes</div>
-                  <div className="text-4xl font-bold mt-1">{total}</div>
-                </div>
-                <Sparkles className="h-10 w-10 text-amber-400" />
-              </div>
-
+          <div className="card-soft warm" style={{ padding: 28 }}>
+            <div className="flex items-center justify-between mb-6">
               <div>
-                <div className="text-sm font-medium mb-2">
-                  ¿Cuántas preguntas quieres practicar?
+                <div style={{ fontSize: 11.5, color: "var(--slate-500)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Errores pendientes
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {[10, 20, 30, total].map((n, i) => {
-                    const realN = Math.min(n, total)
-                    if (i > 0 && realN === Math.min([10, 20, 30][i - 1] ?? 0, total)) return null
-                    return (
-                      <Button
-                        key={`${n}-${i}`}
-                        variant="outline"
-                        asChild
-                      >
-                        <Link href={`/test-errores?n=${realN}`}>
-                          {realN === total ? `Todas (${total})` : realN}
-                        </Link>
-                      </Button>
-                    )
-                  })}
+                <div className="font-mono-tabular" style={{ fontSize: 52, fontWeight: 900, marginTop: 4, color: "var(--red-500)", letterSpacing: "-0.04em" }}>
+                  {total}
                 </div>
               </div>
+              <Sparkles className="h-12 w-12" style={{ color: "var(--amber)" }} />
+            </div>
 
-              <p className="text-xs text-slate-500">
-                Las preguntas se seleccionan en orden aleatorio entre los errores recientes.
-              </p>
-            </CardContent>
-          </Card>
+            <div>
+              <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10, color: "var(--slate-700)" }}>
+                ¿Cuántas preguntas quieres practicar?
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {[10, 20, 30, total].map((n, i) => {
+                  const realN = Math.min(n, total)
+                  if (i > 0 && realN === Math.min([10, 20, 30][i - 1] ?? 0, total)) return null
+                  const isAll = realN === total
+                  return (
+                    <Link
+                      key={`${n}-${i}`}
+                      href={`/test-errores?n=${realN}`}
+                      className={isAll ? "btn-amber" : "btn-secondary"}
+                    >
+                      {isAll ? `Todas (${total})` : realN}
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
+
+            <p style={{ fontSize: 12, color: "var(--slate-500)", marginTop: 18, marginBottom: 0 }}>
+              Las preguntas se seleccionan en orden aleatorio entre los errores recientes.
+            </p>
+          </div>
         )}
       </div>
     )
@@ -105,12 +108,12 @@ export default async function TestErroresPage({ searchParams }: PageProps) {
   // Caso 2: se ha pedido un test → seleccionar preguntas y montar el runner
   if (total === 0) {
     return (
-      <Card className="border-emerald-200 bg-emerald-50/30">
-        <CardContent className="p-10 text-center">
-          <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto" />
-          <h2 className="text-xl font-semibold mt-3">Sin errores pendientes</h2>
-        </CardContent>
-      </Card>
+      <div className="empty-state" style={{ borderColor: "rgba(34, 197, 94, 0.45)" }}>
+        <CheckCircle2 className="h-12 w-12 mx-auto" style={{ color: "var(--green)" }} />
+        <h2 style={{ fontSize: 20, fontWeight: 800, margin: "12px 0", color: "var(--ink)" }}>
+          Sin errores pendientes
+        </h2>
+      </div>
     )
   }
 

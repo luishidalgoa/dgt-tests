@@ -54,59 +54,78 @@ export default async function TemaPage({ params, searchParams }: PageProps) {
     )
 
     return (
-      <div className="space-y-6">
-        <Link href="/temas" className="text-sm text-slate-600 hover:text-slate-900 inline-flex items-center gap-1">
+      <div>
+        <Link href="/temas" className="back-link">
           <ChevronLeft className="h-4 w-4" />
           Todos los temas
         </Link>
 
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <BookMarked className="h-7 w-7" />
-            <Badge variant="secondary" className="font-mono">
-              {prefix}
-            </Badge>
+        <header className="page-header">
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+              <BookMarked className="h-6 w-6" style={{ color: "var(--orange-600)" }} />
+              <span className="badge">{prefix}</span>
+            </div>
+            <h1>{getTemaName(prefix)}</h1>
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">{getTemaName(prefix)}</h1>
-        </div>
+        </header>
 
-        <Card>
-          <CardContent className="p-6 space-y-4">
-            <div className="flex items-center justify-between gap-6 flex-wrap">
-              <div>
-                <div className="text-sm text-slate-500">Preguntas en este tema</div>
-                <div className="text-4xl font-bold mt-1">{totalAvailable}</div>
-              </div>
-              {acc !== null && (
-                <div className="text-right">
-                  <div className="text-sm text-slate-500">Tu acierto en este tema</div>
-                  <div className={`text-4xl font-bold mt-1 ${acc < 70 ? "text-red-500" : "text-emerald-600"}`}>
-                    {acc.toFixed(0)}%
-                  </div>
-                  <div className="text-xs text-slate-500">{correct}/{answered} respuestas</div>
-                </div>
-              )}
-              <Sparkles className="h-10 w-10 text-amber-400 hidden lg:block" />
-            </div>
-
+        <div className="card-soft warm" style={{ padding: 28, marginBottom: 6 }}>
+          <div className="flex items-center justify-between gap-6 flex-wrap mb-6">
             <div>
-              <div className="text-sm font-medium mb-2">¿Cuántas preguntas quieres practicar?</div>
-              <div className="flex flex-wrap gap-2">
-                {options.map((n) => (
-                  <Button key={n} variant="outline" asChild>
-                    <Link href={`/temas/${rawPrefix}?n=${n}`}>
-                      {n === totalAvailable ? `Todas (${n})` : n}
-                    </Link>
-                  </Button>
-                ))}
+              <div style={{ fontSize: 11.5, color: "var(--slate-500)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Preguntas en este tema
+              </div>
+              <div className="font-mono-tabular" style={{ fontSize: 44, fontWeight: 900, marginTop: 4, letterSpacing: "-0.03em" }}>
+                {totalAvailable}
               </div>
             </div>
+            {acc !== null && (
+              <div className="text-right">
+                <div style={{ fontSize: 11.5, color: "var(--slate-500)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Tu acierto
+                </div>
+                <div
+                  className="font-mono-tabular"
+                  style={{
+                    fontSize: 44,
+                    fontWeight: 900,
+                    marginTop: 4,
+                    letterSpacing: "-0.03em",
+                    color: acc < 70 ? "var(--red-500)" : acc >= 90 ? "var(--green)" : "var(--amber)",
+                  }}
+                >
+                  {acc.toFixed(0)}%
+                </div>
+                <div style={{ fontSize: 12, color: "var(--slate-500)" }}>
+                  {correct}/{answered} respuestas
+                </div>
+              </div>
+            )}
+            <Sparkles className="h-10 w-10 hidden lg:block" style={{ color: "var(--amber)" }} />
+          </div>
 
-            <p className="text-xs text-slate-500">
-              Las preguntas se seleccionan en orden aleatorio entre las {totalAvailable} disponibles.
-            </p>
-          </CardContent>
-        </Card>
+          <div>
+            <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10, color: "var(--slate-700)" }}>
+              ¿Cuántas preguntas quieres practicar?
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {options.map((n) => (
+                <Link
+                  key={n}
+                  href={`/temas/${rawPrefix}?n=${n}`}
+                  className={n === totalAvailable ? "btn-primary" : "btn-secondary"}
+                >
+                  {n === totalAvailable ? `Todas (${n})` : n}
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          <p style={{ fontSize: 12, color: "var(--slate-500)", marginTop: 18, marginBottom: 0 }}>
+            Las preguntas se seleccionan en orden aleatorio entre las {totalAvailable} disponibles.
+          </p>
+        </div>
       </div>
     )
   }
