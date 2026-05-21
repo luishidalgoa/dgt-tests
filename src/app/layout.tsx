@@ -100,6 +100,13 @@ export default async function RootLayout({
           >
             Privacidad y cookies
           </Link>
+          {" · "}
+          <Link
+            href="/return-policy"
+            style={{ color: "var(--slate-500)", textDecoration: "none" }}
+          >
+            Devoluciones
+          </Link>
         </footer>
         <CookieConsent />
       </body>

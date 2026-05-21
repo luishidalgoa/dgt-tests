@@ -19,6 +19,7 @@
     "user:fake-subscribe": "tsx --env-file=.env scripts/fake-subscribe.ts",
     "questions:tag-tiers": "tsx --env-file=.env scripts/tag-question-tiers.ts",
     "stripe:check": "tsx --env-file=.env scripts/test-stripe.ts",
+    "stripe:sync-user": "tsx --env-file=.env scripts/sync-subscription-from-stripe.ts",
     "images:copy": "tsx scripts/copy-images.ts",
     "manual:import": "tsx --env-file=.env scripts/import-manual.ts",
     "ingest": "npm run db:seed && npm run images:copy && npm run manual:import"
