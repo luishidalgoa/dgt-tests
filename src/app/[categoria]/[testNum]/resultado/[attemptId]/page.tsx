@@ -173,6 +173,30 @@ export default async function ResultPage({ params }: PageProps) {
           Revisión
         </h2>
 
+        {orderedAnswers.length === 0 && (
+          <div
+            className="card-soft"
+            style={{
+              padding: 20,
+              borderColor: "rgba(245, 158, 11, 0.35)",
+              background: "rgba(245, 158, 11, 0.06)",
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 12,
+            }}
+          >
+            <MinusCircle className="h-5 w-5 flex-shrink-0" style={{ color: "var(--amber-d)", marginTop: 2 }} />
+            <div style={{ fontSize: 14, color: "var(--slate-700)", lineHeight: 1.55 }}>
+              <b>No hay respuestas guardadas para revisar.</b>
+              <p style={{ margin: "6px 0 0", fontSize: 13, color: "var(--slate-600)" }}>
+                Este intento se contabilizó en tu historial ({score}/{total}) pero las
+                respuestas individuales se perdieron — posiblemente de una migración
+                antigua. No es un bug actual; puedes seguir adelante repitiendo el test.
+              </p>
+            </div>
+          </div>
+        )}
+
         {orderedAnswers.map((a, idx) => {
           const isCorrect = a.isCorrect
           const isBlank = a.selectedOptionId === null
