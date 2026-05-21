@@ -25,18 +25,35 @@ async function main() {
   console.log(`📡 Conectando a: ${url}`)
   const client = createClient({ url, authToken })
 
+  // Crear tabla de tracking de migraciones aplicadas
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS _migrations_applied (
+      name        TEXT PRIMARY KEY,
+      applied_at  TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
   // Localizar migraciones
   const migrationsDir = resolve(process.cwd(), "prisma", "migrations")
   const dirs = readdirSync(migrationsDir)
     .filter((d) => statSync(join(migrationsDir, d)).isDirectory())
     .sort()
 
+  // Leer las ya aplicadas
+  const appliedRes = await client.execute("SELECT name FROM _migrations_applied")
+  const applied = new Set(appliedRes.rows.map((r) => String(r.name)))
+
   console.log(`🔍 Migraciones encontradas: ${dirs.length}`)
-  for (const d of dirs) console.log(`   - ${d}`)
+  console.log(`📋 Ya aplicadas: ${applied.size}`)
+  for (const d of dirs) {
+    const mark = applied.has(d) ? "✓" : "•"
+    console.log(`   ${mark} ${d}`)
+  }
 
   let totalStatements = 0
 
   for (const dir of dirs) {
+    if (applied.has(dir)) continue   // skip ya aplicadas
     const sqlPath = join(migrationsDir, dir, "migration.sql")
     const sql = readFileSync(sqlPath, "utf-8")
 
@@ -68,6 +85,12 @@ async function main() {
         }
       }
     }
+
+    // Marcar como aplicada
+    await client.execute({
+      sql:  "INSERT OR IGNORE INTO _migrations_applied (name) VALUES (?)",
+      args: [dir],
+    })
   }
 
   // Listar tablas para verificación

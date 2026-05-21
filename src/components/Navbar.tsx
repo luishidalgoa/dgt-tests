@@ -11,6 +11,7 @@ interface NavbarProps {
 const LINKS = [
   { href: "/",             label: "Inicio"     },
   { href: "/temas",        label: "Por temas"  },
+  { href: "/competir",     label: "Competir"   },
   { href: "/stats",        label: "Stats"      },
   { href: "/historial",    label: "Historial"  },
 ] as const

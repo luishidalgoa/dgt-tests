@@ -22,6 +22,8 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith("/_next") ||
     pathname.startsWith("/images") ||
     pathname.startsWith("/manual") ||
+    pathname.startsWith("/party/") ||                // partys públicas (guests)
+    pathname.startsWith("/api/parties/") ||          // ditto
     pathname === "/icon.svg" ||
     pathname === "/apple-icon.svg" ||
     pathname === "/favicon.ico"

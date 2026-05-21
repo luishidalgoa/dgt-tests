@@ -12,12 +12,14 @@ datasource db {
 
 // ── Usuario ──────────────────────────────────────────────────────────────
 model User {
-  id           Int           @id @default(autoincrement())
-  username     String        @unique
-  passwordHash String
-  displayName  String?
-  createdAt    DateTime      @default(now())
-  attempts     ExamAttempt[]
+  id              Int           @id @default(autoincrement())
+  username        String        @unique
+  passwordHash    String
+  displayName     String?
+  createdAt       DateTime      @default(now())
+  attempts        ExamAttempt[]
+  hostedParties   Party[]       @relation("HostedParties")
+  partyPlays      PartyPlayer[] @relation("PartyParticipations")
 
   @@map("users")
 }
@@ -25,12 +27,13 @@ model User {
 
 // ── Categoría / Familia de exámenes ──────────────────────────────────────
 model Category {
-  id          Int    @id @default(autoincrement())
-  code        String @unique          // "134" | "434" | "501"
-  slug        String @unique          // "permiso-b" | "repaso-final" | "adas"
-  name        String                  // "Examen permiso B"
+  id          Int     @id @default(autoincrement())
+  code        String  @unique          // "134" | "434" | "501"
+  slug        String  @unique          // "permiso-b" | "repaso-final" | "adas"
+  name        String                   // "Examen permiso B"
   description String?
   tests       Test[]
+  parties     Party[]
 
   @@map("categories")
 }
@@ -51,15 +54,16 @@ model Test {
 
 // ── Pregunta (única por externalId, compartida entre tests) ─────────────
 model Question {
-  id            Int       @id @default(autoincrement())
-  externalId    String    @unique       // id_pregunta de AEOL (ej. "320671")
-  codigoTema    String?                  // "TC 7.3-3.1.3 (7-3.3.1)"
+  id            Int            @id @default(autoincrement())
+  externalId    String         @unique       // id_pregunta de AEOL (ej. "320671")
+  codigoTema    String?                       // "TC 7.3-3.1.3 (7-3.3.1)"
   enunciado     String
   explicacion   String
-  imagen        String?                  // "320671.png"
+  imagen        String?                       // "320671.png"
   options       Option[]
   testQuestions TestQuestion[]
   answers       Answer[]
+  partyAnswers  PartyAnswer[]
 
   @@map("questions")
 }
@@ -142,4 +146,61 @@ model Answer {
 
   @@index([questionId, answeredAt])  // clave para "errores recientes"
   @@map("answers")
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  PARTY MODE — competición multi-jugador
+// ═══════════════════════════════════════════════════════════════════════════
+
+model Party {
+  id              Int           @id @default(autoincrement())
+  code            String        @unique                  // 6 chars, p.ej. "AB12CD"
+  hostUserId      Int
+  categoryId      Int?
+  totalQuestions  Int
+  questionIds     String                                  // JSON array de question.id
+  status          String        @default("waiting")       // waiting | playing | finished
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  createdAt       DateTime      @default(now())
+  host            User          @relation("HostedParties", fields: [hostUserId], references: [id], onDelete: Cascade)
+  category        Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  players         PartyPlayer[]
+
+  @@index([code])
+  @@index([hostUserId])
+  @@map("parties")
+}
+
+model PartyPlayer {
+  id           Int            @id @default(autoincrement())
+  partyId      Int
+  userId       Int?                                       // null si es guest
+  guestName    String?                                    // nombre del guest si userId es null
+  guestToken   String?        @unique                     // UUID para identificar al guest entre requests
+  joinedAt     DateTime       @default(now())
+  startedAt    DateTime?                                  // cuando empieza a responder
+  finishedAt   DateTime?                                  // cuando termina todas las preguntas
+  party        Party          @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  user         User?          @relation("PartyParticipations", fields: [userId], references: [id], onDelete: SetNull)
+  answers      PartyAnswer[]
+
+  @@index([partyId])
+  @@map("party_players")
+}
+
+model PartyAnswer {
+  id               Int          @id @default(autoincrement())
+  partyPlayerId    Int
+  questionId       Int
+  selectedOptionId Int?
+  isCorrect        Boolean
+  timeMs           Int                                    // tiempo en ms desde que se mostró la pregunta
+  answeredAt       DateTime     @default(now())
+  player           PartyPlayer  @relation(fields: [partyPlayerId], references: [id], onDelete: Cascade)
+  question         Question     @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([partyPlayerId])
+  @@map("party_answers")
 }
