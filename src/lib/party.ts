@@ -54,18 +54,31 @@ export function newGuestToken(): string {
 }
 
 /**
- * Scoring: por cada respuesta correcta se ganan puntos según la velocidad.
- *   - Respuesta instantánea (0s)      → 1000 pts
- *   - 10 s                            →  500 pts
- *   - 20+ s                           →  100 pts (mínimo)
- *   - Respuesta incorrecta o en blanco → 0 pts
+ * Scoring: solo puntúan las respuestas CORRECTAS.
  *
- * Fórmula: max(100, 1000 - timeMs/20)  cuando isCorrect
+ *   - Acierto base:          100 pts
+ *   - Bonus por velocidad:   hasta +15% sobre la base (= 15 pts)
+ *     · Decrece linealmente desde 15 pts (al responder en 0s) hasta 0 pts
+ *       (al responder en SPEED_BONUS_WINDOW_MS o más tarde).
+ *   - Fallo o respuesta en blanco: 0 pts (la velocidad NO da nada).
+ *
+ * Ejemplos:
+ *   correct + 0  s  → 115
+ *   correct + 5  s  → 110
+ *   correct + 10 s  → 105
+ *   correct + 15 s+ → 100
+ *   wrong / blank   → 0
  */
+export const SCORE_BASE_CORRECT       = 100
+export const SCORE_SPEED_BONUS_PCT    = 0.15            // +15 % máximo
+export const SCORE_SPEED_WINDOW_MS    = 15_000          // bonus 0 a partir de 15 s
+
 export function scoreForAnswer(isCorrect: boolean, timeMs: number): number {
   if (!isCorrect) return 0
-  const raw = 1000 - timeMs / 20
-  return Math.max(100, Math.round(raw))
+  // Factor lineal: 1 al instante, 0 al alcanzar SCORE_SPEED_WINDOW_MS
+  const factor = Math.max(0, Math.min(1, 1 - timeMs / SCORE_SPEED_WINDOW_MS))
+  const bonus  = SCORE_BASE_CORRECT * SCORE_SPEED_BONUS_PCT * factor
+  return Math.round(SCORE_BASE_CORRECT + bonus)
 }
 
 /**

@@ -21,17 +21,39 @@ async function main() {
 
   const stripe = new Stripe(apiKey)
 
-  // 1. Verificar credenciales pidiendo info de la cuenta
+  // 1. Verificar credenciales con un GET /balance (no requiere id)
   try {
-    const account = await stripe.accounts.retrieve()
-    console.log(`✓ Conexión OK · Cuenta: ${account.business_profile?.name ?? account.id}`)
-    console.log(`  Email: ${account.email ?? "—"}`)
-    console.log(`  País:  ${account.country ?? "—"}`)
-    console.log(`  Charges enabled:    ${account.charges_enabled ? "✅" : "❌"}`)
-    console.log(`  Payouts enabled:    ${account.payouts_enabled ? "✅" : "❌"}`)
-    if (!account.charges_enabled) {
-      console.log(`  ⚠ Para aceptar pagos tienes que completar el onboarding en`)
-      console.log(`     https://dashboard.stripe.com/settings/account`)
+    const balance = await stripe.balance.retrieve()
+    console.log(`✓ Conexión OK · Balance disponible:`)
+    if (balance.available.length === 0) {
+      console.log(`    (0)`)
+    } else {
+      for (const b of balance.available) {
+        console.log(`    ${(b.amount / 100).toFixed(2)} ${b.currency.toUpperCase()}`)
+      }
+    }
+    // Info de la cuenta vía REST directo (la firma TS de retrieve() exige id)
+    try {
+      const res = await fetch("https://api.stripe.com/v1/account", {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      })
+      if (res.ok) {
+        const account = (await res.json()) as {
+          id?: string
+          email?: string
+          country?: string
+          charges_enabled?: boolean
+          payouts_enabled?: boolean
+          business_profile?: { name?: string }
+        }
+        console.log(`  Cuenta: ${account.business_profile?.name ?? account.id ?? "—"}`)
+        console.log(`  Email:  ${account.email ?? "—"}`)
+        console.log(`  País:   ${account.country ?? "—"}`)
+        console.log(`  Charges enabled: ${account.charges_enabled ? "✅" : "❌"}`)
+        console.log(`  Payouts enabled: ${account.payouts_enabled ? "✅" : "❌"}`)
+      }
+    } catch {
+      // no bloqueante
     }
   } catch (err) {
     console.error("❌ Error conectando a Stripe:", err instanceof Error ? err.message : err)
