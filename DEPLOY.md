@@ -41,21 +41,80 @@ Guarda los dos valores.
 
 ---
 
-## 2. Configurar variables localmente
+## 2. Configurar variables localmente — split dev / prod
 
-Añade al `.env` (queda **fuera** de git por el `.gitignore`):
+A partir de Fase 82 **dev local NO usa Turso**. Usa el SQLite local
+`prisma/dev.db`. Esto evita que customers de Stripe TEST acaben
+contaminando la BBDD de producción (problema real que tuvimos: ver
+fase 82).
+
+El split se consigue con dos archivos:
+
+### `.env` — credenciales de PRODUCCIÓN
+
+Sólo usado por:
+- **Vercel** (lo replica vía Environment Variables del dashboard)
+- **Scripts puntuales** que tocan prod a mano, como `npm run
+  turso:apply-migration`, `npm run turso:sync`, `npm run user:clear-stripe`.
+  Estos scripts cargan SOLO `.env` (no `.env.local`).
 
 ```env
-# Para Prisma CLI (migrate, etc.) sigue usando el SQLite local
-DATABASE_URL="file:./dev.db"
-
-# Para la app y los scripts (libSQL → Turso)
-TURSO_DATABASE_URL="libsql://dgt-tests-tuusuario.turso.io"
-TURSO_AUTH_TOKEN="ey......."
+DATABASE_URL="file:./dev.db"           # solo Prisma CLI lo usa
+TURSO_DATABASE_URL="libsql://dgt-tests-tuusuario.aws-us-west-2.turso.io"
+TURSO_AUTH_TOKEN="eyJ......."          # token de prod
+SESSION_SECRET="..."                    # 32+ chars, NUNCA cambiar en prod
+GEMINI_API_KEY="..."
+STRIPE_SECRET_KEY="rk_live_..."         # LIVE (¡cobra dinero real!)
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_live_..."
+STRIPE_WEBHOOK_SECRET="whsec_..."       # del endpoint LIVE del dashboard
+STRIPE_PRICE_ID="price_live_..."        # del producto en modo LIVE
+NEXT_PUBLIC_APP_URL="https://dgt-tests.vercel.app"
+RESEND_API_KEY="re_..."
+ALERT_EMAIL="..."
 ```
 
-> El runtime usa `TURSO_DATABASE_URL` si existe. Si no, cae a la BBDD SQLite
-> local. Así puedes seguir desarrollando offline cuando quieras.
+### `.env.local` — overrides para DESARROLLO
+
+Tiene PRIORIDAD sobre `.env` cuando arranca `npm run dev`. Lo importante:
+forzar TURSO_* vacío → src/lib/db.ts usa `||` y cae al SQLite local.
+
+```env
+# Forzar SQLite local — overrides .env
+TURSO_DATABASE_URL=
+TURSO_AUTH_TOKEN=
+
+# Stripe TEST mode (no cobra)
+STRIPE_SECRET_KEY="sk_test_..."
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_test_..."
+STRIPE_PRICE_ID="price_test_..."        # del producto en modo TEST
+STRIPE_WEBHOOK_SECRET="whsec_..."       # del CLI: stripe listen ...
+
+NEXT_PUBLIC_APP_URL="http://localhost:4321"
+```
+
+### Cuadro resumen
+
+| Componente | Carga | DB | Stripe |
+|---|---|---|---|
+| `npm run dev` (Next.js) | `.env` + `.env.local` | SQLite local | TEST |
+| Vercel build/runtime | Sus Environment Variables (≈ `.env`) | Turso | LIVE |
+| Tests (`npm test`) | `tests/setup.ts` borra todo | SQLite local (mockeado) | — |
+| `npm run turso:*` | sólo `.env` | Turso (prod) | — |
+| `npm run user:clear-stripe` | sólo `.env` | Turso (prod) | — |
+| `npm run stripe:check` / `stripe:audit` | `.env` + `.env.local` | SQLite local | TEST |
+
+### Inicializar la BBDD local
+
+Una vez tras clonar el repo:
+
+```bash
+npx prisma migrate deploy   # aplica las 13 migraciones al SQLite local
+npm run db:seed              # carga categorías/tests/preguntas
+npm run manual:import        # importa secciones del manual + PDFs
+```
+
+> Si necesitas tocar PROD Turso para algo concreto, esos scripts usan
+> `.env` directamente (no necesitas comentar el override de `.env.local`).
 
 ---
 
@@ -168,9 +227,14 @@ git ls-files public/manual/pdfs | wc -l
 ```
 
 ### Quiero usar la BBDD de Turso también en dev local
-Solo tienes que tener `TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN` definidos
-en `.env`. El runtime los usará automáticamente. Quítalos del `.env` para
-volver al SQLite local.
+Comenta (o borra) las dos líneas `TURSO_DATABASE_URL=` y
+`TURSO_AUTH_TOKEN=` del `.env.local`. Con `.env.local` "limpio", el
+runtime hereda las TURSO_* del `.env` y se conecta a prod.
+
+**Cuidado**: cualquier cosa que hagas localmente con Stripe TEST
+escribirá customers TEST en la BBDD de prod. Si lo haces a propósito
+(p. ej. para reproducir un bug), después tendrás que limpiar con
+`npm run user:clear-stripe` o `npm run stripe:audit --apply`.
 
 ---
 

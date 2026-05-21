@@ -7,18 +7,20 @@ import { isTursoQuotaError, notifyTursoQuotaExceeded } from "@/lib/alerts"
 /**
  * Cliente Prisma usando el adapter libSQL.
  *
- * - En local: TURSO_DATABASE_URL no está definida → apuntamos al SQLite local
- *   con ruta ABSOLUTA (file://...) porque libsql resuelve los paths relativos
- *   distinto a Prisma CLI.
- * - En Vercel: TURSO_DATABASE_URL = libsql://<algo>.turso.io
- *              TURSO_AUTH_TOKEN  = token de Turso.
+ * - En local: TURSO_DATABASE_URL ausente o vacía → SQLite local
+ *   (prisma/dev.db). El `.env.local` deja TURSO_DATABASE_URL="" para
+ *   sobrescribir cualquier valor heredado de `.env` (que puede tener
+ *   las credenciales prod para scripts puntuales como
+ *   turso:apply-migration).
+ * - En Vercel (prod): TURSO_DATABASE_URL=libsql://<algo>.turso.io,
+ *                      TURSO_AUTH_TOKEN=eyJ...
  *
  * Cuando una query falla con un error de cuota de Turso, se dispara un
  * email de alerta (rate-limited a 1 por hora) — ver src/lib/alerts.ts.
  */
 
 declare global {
-  // eslint-disable-next-line no-var
+   
   var prisma: PrismaClient | undefined
 }
 
@@ -26,7 +28,11 @@ function buildLocalUrl(): string {
   return pathToFileURL(resolve(process.cwd(), "prisma", "dev.db")).href
 }
 
-const databaseUrl = process.env.TURSO_DATABASE_URL ?? buildLocalUrl()
+// Usamos `||` (NO `??`) a propósito: si TURSO_DATABASE_URL viene como
+// string vacío (".env.local lo sobreescribe a vacío"), también caemos
+// al SQLite local. Con `??` solo caería para `undefined`/`null` y
+// libsql intentaría conectar con "" → boom.
+const databaseUrl = process.env.TURSO_DATABASE_URL || buildLocalUrl()
 
 const adapter = new PrismaLibSql({
   url:       databaseUrl,
@@ -85,7 +91,7 @@ if (process.env.NODE_ENV !== "production") {
     const present = new Set(userFields.map((f) => f.name))
     const missing = EXPECTED_USER_FIELDS.filter((f) => !present.has(f))
     if (missing.length > 0) {
-      // eslint-disable-next-line no-console
+       
       console.warn(
         [
           "",
