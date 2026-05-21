@@ -16,6 +16,7 @@ import {
   Loader2,
   ArrowRight,
 } from "lucide-react"
+import { ackNotification } from "@/lib/client-acks"
 
 interface Props {
   /** Id de la notificación (siempre "welcome-v1" por ahora). */
@@ -54,18 +55,12 @@ export function WelcomeModal({ notificationId, username }: Props) {
   }, [])
 
   async function dismiss() {
+    // ackNotification marca SIEMPRE en localStorage (síncrono) + POST con
+    // keepalive en server. Si el server falla, el localStorage nos cubre.
     setOpen(false)
     startTransition(async () => {
-      try {
-        await fetch("/api/users/me/ack", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ key: notificationId }),
-        })
-        router.refresh()
-      } catch {
-        // ignore
-      }
+      await ackNotification(notificationId)
+      router.refresh()
     })
   }
 
@@ -84,14 +79,8 @@ export function WelcomeModal({ notificationId, username }: Props) {
       }
       const { url } = (await res.json()) as { url: string }
       if (!url) throw new Error("Sin url de Stripe")
-      // Marcamos ack ANTES de redirigir
-      try {
-        await fetch("/api/users/me/ack", {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ key: notificationId }),
-        })
-      } catch {}
+      // Marcamos ack ANTES de redirigir (también con keepalive)
+      await ackNotification(notificationId)
       window.location.href = url
     } catch (err) {
       setErrorPro(err instanceof Error ? err.message : "Error desconocido")

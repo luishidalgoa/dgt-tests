@@ -23,6 +23,10 @@ enum UserRole {
 model User {
   id              Int           @id @default(autoincrement())
   username        String        @unique
+  /// Email opcional. Lo añadimos en una actualización posterior al registro
+  /// original; los usuarios antiguos no tienen email hasta que lo rellenen
+  /// desde /settings.
+  email           String?       @unique
   passwordHash    String
   displayName     String?
   createdAt       DateTime      @default(now())

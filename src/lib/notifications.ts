@@ -29,14 +29,16 @@ export const NOTIFICATIONS: readonly NotificationConfig[] = [
     // Admins no necesitan ver el modal de "elige tu plan"
     eligible: (u) => !isAdmin(u),
   },
+  {
+    // Mayo 2026: añadimos email y cambio de contraseña al perfil.
+    // Se muestra a TODOS los usuarios (incluso admin) — es informativo.
+    id: "user-update-may26",
+    eligible: () => true,
+  },
   // Ejemplos para el futuro:
   // {
-  //   id: "terms-update-2026-q2",
+  //   id: "terms-update-2026-q3",
   //   eligible: () => true,
-  // },
-  // {
-  //   id: "new-feature-flashcards",
-  //   eligible: (u) => u.role !== "ADMIN",
   // },
 ] as const
 

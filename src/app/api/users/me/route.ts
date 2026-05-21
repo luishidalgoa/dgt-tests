@@ -9,6 +9,10 @@ const schema = z.object({
     message: "Solo letras, números, guion bajo, punto y guion medio",
   }),
   displayName: z.string().trim().min(1).max(80).optional().nullable(),
+  // Email opcional. Si se manda string vacío, lo tratamos como "borrar email".
+  email:       z.union([z.string().trim().email("Email no válido"), z.literal("")])
+                 .optional()
+                 .nullable(),
 })
 
 export async function PATCH(req: Request) {
@@ -26,7 +30,7 @@ export async function PATCH(req: Request) {
     )
   }
 
-  // Si quiere cambiar el username, comprobar unicidad
+  // ── Username: si cambia, comprobar unicidad ──
   if (parsed.data.username !== user.username) {
     const existing = await db.user.findUnique({
       where: { username: parsed.data.username },
@@ -39,11 +43,31 @@ export async function PATCH(req: Request) {
     }
   }
 
+  // ── Email: normalizar (lowercase + trim) y comprobar unicidad si cambia ──
+  // Si llega "" o null, lo guardamos como null (borrar).
+  const normalizedEmail = parsed.data.email
+    ? parsed.data.email.toLowerCase().trim() || null
+    : null
+
+  if (normalizedEmail && normalizedEmail !== user.email) {
+    const existing = await db.user.findUnique({
+      where: { email: normalizedEmail },
+    })
+    if (existing && existing.id !== user.id) {
+      return NextResponse.json(
+        { error: "Ese email ya está asociado a otra cuenta" },
+        { status: 409 }
+      )
+    }
+  }
+
   const updated = await db.user.update({
     where: { id: user.id },
     data: {
       username:    parsed.data.username,
       displayName: parsed.data.displayName ?? parsed.data.username,
+      // Solo tocamos el email si vino en el payload (undefined = no tocar)
+      ...(parsed.data.email !== undefined ? { email: normalizedEmail } : {}),
     },
   })
 
@@ -57,5 +81,6 @@ export async function PATCH(req: Request) {
     id:          updated.id,
     username:    updated.username,
     displayName: updated.displayName,
+    email:       updated.email,
   })
 }

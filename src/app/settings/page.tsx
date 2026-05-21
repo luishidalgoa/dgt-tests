@@ -50,6 +50,7 @@ export default async function SettingsPage() {
       <SettingsForm
         initialUsername={user.username}
         initialDisplayName={user.displayName ?? user.username}
+        initialEmail={user.email ?? ""}
       />
 
       {/* Suscripción / plan */}
