@@ -17,6 +17,10 @@ model User {
   passwordHash    String
   displayName     String?
   createdAt       DateTime      @default(now())
+  // Quota mensual de tokens IA (Gemini). aiTokensMonth = "YYYY-MM".
+  // Al cambiar de mes, se resetea a 0.
+  aiTokensUsed    Int           @default(0)
+  aiTokensMonth   String        @default("")
   attempts        ExamAttempt[]
   hostedParties   Party[]       @relation("HostedParties")
   partyPlays      PartyPlayer[] @relation("PartyParticipations")

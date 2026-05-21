@@ -8,10 +8,12 @@ const MAX_PER_REVIEW = 5
 const SYNC_EVENT = "dgt:ai-quota-sync"
 
 interface Props {
-  attemptId:   number
-  questionId:  number
-  explicacion: string
-  hasImage:    boolean
+  attemptId:    number
+  questionId:   number
+  explicacion:  string
+  hasImage:     boolean
+  options:      { letra: string; texto: string }[]
+  correctLetra: string | undefined
 }
 
 /**
@@ -25,7 +27,7 @@ interface Props {
  * - Si la IA devuelve resultado, se renderiza la explicación oficial con
  *   las keyPhrases subrayadas (efecto rotulador).
  */
-export function ResultsAIButton({ attemptId, questionId, explicacion, hasImage }: Props) {
+export function ResultsAIButton({ attemptId, questionId, explicacion, hasImage, options, correctLetra }: Props) {
   const key = `dgt:ai-quota-results-${attemptId}`
   const [remaining, setRemaining] = useState(MAX_PER_REVIEW)
   const [aiResult,  setAiResult]  = useState<AIResult | null>(null)
@@ -75,6 +77,8 @@ export function ResultsAIButton({ attemptId, questionId, explicacion, hasImage }
           hasImage={hasImage}
           remaining={remaining}
           maxAllowed={MAX_PER_REVIEW}
+          options={options}
+          correctLetra={correctLetra}
           onConsume={(cached) => {
             if (!cached) sync(Math.max(0, remaining - 1))
           }}

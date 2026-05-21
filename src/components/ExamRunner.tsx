@@ -532,6 +532,12 @@ export function ExamRunner({ data, mode = "normal", timeLimit = null, isGuest = 
                     hasImage={Boolean(q.imagen)}
                     remaining={aiRemaining}
                     maxAllowed={aiQuota}
+                    options={q.options.map((o) => ({ letra: o.letra, texto: o.texto }))}
+                    correctLetra={
+                      q.correctOptionId
+                        ? q.options.find((o) => o.id === q.correctOptionId)?.letra
+                        : undefined
+                    }
                     onConsume={(cached) => {
                       // Las respuestas cacheadas no descuentan quota
                       if (!cached) setAiRemaining((r) => Math.max(0, r - 1))

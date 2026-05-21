@@ -26,6 +26,14 @@ export interface AIResult {
   keyPhrases:      string[]
 }
 
+export interface MonthlyQuota {
+  used:      number
+  max:       number
+  remaining: number
+  month:     string
+  resetsAt:  string
+}
+
 interface Props {
   questionId:   number
   /** Explicación oficial — sobre la que se aplica el subrayado. */
@@ -36,6 +44,10 @@ interface Props {
   remaining:    number
   /** Total de preguntas permitidas (para mostrar X/5). */
   maxAllowed:   number
+  /** Letra de la opción correcta (para mostrar su texto en "por qué es la correcta"). */
+  correctLetra?: string
+  /** Opciones de la pregunta (para mostrar texto + letra en el panel). */
+  options?:     { letra: string; texto: string }[]
   /** Se llama si la IA devolvió respuesta (cached o no). Sirve para descontar quota. */
   onConsume:    (cached: boolean) => void
   /** Pasar las key phrases al panel padre para sincronizar el subrayado. */
@@ -48,14 +60,21 @@ export function AIExplainPanel({
   hasImage,
   remaining,
   maxAllowed,
+  correctLetra,
+  options = [],
   onConsume,
   onResult,
 }: Props) {
+  // Mapa letra → texto, en mayúsculas para el lookup
+  const textByLetra: Record<string, string> = {}
+  for (const o of options) textByLetra[o.letra.toUpperCase()] = o.texto
+  const correctText = correctLetra ? textByLetra[correctLetra.toUpperCase()] : undefined
   const [open, setOpen]       = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
   const [result, setResult]   = useState<AIResult | null>(null)
   const [cached, setCached]   = useState(false)
+  const [quota, setQuota]     = useState<MonthlyQuota | null>(null)
   /** true cuando ya hemos consultado el cache al menos una vez */
   const [checkedCache, setCheckedCache] = useState(false)
 
@@ -73,9 +92,10 @@ export function AIExplainPanel({
         )
         if (cancelled) return
         if (res.status === 200) {
-          const data = (await res.json()) as { cached: boolean; result: AIResult }
+          const data = (await res.json()) as { cached: boolean; result: AIResult; quota?: MonthlyQuota }
           setResult(data.result)
           setCached(true)
+          if (data.quota) setQuota(data.quota)
           onResult?.(data.result)
           // Cache hit → no consume quota
           onConsume(true)
@@ -104,11 +124,13 @@ export function AIExplainPanel({
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
+        if (body.quota) setQuota(body.quota)
         throw new Error(body.error ?? "Error al consultar la IA")
       }
-      const data = (await res.json()) as { cached: boolean; result: AIResult }
+      const data = (await res.json()) as { cached: boolean; result: AIResult; quota?: MonthlyQuota }
       setResult(data.result)
       setCached(data.cached)
+      if (data.quota) setQuota(data.quota)
       onResult?.(data.result)
       onConsume(data.cached)
     } catch (err) {
@@ -188,6 +210,32 @@ export function AIExplainPanel({
             explicación de las otras opciones y subrayado de las frases clave.
           </DialogDescription>
         </DialogHeader>
+
+        {/* Quota mensual */}
+        {quota && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 10,
+              padding: "8px 12px",
+              borderRadius: 10,
+              background: "rgba(168, 85, 247, 0.06)",
+              border: "1px solid rgba(168, 85, 247, 0.20)",
+              fontSize: 12,
+              color: "var(--slate-600)",
+            }}
+          >
+            <span>
+              Quota mensual:{" "}
+              <b style={{ color: quota.remaining <= 5 ? "var(--red-600)" : "rgb(126, 34, 206)" }}>
+                {quota.used}/{quota.max}
+              </b>{" "}
+              <span style={{ color: "var(--slate-500)" }}>· se resetea el 1 del próximo mes</span>
+            </span>
+          </div>
+        )}
 
         {/* Estado: comprobando cache */}
         {!checkedCache && !result && (
@@ -357,6 +405,41 @@ export function AIExplainPanel({
                 <h4 style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 800, color: "var(--green-d)", textTransform: "uppercase", letterSpacing: "0.05em", display: "flex", alignItems: "center", gap: 6 }}>
                   <CheckCircle2 className="h-3.5 w-3.5" /> Por qué la correcta es la correcta
                 </h4>
+                {correctText && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: 8,
+                      marginTop: 6,
+                      marginBottom: 8,
+                      padding: "6px 8px",
+                      borderRadius: 8,
+                      background: "rgba(34, 197, 94, 0.10)",
+                      border: "1px dashed rgba(34, 197, 94, 0.35)",
+                    }}
+                  >
+                    {correctLetra && (
+                      <span
+                        className="font-mono-tabular"
+                        style={{
+                          flexShrink: 0,
+                          padding: "1px 7px",
+                          borderRadius: 6,
+                          background: "var(--green)",
+                          color: "#fff",
+                          fontSize: 11,
+                          fontWeight: 800,
+                        }}
+                      >
+                        {correctLetra.toUpperCase()}
+                      </span>
+                    )}
+                    <span style={{ fontSize: 13, fontStyle: "italic", color: "var(--green-d)" }}>
+                      {correctText}
+                    </span>
+                  </div>
+                )}
                 <p style={{ margin: 0 }}>{result.whyCorrect}</p>
               </section>
             )}
@@ -367,36 +450,50 @@ export function AIExplainPanel({
                   Por qué las otras no
                 </h4>
                 <div className="space-y-2">
-                  {Object.entries(result.whyOthersWrong).map(([letra, txt]) => (
-                    <div
-                      key={letra}
-                      style={{
-                        display: "flex",
-                        alignItems: "flex-start",
-                        gap: 8,
-                        padding: "8px 10px",
-                        borderRadius: 8,
-                        background: "rgba(239, 68, 68, 0.06)",
-                        border: "1px solid rgba(239, 68, 68, 0.18)",
-                      }}
-                    >
-                      <span
-                        className="font-mono-tabular"
+                  {Object.entries(result.whyOthersWrong).map(([letra, txt]) => {
+                    const optText = textByLetra[letra.toUpperCase()]
+                    return (
+                      <div
+                        key={letra}
                         style={{
-                          flexShrink: 0,
-                          padding: "1px 7px",
-                          borderRadius: 6,
-                          background: "var(--red-500)",
-                          color: "#fff",
-                          fontSize: 11,
-                          fontWeight: 800,
+                          padding: "8px 10px",
+                          borderRadius: 8,
+                          background: "rgba(239, 68, 68, 0.06)",
+                          border: "1px solid rgba(239, 68, 68, 0.18)",
                         }}
                       >
-                        {letra.toUpperCase()}
-                      </span>
-                      <span>{txt}</span>
-                    </div>
-                  ))}
+                        <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                          <span
+                            className="font-mono-tabular"
+                            style={{
+                              flexShrink: 0,
+                              padding: "1px 7px",
+                              borderRadius: 6,
+                              background: "var(--red-500)",
+                              color: "#fff",
+                              fontSize: 11,
+                              fontWeight: 800,
+                            }}
+                          >
+                            {letra.toUpperCase()}
+                          </span>
+                          {optText && (
+                            <span
+                              style={{
+                                fontSize: 13,
+                                fontStyle: "italic",
+                                color: "var(--slate-600)",
+                                lineHeight: 1.45,
+                              }}
+                            >
+                              {optText}
+                            </span>
+                          )}
+                        </div>
+                        <p style={{ margin: "6px 0 0", paddingLeft: 30 }}>{txt}</p>
+                      </div>
+                    )
+                  })}
                 </div>
               </section>
             )}

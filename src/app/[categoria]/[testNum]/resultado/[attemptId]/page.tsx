@@ -344,6 +344,8 @@ export default async function ResultPage({ params }: PageProps) {
                       questionId={a.question.id}
                       explicacion={a.question.explicacion}
                       hasImage={Boolean(a.question.imagen)}
+                      options={a.question.options.map((o) => ({ letra: o.letra, texto: o.texto }))}
+                      correctLetra={a.question.options.find((o) => o.isCorrect)?.letra}
                     />
                   )}
 

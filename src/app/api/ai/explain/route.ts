@@ -3,6 +3,7 @@ import { z } from "zod"
 import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
 import { explainQuestion, type AIExplanationResult } from "@/lib/ai"
+import { consumeToken, getQuotaStatus } from "@/lib/aiQuota"
 
 const schema = z.object({
   questionId: z.number().int().positive(),
@@ -37,7 +38,8 @@ export async function GET(req: Request) {
   }
   try {
     const result = JSON.parse(cached.payloadJson) as AIExplanationResult
-    return NextResponse.json({ cached: true, result })
+    const quota = await getQuotaStatus(user.id)
+    return NextResponse.json({ cached: true, result, quota })
   } catch {
     return new NextResponse(null, { status: 204 })
   }
@@ -61,37 +63,57 @@ export async function POST(req: Request) {
   }
   const { questionId, withImage } = parsed.data
 
-  // 3. Cache hit
+  // 3. Cache hit (no descuenta quota)
   const cached = await db.aICacheEntry.findUnique({
     where: { questionId_withImage: { questionId, withImage } },
   })
   if (cached) {
     try {
       const result = JSON.parse(cached.payloadJson) as AIExplanationResult
-      return NextResponse.json({ cached: true, result })
+      const quota = await getQuotaStatus(user.id)
+      return NextResponse.json({ cached: true, result, quota })
     } catch {
       // si el JSON está corrupto, lo regeneramos
     }
   }
 
-  // 4. Cargar pregunta con opciones
+  // 4. Comprobar quota mensual ANTES de llamar a Gemini
+  const consumed = await consumeToken(user.id)
+  if (!consumed) {
+    const quota = await getQuotaStatus(user.id)
+    return NextResponse.json(
+      { error: "Has agotado tu quota mensual de IA. Se reseteará el día 1 del próximo mes.", quota },
+      { status: 429 }
+    )
+  }
+
+  // 5. Cargar pregunta con opciones
   const question = await db.question.findUnique({
     where: { id: questionId },
     include: { options: { orderBy: { letra: "asc" } } },
   })
   if (!question) {
+    // Devolver el token (revertimos el consumo)
+    await db.user.update({
+      where: { id: user.id },
+      data:  { aiTokensUsed: { decrement: 1 } },
+    })
     return NextResponse.json({ error: "Pregunta no encontrada" }, { status: 404 })
   }
 
   const correct = question.options.find((o) => o.isCorrect)
   if (!correct) {
+    await db.user.update({
+      where: { id: user.id },
+      data:  { aiTokensUsed: { decrement: 1 } },
+    })
     return NextResponse.json(
       { error: "La pregunta no tiene opción correcta marcada" },
       { status: 500 }
     )
   }
 
-  // 5. Llamar a Gemini
+  // 6. Llamar a Gemini
   let result: AIExplanationResult
   try {
     result = await explainQuestion({
@@ -103,13 +125,18 @@ export async function POST(req: Request) {
       imagePath:    withImage && question.imagen ? question.imagen : null,
     })
   } catch (err) {
+    // Revertir el consumo si Gemini falla
+    await db.user.update({
+      where: { id: user.id },
+      data:  { aiTokensUsed: { decrement: 1 } },
+    })
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Error al llamar a la IA" },
       { status: 502 }
     )
   }
 
-  // 6. Guardar en cache
+  // 7. Guardar en cache
   try {
     await db.aICacheEntry.upsert({
       where:  { questionId_withImage: { questionId, withImage } },
@@ -120,5 +147,5 @@ export async function POST(req: Request) {
     // no bloqueamos la respuesta al usuario si falla el cache
   }
 
-  return NextResponse.json({ cached: false, result })
+  return NextResponse.json({ cached: false, result, quota: consumed })
 }
