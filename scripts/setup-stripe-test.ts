@@ -13,8 +13,10 @@
  */
 import Stripe from "stripe"
 
+import { PRO_PRICE_CENTS } from "@/lib/pricing"
+
 const PRODUCT_NAME = "DGT Tests PRO"
-const TARGET_AMOUNT = 500            // 5,00 EUR en céntimos
+const TARGET_AMOUNT = PRO_PRICE_CENTS        // sincronizado con el frontend (6,99 EUR = 699)
 const TARGET_CURRENCY = "eur"
 const TARGET_INTERVAL = "month"
 
