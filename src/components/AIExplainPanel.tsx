@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -92,15 +92,33 @@ export function AIExplainPanel({
   // suave en vez del CTA, para no parpadear el "1 token" antes de saberlo.
   const [checkingPaid, setCheckingPaid] = useState(false)
 
+  // Recordamos qué questionId ya hemos chequeado para no re-disparar el
+  // GET en cada re-render. Sin esto el effect entraba en un bucle:
+  // setCheckingPaid(true) → re-render → cleanup invalida cancelled del
+  // promise original → finally no resetea checkingPaid → "Comprobando..."
+  // se quedaba pegado.
+  const checkedForRef = useRef<string | null>(null)
+
+  // Callback estable: si el padre re-renderiza y pasa una nueva referencia
+  // de onResult, no queremos que dispare otro GET. Guardamos en ref.
+  const onResultRef = useRef(onResult)
+  useEffect(() => { onResultRef.current = onResult }, [onResult])
+
   const noQuota = remaining <= 0
 
   // Al abrir el modal POR PRIMERA VEZ con esta questionId, comprobamos
   // si el user ya había pagado por esta explicación. Si sí, la cargamos
   // automáticamente sin cobrar. Si no, dejamos el CTA "Generar · 1 token".
   useEffect(() => {
-    if (!open || result || checkingPaid) return
-    let cancelled = false
+    if (!open) return
+    if (result) return
+    const key = `${questionId}:${hasImage}`
+    if (checkedForRef.current === key) return  // ya chequeado esta combinación
+
+    checkedForRef.current = key
     setCheckingPaid(true)
+    let cancelled = false
+
     fetch(`/api/ai/explain?questionId=${questionId}&withImage=${hasImage ? "true" : "false"}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data: { alreadyPaid?: boolean; result?: AIResult } | null) => {
@@ -109,13 +127,14 @@ export function AIExplainPanel({
           setResult(data.result)
           setCached(true)
           setAlreadyPaid(true)
-          onResult?.(data.result)
+          onResultRef.current?.(data.result)
         }
       })
       .catch(() => { /* silencio: el usuario podrá usar el CTA igualmente */ })
       .finally(() => { if (!cancelled) setCheckingPaid(false) })
+
     return () => { cancelled = true }
-  }, [open, questionId, hasImage, result, checkingPaid, onResult])
+  }, [open, questionId, hasImage, result])
 
   async function askAI() {
     if (noQuota || loading) return
