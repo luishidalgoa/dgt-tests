@@ -24,6 +24,7 @@
     "user:fake-subscribe": "tsx --env-file=.env scripts/fake-subscribe.ts",
     "user:lowercase": "tsx --env-file=.env scripts/lowercase-usernames.ts",
     "user:clear-stripe": "tsx --env-file=.env scripts/clear-user-stripe.ts",
+    "dev:prepare-test-user": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/dev-prepare-test-user.ts",
     "attempts:cleanup-orphan": "tsx --env-file=.env scripts/cleanup-orphan-attempts.ts",
     "user-ai-paid:backfill": "tsx --env-file=.env scripts/backfill-user-ai-paid.ts",
     "questions:tag-tiers": "tsx --env-file=.env scripts/tag-question-tiers.ts",
