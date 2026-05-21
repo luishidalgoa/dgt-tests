@@ -155,6 +155,7 @@ model ExamAttempt {
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   test       Test?     @relation(fields: [testId], references: [id], onDelete: SetNull)
   answers    Answer[]
+  aiPaid     UserAiPaid[]
 
   @@index([userId, startedAt])
   @@index([userId, testId])
@@ -269,23 +270,34 @@ model AICacheEntry {
 }
 
 // ── Registro per-user de "ya pagué por esta explicación IA" ──────────────
-// El cobro de 1 token solo ocurre la PRIMERA vez que un usuario pide la
-// explicación de una pregunta. Las siguientes veces (cambia de página,
-// re-entra a la revisión, etc.) son gratis. Ver /api/ai/explain.
+// El cobro de 1 token solo ocurre la PRIMERA vez que un user pide la
+// explicación de una pregunta EN UN CONTEXTO DADO. Contexto = attemptId.
+//   - attemptId = null → modo práctica (o cualquier sitio sin contexto).
+//                        Una sola compra por (user, question, withImage)
+//                        — gratis para siempre. Comportamiento Fase 77.
+//   - attemptId = X    → atado al ExamAttempt X. Re-ver el mismo attempt
+//                        es gratis; un attempt NUEVO del mismo test
+//                        vuelve a cobrar.
 //
-// AICacheEntry sigue existiendo y es global — evita gastar dinero
-// llamando a Gemini cuando ya hay respuesta. Esta tabla es ortogonal:
-// trackea quién pagó.
+// El cache global (AICacheEntry) sigue existiendo y ahorra dinero de
+// Gemini. Esta tabla es ortogonal: trackea quién pagó qué.
+//
+// La unicidad se gestiona con partial unique indexes en SQL (uno para
+// attemptId IS NULL, otro para attemptId IS NOT NULL); Prisma no expone
+// partial indexes en el schema, por eso no hay @@unique aquí.
 model UserAiPaid {
-  id          Int      @id @default(autoincrement())
+  id          Int          @id @default(autoincrement())
   userId      Int
   questionId  Int
-  withImage   Boolean  @default(false)
-  paidAt      DateTime @default(now())
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  question    Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  withImage   Boolean      @default(false)
+  /// null = modo práctica; X = pago atado al ExamAttempt #X.
+  attemptId   Int?
+  paidAt      DateTime     @default(now())
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question    Question     @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  attempt     ExamAttempt? @relation(fields: [attemptId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, questionId, withImage])
   @@index([userId])
+  @@index([attemptId])
   @@map("user_ai_paid")
 }

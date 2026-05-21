@@ -8,12 +8,40 @@ import { consumeToken, getQuotaStatus } from "@/lib/aiQuota"
 const postSchema = z.object({
   questionId: z.number().int().positive(),
   withImage:  z.boolean().optional().default(false),
+  /** Opcional. Si va, el pago se asocia al ExamAttempt indicado. */
+  attemptId:  z.number().int().positive().nullable().optional(),
 })
 
 const getSchema = z.object({
   questionId: z.coerce.number().int().positive(),
   withImage:  z.union([z.literal("true"), z.literal("false")]).optional().default("false"),
+  /** Opcional. Mismo significado que en POST. */
+  attemptId:  z.coerce.number().int().positive().optional(),
 })
+
+/**
+ * Busca un UserAiPaid en el scope correcto:
+ *   - attemptId !== null → match exacto sobre (user, attempt, question, withImage)
+ *   - attemptId === null → match sobre (user, question, withImage) donde attemptId IS NULL
+ *
+ * Devolvemos el findFirst para no depender de un @@unique compuesto (que
+ * no podemos declarar en Prisma al ser nullable).
+ */
+async function findPaid(args: {
+  userId:     number
+  questionId: number
+  withImage:  boolean
+  attemptId:  number | null
+}) {
+  return db.userAiPaid.findFirst({
+    where: {
+      userId:     args.userId,
+      questionId: args.questionId,
+      withImage:  args.withImage,
+      attemptId:  args.attemptId,
+    },
+  })
+}
 
 /**
  * GET /api/ai/explain?questionId=X[&withImage=true|false]
@@ -35,19 +63,20 @@ export async function GET(req: Request) {
   }
 
   const url = new URL(req.url)
+  const aId = url.searchParams.get("attemptId")
   const parsed = getSchema.safeParse({
     questionId: url.searchParams.get("questionId") ?? "",
     withImage:  url.searchParams.get("withImage") ?? "false",
+    ...(aId ? { attemptId: aId } : {}),
   })
   if (!parsed.success) {
     return NextResponse.json({ error: "Query inválida" }, { status: 400 })
   }
   const questionId = parsed.data.questionId
   const withImage  = parsed.data.withImage === "true"
+  const attemptId  = parsed.data.attemptId ?? null
 
-  const paid = await db.userAiPaid.findUnique({
-    where: { userId_questionId_withImage: { userId: user.id, questionId, withImage } },
-  })
+  const paid = await findPaid({ userId: user.id, questionId, withImage, attemptId })
   if (!paid) {
     return NextResponse.json({ alreadyPaid: false })
   }
@@ -103,11 +132,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Payload inválido" }, { status: 400 })
   }
   const { questionId, withImage } = parsed.data
+  const attemptId = parsed.data.attemptId ?? null
 
-  // 3. ¿Ya pagó este user por esta explicación?
-  const alreadyPaid = await db.userAiPaid.findUnique({
-    where: { userId_questionId_withImage: { userId: user.id, questionId, withImage } },
-  })
+  // 3. ¿Ya pagó este user por esta explicación en este contexto (attempt)?
+  const alreadyPaid = await findPaid({ userId: user.id, questionId, withImage, attemptId })
 
   // 4. Si NO pagó, consumir 1 token antes de seguir.
   let consumedQuota = alreadyPaid ? await getQuotaStatus(user.id) : await consumeToken(user.id)
@@ -142,7 +170,7 @@ export async function POST(req: Request) {
     try {
       const result = JSON.parse(cached.payloadJson) as AIExplanationResult
       if (chargedNow) {
-        await markPaid(user.id, questionId, withImage)
+        await markPaid(user.id, questionId, withImage, attemptId)
         consumedQuota = await getQuotaStatus(user.id)
       }
       return NextResponse.json({ cached: true, result, quota: consumedQuota, charged: chargedNow })
@@ -200,23 +228,25 @@ export async function POST(req: Request) {
     // no bloqueamos
   }
 
-  // 9. Registrar que ESTE user ya pagó por esta pregunta
+  // 9. Registrar que ESTE user ya pagó por esta pregunta en este contexto
   if (chargedNow) {
-    await markPaid(user.id, questionId, withImage)
+    await markPaid(user.id, questionId, withImage, attemptId)
   }
 
   const quota = await getQuotaStatus(user.id)
   return NextResponse.json({ cached: false, result, quota, charged: chargedNow })
 }
 
-async function markPaid(userId: number, questionId: number, withImage: boolean) {
+async function markPaid(userId: number, questionId: number, withImage: boolean, attemptId: number | null) {
   try {
-    await db.userAiPaid.upsert({
-      where:  { userId_questionId_withImage: { userId, questionId, withImage } },
-      update: {},
-      create: { userId, questionId, withImage },
+    // No usamos upsert porque attemptId puede ser NULL y Prisma no
+    // expone partial unique indexes. Insertamos a mano comprobando antes.
+    const existing = await findPaid({ userId, questionId, withImage, attemptId })
+    if (existing) return
+    await db.userAiPaid.create({
+      data: { userId, questionId, withImage, attemptId },
     })
   } catch {
-    // no bloqueamos respuesta si el insert falla
+    // no bloqueamos respuesta si el insert falla (race con otra request, etc.)
   }
 }

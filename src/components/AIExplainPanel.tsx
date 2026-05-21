@@ -57,6 +57,13 @@ interface Props {
   correctLetra?: string
   /** Opciones de la pregunta (para mostrar texto + letra en el panel). */
   options?:     { letra: string; texto: string }[]
+  /**
+   * ID del ExamAttempt al que se asocia el pago. Si va, el pago es
+   * "per-attempt": re-ver el mismo attempt es gratis pero un attempt
+   * nuevo del mismo test cobra otra vez. Si NO va (undefined), el pago
+   * es global por (user, question) — útil en modo práctica.
+   */
+  attemptId?:   number
   /** Se llama si la IA devolvió respuesta (cached o no). Sirve para descontar quota. */
   onConsume:    (cached: boolean) => void
   /** Pasar las key phrases al panel padre para sincronizar el subrayado. */
@@ -71,6 +78,7 @@ export function AIExplainPanel({
   maxAllowed,
   correctLetra,
   options = [],
+  attemptId,
   onConsume,
   onResult,
 }: Props) {
@@ -119,7 +127,12 @@ export function AIExplainPanel({
     setCheckingPaid(true)
     let cancelled = false
 
-    fetch(`/api/ai/explain?questionId=${questionId}&withImage=${hasImage ? "true" : "false"}`)
+    const qs = new URLSearchParams({
+      questionId: String(questionId),
+      withImage:  hasImage ? "true" : "false",
+    })
+    if (attemptId) qs.set("attemptId", String(attemptId))
+    fetch(`/api/ai/explain?${qs.toString()}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data: { alreadyPaid?: boolean; result?: AIResult } | null) => {
         if (cancelled || !data) return
@@ -134,7 +147,7 @@ export function AIExplainPanel({
       .finally(() => { if (!cancelled) setCheckingPaid(false) })
 
     return () => { cancelled = true }
-  }, [open, questionId, hasImage, result])
+  }, [open, questionId, hasImage, attemptId, result])
 
   async function askAI() {
     if (noQuota || loading) return
@@ -144,7 +157,11 @@ export function AIExplainPanel({
       const res = await fetch("/api/ai/explain", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ questionId, withImage: hasImage }),
+        body: JSON.stringify({
+          questionId,
+          withImage: hasImage,
+          ...(attemptId ? { attemptId } : {}),
+        }),
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))

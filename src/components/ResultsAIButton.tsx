@@ -73,6 +73,7 @@ export function ResultsAIButton({ attemptId, questionId, explicacion, hasImage, 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
         <AIExplainPanel
           questionId={questionId}
+          attemptId={attemptId}
           explicacion={explicacion}
           hasImage={hasImage}
           remaining={remaining}
