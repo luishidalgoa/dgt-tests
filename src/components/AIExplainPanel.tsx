@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -85,7 +85,37 @@ export function AIExplainPanel({
   const [cached, setCached]   = useState(false)
   const [quota, setQuota]     = useState<MonthlyQuota | null>(null)
 
+  // alreadyPaid=true cuando el user ya gastó token por esta pregunta
+  // previamente. En ese caso cargamos la respuesta sin cobrar nada.
+  const [alreadyPaid, setAlreadyPaid] = useState(false)
+  // Mientras hacemos el GET para comprobar si ya pagó, mostramos un loader
+  // suave en vez del CTA, para no parpadear el "1 token" antes de saberlo.
+  const [checkingPaid, setCheckingPaid] = useState(false)
+
   const noQuota = remaining <= 0
+
+  // Al abrir el modal POR PRIMERA VEZ con esta questionId, comprobamos
+  // si el user ya había pagado por esta explicación. Si sí, la cargamos
+  // automáticamente sin cobrar. Si no, dejamos el CTA "Generar · 1 token".
+  useEffect(() => {
+    if (!open || result || checkingPaid) return
+    let cancelled = false
+    setCheckingPaid(true)
+    fetch(`/api/ai/explain?questionId=${questionId}&withImage=${hasImage ? "true" : "false"}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { alreadyPaid?: boolean; result?: AIResult } | null) => {
+        if (cancelled || !data) return
+        if (data.alreadyPaid && data.result) {
+          setResult(data.result)
+          setCached(true)
+          setAlreadyPaid(true)
+          onResult?.(data.result)
+        }
+      })
+      .catch(() => { /* silencio: el usuario podrá usar el CTA igualmente */ })
+      .finally(() => { if (!cancelled) setCheckingPaid(false) })
+    return () => { cancelled = true }
+  }, [open, questionId, hasImage, result, checkingPaid, onResult])
 
   async function askAI() {
     if (noQuota || loading) return
@@ -105,15 +135,24 @@ export function AIExplainPanel({
         }
         throw new Error(body.error ?? "Error al consultar la IA")
       }
-      const data = (await res.json()) as { cached: boolean; result: AIResult; quota?: MonthlyQuota }
+      const data = (await res.json()) as {
+        cached:   boolean
+        result:   AIResult
+        quota?:   MonthlyQuota
+        charged?: boolean      // true si esta llamada cobró 1 token
+      }
       setResult(data.result)
       setCached(data.cached)
+      setAlreadyPaid(data.charged === false)
       if (data.quota) {
         setQuota(data.quota)
         emitQuotaChange(data.quota)
       }
       onResult?.(data.result)
-      onConsume(data.cached)
+      // Solo descontamos quota en el padre si realmente cobramos
+      if (data.charged !== false) {
+        onConsume(data.cached)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error desconocido")
     } finally {
@@ -220,8 +259,26 @@ export function AIExplainPanel({
           </div>
         )}
 
+        {/* Comprobando si ya pagaste (GET inicial) */}
+        {!result && checkingPaid && !error && (
+          <div
+            style={{
+              padding: 24,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 10,
+              color: "var(--slate-500)",
+              fontSize: 13,
+            }}
+          >
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Comprobando...
+          </div>
+        )}
+
         {/* Estado inicial: CTA para generar */}
-        {!result && !loading && !error && (
+        {!result && !loading && !checkingPaid && !error && (
           <div className="space-y-3">
             <div
               style={{
@@ -334,7 +391,27 @@ export function AIExplainPanel({
         {/* Resultado */}
         {result && (
           <div className="space-y-4" style={{ fontSize: 13.5, lineHeight: 1.55 }}>
-            {cached && (
+            {alreadyPaid ? (
+              <div
+                style={{
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  color: "var(--green-d)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "4px 10px",
+                  borderRadius: 999,
+                  background: "rgba(34, 197, 94, 0.10)",
+                  border: "1px solid rgba(34, 197, 94, 0.30)",
+                }}
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Sin coste — ya pagaste por esta explicación
+              </div>
+            ) : cached && (
               <div
                 style={{
                   fontSize: 11,

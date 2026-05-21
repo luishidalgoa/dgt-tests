@@ -5,19 +5,85 @@ import { getCurrentUser } from "@/lib/auth"
 import { explainQuestion, type AIExplanationResult } from "@/lib/ai"
 import { consumeToken, getQuotaStatus } from "@/lib/aiQuota"
 
-const schema = z.object({
+const postSchema = z.object({
   questionId: z.number().int().positive(),
   withImage:  z.boolean().optional().default(false),
 })
 
+const getSchema = z.object({
+  questionId: z.coerce.number().int().positive(),
+  withImage:  z.union([z.literal("true"), z.literal("false")]).optional().default("false"),
+})
+
+/**
+ * GET /api/ai/explain?questionId=X[&withImage=true|false]
+ *
+ * Devuelve la explicación ya pagada por este user sin cobrar nada.
+ *
+ * - 200 + { result, alreadyPaid: true }   si el user ya pagó por esta
+ *                                          pregunta y la cache existe.
+ * - 200 + { alreadyPaid: false }           si no la ha pagado todavía
+ *                                          (el front mostrará el CTA
+ *                                          "Generar análisis · 1 token").
+ *
+ * No consume tokens. No llama a Gemini.
+ */
+export async function GET(req: Request) {
+  const user = await getCurrentUser()
+  if (!user) {
+    return NextResponse.json({ error: "Necesitas una cuenta para usar la IA" }, { status: 401 })
+  }
+
+  const url = new URL(req.url)
+  const parsed = getSchema.safeParse({
+    questionId: url.searchParams.get("questionId") ?? "",
+    withImage:  url.searchParams.get("withImage") ?? "false",
+  })
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Query inválida" }, { status: 400 })
+  }
+  const questionId = parsed.data.questionId
+  const withImage  = parsed.data.withImage === "true"
+
+  const paid = await db.userAiPaid.findUnique({
+    where: { userId_questionId_withImage: { userId: user.id, questionId, withImage } },
+  })
+  if (!paid) {
+    return NextResponse.json({ alreadyPaid: false })
+  }
+
+  const cached = await db.aICacheEntry.findUnique({
+    where: { questionId_withImage: { questionId, withImage } },
+  })
+  if (!cached) {
+    // Raro: el usuario pagó pero la cache se borró. Tratamos como "no pagado"
+    // para que pueda regenerar (le cobraremos otra vez, pero al menos no
+    // se queda colgado sin respuesta).
+    return NextResponse.json({ alreadyPaid: false })
+  }
+  try {
+    const result = JSON.parse(cached.payloadJson) as AIExplanationResult
+    return NextResponse.json({ alreadyPaid: true, result, paidAt: paid.paidAt })
+  } catch {
+    return NextResponse.json({ alreadyPaid: false })
+  }
+}
+
 /**
  * POST /api/ai/explain
  *
- * Cada llamada que el usuario hace cuesta 1 token de su quota mensual,
- * AUNQUE la respuesta esté cacheada en BBDD. El cache solo evita gastar
- * dinero llamando a Gemini, pero no exime al usuario del coste.
+ * Comportamiento (a partir de Fase 77):
  *
- * Si Gemini falla (cache miss) o la pregunta no existe, revertimos el
+ *  - Si el user YA pagó antes por esta (questionId, withImage) → NO se
+ *    le cobra otro token, se devuelve la respuesta cacheada o se
+ *    regenera vía Gemini si la cache desapareció.
+ *  - Si NO había pagado → consumimos 1 token. Si hay cache hit la
+ *    devolvemos sin llamar a Gemini; si no, llamamos a Gemini y
+ *    cacheamos. Insertamos un row en user_ai_paid para que próximas
+ *    visualizaciones del MISMO user sobre esta MISMA pregunta sean
+ *    gratis.
+ *
+ * Si Gemini falla en una request que consumió token, revertimos el
  * consumo para no penalizar al usuario por un fallo del sistema.
  */
 export async function POST(req: Request) {
@@ -32,15 +98,20 @@ export async function POST(req: Request) {
 
   // 2. Validar body
   const body = await req.json().catch(() => null)
-  const parsed = schema.safeParse(body)
+  const parsed = postSchema.safeParse(body)
   if (!parsed.success) {
     return NextResponse.json({ error: "Payload inválido" }, { status: 400 })
   }
   const { questionId, withImage } = parsed.data
 
-  // 3. Consumir token ANTES de cualquier otra cosa
-  const consumed = await consumeToken(user.id)
-  if (!consumed) {
+  // 3. ¿Ya pagó este user por esta explicación?
+  const alreadyPaid = await db.userAiPaid.findUnique({
+    where: { userId_questionId_withImage: { userId: user.id, questionId, withImage } },
+  })
+
+  // 4. Si NO pagó, consumir 1 token antes de seguir.
+  let consumedQuota = alreadyPaid ? await getQuotaStatus(user.id) : await consumeToken(user.id)
+  if (!consumedQuota) {
     const quota = await getQuotaStatus(user.id)
     return NextResponse.json(
       { error: "Has agotado tu quota mensual de IA. Se reseteará el día 1 del próximo mes.", quota },
@@ -48,8 +119,11 @@ export async function POST(req: Request) {
     )
   }
 
-  // Helper para revertir el token si algo va mal
+  const chargedNow = !alreadyPaid
+
+  // Helper para revertir el token si algo va mal y lo habíamos consumido
   async function refundToken() {
+    if (!chargedNow) return
     try {
       await db.user.update({
         where: { id: user!.id },
@@ -60,21 +134,24 @@ export async function POST(req: Request) {
     }
   }
 
-  // 4. Cache hit: devolvemos directamente sin llamar a Gemini
-  //    (pero el token YA se ha consumido en el paso 3)
+  // 5. Cache hit: devolvemos directamente sin llamar a Gemini
   const cached = await db.aICacheEntry.findUnique({
     where: { questionId_withImage: { questionId, withImage } },
   })
   if (cached) {
     try {
       const result = JSON.parse(cached.payloadJson) as AIExplanationResult
-      return NextResponse.json({ cached: true, result, quota: consumed })
+      if (chargedNow) {
+        await markPaid(user.id, questionId, withImage)
+        consumedQuota = await getQuotaStatus(user.id)
+      }
+      return NextResponse.json({ cached: true, result, quota: consumedQuota, charged: chargedNow })
     } catch {
       // JSON corrupto, regeneramos vía Gemini abajo
     }
   }
 
-  // 5. Cargar pregunta con opciones (necesario para llamar a Gemini)
+  // 6. Cargar pregunta con opciones (necesario para llamar a Gemini)
   const question = await db.question.findUnique({
     where: { id: questionId },
     include: { options: { orderBy: { letra: "asc" } } },
@@ -93,7 +170,7 @@ export async function POST(req: Request) {
     )
   }
 
-  // 6. Llamar a Gemini
+  // 7. Llamar a Gemini
   let result: AIExplanationResult
   try {
     result = await explainQuestion({
@@ -112,7 +189,7 @@ export async function POST(req: Request) {
     )
   }
 
-  // 7. Guardar en cache (no bloqueamos respuesta si falla)
+  // 8. Guardar en cache global (no bloqueamos respuesta si falla)
   try {
     await db.aICacheEntry.upsert({
       where:  { questionId_withImage: { questionId, withImage } },
@@ -123,7 +200,23 @@ export async function POST(req: Request) {
     // no bloqueamos
   }
 
-  // Devolvemos quota actualizada (puede haber cambiado en otra request en paralelo)
+  // 9. Registrar que ESTE user ya pagó por esta pregunta
+  if (chargedNow) {
+    await markPaid(user.id, questionId, withImage)
+  }
+
   const quota = await getQuotaStatus(user.id)
-  return NextResponse.json({ cached: false, result, quota })
+  return NextResponse.json({ cached: false, result, quota, charged: chargedNow })
+}
+
+async function markPaid(userId: number, questionId: number, withImage: boolean) {
+  try {
+    await db.userAiPaid.upsert({
+      where:  { userId_questionId_withImage: { userId, questionId, withImage } },
+      update: {},
+      create: { userId, questionId, withImage },
+    })
+  } catch {
+    // no bloqueamos respuesta si el insert falla
+  }
 }
