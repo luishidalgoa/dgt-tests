@@ -100,24 +100,45 @@ async function main() {
     }
   }
 
-  // 4. Webhooks configurados
+  // 4. Webhooks configurados en el dashboard
   console.log()
-  console.log("🪝 Webhooks configurados:")
+  console.log("🪝 Webhooks REGISTRADOS en Stripe Dashboard:")
   const hooks = await stripe.webhookEndpoints.list({ limit: 20 })
   if (hooks.data.length === 0) {
     console.log("  (ninguno)")
-    console.log()
-    console.log("→ Crea el webhook en https://dashboard.stripe.com/webhooks")
-    console.log("  • Endpoint URL: https://TU-DOMINIO/api/webhooks/stripe")
-    console.log("  • Eventos: checkout.session.completed,")
-    console.log("            customer.subscription.created,")
-    console.log("            customer.subscription.updated,")
-    console.log("            customer.subscription.deleted")
-    console.log("  Luego copia el whsec_... aquí en STRIPE_WEBHOOK_SECRET")
   } else {
     for (const h of hooks.data) {
       console.log(`  • ${h.url} (${h.status})`)
       console.log(`    eventos: ${h.enabled_events.join(", ").slice(0, 100)}${h.enabled_events.length > 5 ? "…" : ""}`)
+    }
+  }
+
+  // 5. STRIPE_WEBHOOK_SECRET local (el que verifica la firma cuando llega un evento)
+  console.log()
+  console.log("🔐 STRIPE_WEBHOOK_SECRET en este entorno:")
+  const whsec = process.env.STRIPE_WEBHOOK_SECRET
+  if (!whsec || whsec.trim() === "") {
+    console.log("  ❌ vacío")
+    console.log("  → Para LOCAL test: arranca `stripe listen --forward-to http://localhost:4321/api/webhooks/stripe`")
+    console.log("    y pega el whsec_... que te imprime en .env.local")
+    console.log("  → Para producción: coge el de https://dashboard.stripe.com/webhooks (modo live)")
+  } else if (!whsec.startsWith("whsec_")) {
+    console.log(`  ⚠ formato sospechoso (no empieza por whsec_): ${whsec.slice(0, 10)}…`)
+  } else {
+    console.log(`  ✓ definido (${whsec.slice(0, 12)}…)`)
+    const isLiveKey = apiKey.startsWith("sk_live_")
+    console.log()
+    if (isLiveKey) {
+      console.log("  Notas:")
+      console.log("  • Estás en LIVE mode → este secret debe ser el del webhook LIVE de tu Dashboard.")
+    } else {
+      console.log("  Notas:")
+      console.log("  • Estás en TEST mode → este secret debe ser:")
+      console.log("    - el temporal que imprime Stripe CLI al hacer `stripe listen`, O")
+      console.log("    - el del webhook test del Dashboard (si tienes uno apuntando a una URL")
+      console.log("      accesible públicamente, p.ej. ngrok o tu Vercel preview).")
+      console.log("  • Si NO coincide con el origen real de los eventos, /api/webhooks/stripe")
+      console.log("    devolverá 400 (firma inválida) y la BBDD no se actualizará.")
     }
   }
 }
