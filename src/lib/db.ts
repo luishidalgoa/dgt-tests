@@ -63,3 +63,50 @@ function makeClient() {
 export const db = global.prisma ?? (makeClient() as unknown as PrismaClient)
 
 if (process.env.NODE_ENV !== "production") global.prisma = db
+
+// ── Sanity check: avisar si el cliente generado está stale ─────────────
+// Listamos algunos campos que se han ido añadiendo a User. Si alguno
+// falta en el modelo en runtime, es que el cliente Prisma cargado en el
+// proceso Node es anterior a la última migración. Hay que regenerar.
+if (process.env.NODE_ENV !== "production") {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const userFields = (db as any)?._runtimeDataModel?.models?.User?.fields as
+    | { name: string }[]
+    | undefined
+  const EXPECTED_USER_FIELDS = [
+    "role",
+    "aiTokensUsed",
+    "aiTokensMonth",
+    "stripeCustomerId",
+    "subscriptionStatus",
+    "acknowledgments",
+  ]
+  if (userFields) {
+    const present = new Set(userFields.map((f) => f.name))
+    const missing = EXPECTED_USER_FIELDS.filter((f) => !present.has(f))
+    if (missing.length > 0) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        [
+          "",
+          "──────────────────────────────────────────────────────────────",
+          "⚠  PRISMA CLIENT STALE",
+          "──────────────────────────────────────────────────────────────",
+          `Faltan los campos: ${missing.join(", ")}`,
+          "",
+          "El proceso de Node tiene cargada una versión vieja del cliente",
+          "Prisma. La migración ya está aplicada en la BBDD pero hay que",
+          "regenerar el cliente y reiniciar el dev server:",
+          "",
+          "  1. Para el dev server (Ctrl+C en su terminal)",
+          "  2. npx prisma generate",
+          "  3. npm run dev",
+          "",
+          "Mientras tanto, los endpoints que tocan estos campos darán 500.",
+          "──────────────────────────────────────────────────────────────",
+          "",
+        ].join("\n")
+      )
+    }
+  }
+}
