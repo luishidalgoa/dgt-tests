@@ -9,6 +9,40 @@ const schema = z.object({
   withImage:  z.boolean().optional().default(false),
 })
 
+/**
+ * GET /api/ai/explain?questionId=N&withImage=true
+ *
+ * Solo consulta el cache. No llama a Gemini ni descuenta quota.
+ * - 200 con { cached: true, result } si la respuesta está cacheada
+ * - 204 si no hay nada cacheado todavía
+ */
+export async function GET(req: Request) {
+  const user = await getCurrentUser()
+  if (!user) {
+    return NextResponse.json({ error: "Necesitas una cuenta" }, { status: 401 })
+  }
+
+  const url = new URL(req.url)
+  const questionId = Number(url.searchParams.get("questionId") ?? "")
+  const withImage  = url.searchParams.get("withImage") === "true"
+  if (!Number.isInteger(questionId) || questionId <= 0) {
+    return NextResponse.json({ error: "questionId inválido" }, { status: 400 })
+  }
+
+  const cached = await db.aICacheEntry.findUnique({
+    where: { questionId_withImage: { questionId, withImage } },
+  })
+  if (!cached) {
+    return new NextResponse(null, { status: 204 })
+  }
+  try {
+    const result = JSON.parse(cached.payloadJson) as AIExplanationResult
+    return NextResponse.json({ cached: true, result })
+  } catch {
+    return new NextResponse(null, { status: 204 })
+  }
+}
+
 export async function POST(req: Request) {
   // 1. Solo usuarios logueados (los guests no tienen acceso a la IA)
   const user = await getCurrentUser()

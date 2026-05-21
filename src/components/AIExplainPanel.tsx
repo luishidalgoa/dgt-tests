@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -13,8 +13,8 @@ import {
   Loader2,
   ImageIcon,
   XCircle,
-  Lightbulb,
   CheckCircle2,
+  Wand2,
 } from "lucide-react"
 import { ExplanationWithHighlights } from "@/components/ExplanationWithHighlights"
 
@@ -29,7 +29,7 @@ interface Props {
   questionId:   number
   /** Explicación oficial — sobre la que se aplica el subrayado. */
   explicacion:  string
-  /** Si la pregunta tiene imagen, se habilita el switch para enviarla. */
+  /** Si la pregunta tiene imagen, se envía siempre automáticamente. */
   hasImage:     boolean
   /** Cuántas preguntas a la IA le quedan al usuario. */
   remaining:    number
@@ -37,15 +37,9 @@ interface Props {
   maxAllowed:   number
   /** Se llama si la IA devolvió respuesta (cached o no). Sirve para descontar quota. */
   onConsume:    (cached: boolean) => void
-  /** Pasar las key phrases al panel padre para sincronizar el subrayado del enunciado. */
+  /** Pasar las key phrases al panel padre para sincronizar el subrayado. */
   onResult?:    (result: AIResult) => void
 }
-
-const PRESET_QUESTIONS = [
-  { id: "why-correct", label: "¿Por qué es esta la respuesta correcta?" },
-  { id: "why-others",  label: "¿Por qué las otras opciones no son correctas?" },
-  { id: "key",         label: "Subraya las partes clave de la explicación" },
-] as const
 
 export function AIExplainPanel({
   questionId,
@@ -56,14 +50,46 @@ export function AIExplainPanel({
   onConsume,
   onResult,
 }: Props) {
-  const [open, setOpen] = useState(false)
-  const [withImage, setWithImage] = useState(true)
+  const [open, setOpen]       = useState(false)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [result, setResult] = useState<AIResult | null>(null)
-  const [cached, setCached] = useState(false)
+  const [error, setError]     = useState<string | null>(null)
+  const [result, setResult]   = useState<AIResult | null>(null)
+  const [cached, setCached]   = useState(false)
+  /** true cuando ya hemos consultado el cache al menos una vez */
+  const [checkedCache, setCheckedCache] = useState(false)
 
   const noQuota = remaining <= 0
+
+  // Al abrir el modal: consulta el cache (sin gastar quota)
+  useEffect(() => {
+    if (!open || checkedCache) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch(
+          `/api/ai/explain?questionId=${questionId}&withImage=${hasImage}`,
+          { method: "GET" }
+        )
+        if (cancelled) return
+        if (res.status === 200) {
+          const data = (await res.json()) as { cached: boolean; result: AIResult }
+          setResult(data.result)
+          setCached(true)
+          onResult?.(data.result)
+          // Cache hit → no consume quota
+          onConsume(true)
+        }
+        // 204: nada cacheado todavía, esperamos al click del usuario
+      } catch {
+        // ignore — el usuario verá el CTA y podrá disparar manualmente
+      } finally {
+        if (!cancelled) setCheckedCache(true)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [open, checkedCache, questionId, hasImage, onConsume, onResult])
 
   async function askAI() {
     if (noQuota || loading) return
@@ -73,7 +99,7 @@ export function AIExplainPanel({
       const res = await fetch("/api/ai/explain", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ questionId, withImage: hasImage && withImage }),
+        body: JSON.stringify({ questionId, withImage: hasImage }),
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
@@ -91,8 +117,17 @@ export function AIExplainPanel({
     }
   }
 
+  function handleOpenChange(v: boolean) {
+    setOpen(v)
+    if (!v) {
+      // Mantenemos el resultado en memoria para evitar refetch si vuelve a abrir;
+      // pero limpiamos errores transitorios
+      setError(null)
+    }
+  }
+
   return (
-    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setResult(null); setError(null) } }}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <button
           type="button"
@@ -112,7 +147,7 @@ export function AIExplainPanel({
           title={noQuota ? "Sin preguntas disponibles para este examen" : "Pregúntale a la IA"}
         >
           <Sparkles className="h-4 w-4" />
-          Pregunta a la IA
+          Analizar con IA
           <span
             className="font-mono-tabular"
             style={{
@@ -132,7 +167,7 @@ export function AIExplainPanel({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5" style={{ color: "rgb(168, 85, 247)" }} />
-            Asistente IA
+            Análisis IA
             <span
               className="font-mono-tabular"
               style={{
@@ -149,66 +184,94 @@ export function AIExplainPanel({
           </DialogTitle>
         </DialogHeader>
 
-        {/* Switch enviar imagen */}
-        {hasImage && (
-          <label
+        {/* Estado: comprobando cache */}
+        {!checkedCache && !result && (
+          <div
             style={{
+              padding: 24,
               display: "flex",
               alignItems: "center",
+              justifyContent: "center",
               gap: 10,
-              padding: "10px 12px",
-              borderRadius: 10,
-              border: "1px solid var(--slate-200)",
-              background: "rgba(148, 163, 184, 0.06)",
-              cursor: "pointer",
-              fontSize: 13,
+              color: "var(--slate-500)",
+              fontSize: 13.5,
             }}
           >
-            <ImageIcon className="h-4 w-4" style={{ color: "var(--slate-500)" }} />
-            <span style={{ flex: 1 }}>Enviar la imagen de la pregunta a la IA</span>
-            <input
-              type="checkbox"
-              checked={withImage}
-              onChange={(e) => setWithImage(e.target.checked)}
-              style={{ accentColor: "rgb(168, 85, 247)", width: 18, height: 18 }}
-            />
-          </label>
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Comprobando si ya hay análisis...
+          </div>
         )}
 
-        {/* Si todavía no hay resultado, mostrar las opciones de pregunta */}
-        {!result && (
-          <div className="space-y-2">
-            {PRESET_QUESTIONS.map((q) => (
-              <button
-                key={q.id}
-                type="button"
-                onClick={askAI}
-                disabled={loading || noQuota}
-                className="w-full text-left transition flex items-center gap-3"
-                style={{
-                  padding: 12,
-                  borderRadius: 10,
-                  border: "1.5px solid var(--slate-200)",
-                  background: "#fff",
-                  fontSize: 13.5,
-                  cursor: loading || noQuota ? "wait" : "pointer",
-                }}
-              >
-                <Lightbulb className="h-4 w-4 flex-shrink-0" style={{ color: "rgb(168, 85, 247)" }} />
-                <span style={{ flex: 1 }}>{q.label}</span>
-              </button>
-            ))}
+        {/* Estado: cache vacío → CTA para generar */}
+        {checkedCache && !result && !loading && !error && (
+          <div className="space-y-3">
+            <div
+              style={{
+                padding: "14px 16px",
+                borderRadius: 12,
+                background: "rgba(168, 85, 247, 0.06)",
+                border: "1px solid rgba(168, 85, 247, 0.25)",
+                fontSize: 13.5,
+                lineHeight: 1.55,
+                color: "var(--slate-700)",
+              }}
+            >
+              La IA analizará la pregunta y te dará en una sola respuesta:
+              <ul style={{ margin: "8px 0 0 18px", padding: 0, fontSize: 13 }}>
+                <li>La idea clave del concepto</li>
+                <li>Por qué la opción correcta es la correcta</li>
+                <li>Por qué las otras opciones no son válidas</li>
+                <li>Las frases más importantes subrayadas en amarillo</li>
+              </ul>
+              {hasImage && (
+                <p
+                  style={{
+                    margin: "10px 0 0",
+                    fontSize: 12,
+                    color: "var(--slate-500)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <ImageIcon className="h-3.5 w-3.5" />
+                  La imagen de la pregunta se envía automáticamente.
+                </p>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={askAI}
+              disabled={noQuota}
+              className="w-full inline-flex items-center justify-center gap-2"
+              style={{
+                padding: "12px 16px",
+                borderRadius: 12,
+                border: 0,
+                background:
+                  "linear-gradient(135deg, rgb(168, 85, 247), rgb(236, 72, 153))",
+                color: "#fff",
+                fontWeight: 800,
+                fontSize: 14,
+                cursor: noQuota ? "not-allowed" : "pointer",
+                opacity: noQuota ? 0.5 : 1,
+                boxShadow: "0 10px 22px -10px rgba(168, 85, 247, 0.55)",
+              }}
+            >
+              <Wand2 className="h-4 w-4" />
+              {noQuota ? "Sin quota disponible" : "Generar análisis"}
+            </button>
             <p
               style={{
-                margin: "6px 4px 0",
+                margin: "0 4px",
                 fontSize: 11.5,
                 color: "var(--slate-500)",
                 lineHeight: 1.4,
               }}
             >
-              Las preguntas preset son siempre las mismas. La IA analizará la pregunta, las opciones
-              y la explicación oficial. La respuesta se cachea, así que si vuelves a esta pregunta
-              en el futuro no consumirá quota.
+              La respuesta se guarda. Si esta pregunta se vuelve a analizar en
+              el futuro, se reutiliza sin consumir cuota.
             </p>
           </div>
         )}
