@@ -2,6 +2,7 @@ import Link from "next/link"
 import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
 import { Play, Zap, AlertTriangle, LogIn, UserPlus, Sparkles } from "lucide-react"
+import { ContinueExamPill } from "@/components/ContinueExamPill"
 
 export const dynamic = "force-dynamic"
 
@@ -188,10 +189,10 @@ export default async function HomePage() {
             </div>
           </div>
         </div>
-        <Link className="dash-pill" href={continueHref}>
-          <Play className="h-4 w-4 fill-current" />
-          {lastTest ? "Continuar donde lo dejaste" : "Empieza tu primer test"}
-        </Link>
+        <ContinueExamPill
+          fallbackHref={continueHref}
+          fallbackLabel={lastTest ? "Continuar donde lo dejaste" : "Empieza tu primer test"}
+        />
       </section>
 
       {/* ACTIVIDAD SEMANAL */}

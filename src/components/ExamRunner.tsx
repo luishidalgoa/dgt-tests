@@ -15,6 +15,12 @@ import { QuestionImage } from "@/components/QuestionImage"
 import { AIExplainPanel, type AIResult } from "@/components/AIExplainPanel"
 import { ExplanationWithHighlights } from "@/components/ExplanationWithHighlights"
 import {
+  loadExamState,
+  saveExamState,
+  clearExamState,
+  type SavedExamState,
+} from "@/lib/examState"
+import {
   ArrowLeft,
   ArrowRight,
   LayoutGrid,
@@ -60,12 +66,21 @@ export function ExamRunner({ data, mode = "normal", timeLimit = null, isGuest = 
   // Resultados de la IA cacheados por questionId (para no perderlos al navegar)
   const [aiResults, setAiResults] = useState<Record<number, AIResult>>({})
   const submittedRef = useRef(false)
+  // Refs para la persistencia
+  const startedAtRef = useRef<string>(new Date().toISOString())
+  const hydratedRef  = useRef(false)
+  const [hydrated, setHydrated] = useState(false)
 
   const { questions, test } = data
   const total = questions.length
   const q = questions[current]
   const selected = answers[q.id] ?? null
   const answered = Object.values(answers).filter((v) => v !== null).length
+
+  // Un examen es "reanudable" cuando viene de un test concreto (no /temas ni
+  // /test-errores, que reparten preguntas aleatorias en cada visita).
+  const isResumable = !isGuest && test.id > 0 && test.testNumber > 0
+  const persistMode: "practica" | "examen" = timeLimit !== null ? "examen" : "practica"
 
   // Feedback en modo práctica: cuando llega correctOptionId del server y NO hay temporizador
   const showFeedback =
@@ -75,6 +90,61 @@ export function ExamRunner({ data, mode = "normal", timeLimit = null, isGuest = 
 
   const selectedIsCorrect =
     showFeedback && selected !== null && selected === q.correctOptionId
+
+  // ── Hidratación desde localStorage (solo 1 vez) ─────────────────────────
+  useEffect(() => {
+    if (hydratedRef.current) return
+    hydratedRef.current = true
+    if (!isResumable) {
+      setHydrated(true)
+      return
+    }
+    const saved = loadExamState()
+    if (saved && saved.testId === test.id && saved.mode === persistMode) {
+      // Restaurar respuestas válidas (solo las preguntas que existan)
+      const validQuestionIds = new Set(questions.map((qu) => qu.id))
+      const restoredAnswers: Record<number, number | null> = {}
+      for (const [qid, oid] of Object.entries(saved.answers)) {
+        const n = Number(qid)
+        if (validQuestionIds.has(n)) restoredAnswers[n] = oid
+      }
+      setAnswers(restoredAnswers)
+      // Pregunta actual (clavada al rango válido)
+      const safeCurrent = Math.min(Math.max(0, saved.current), questions.length - 1)
+      setCurrent(safeCurrent)
+      startedAtRef.current = saved.startedAt
+      // Recalcular el tiempo restante si es examen cronometrado
+      if (timeLimit !== null) {
+        const elapsed = (Date.now() - new Date(saved.startedAt).getTime()) / 1000
+        const remaining = Math.max(0, timeLimit - Math.floor(elapsed))
+        setSecondsLeft(remaining)
+      }
+    }
+    setHydrated(true)
+  }, [isResumable, test.id, persistMode, questions, timeLimit])
+
+  // ── Guardado automático en cada cambio ──────────────────────────────────
+  useEffect(() => {
+    if (!hydrated || !isResumable) return
+    // No sobrescribir el slot de "examen en curso" hasta que el usuario
+    // haya hecho algo (al menos una respuesta o haya navegado).
+    const hasActivity = answered > 0 || current > 0
+    if (!hasActivity) return
+    const state: SavedExamState = {
+      categorySlug:   test.category.slug,
+      categoryName:   test.category.name,
+      categoryCode:   test.category.code,
+      testId:         test.id,
+      testNumber:     test.testNumber,
+      mode:           persistMode,
+      answers,
+      current,
+      startedAt:      startedAtRef.current,
+      timeLimit,
+      totalQuestions: questions.length,
+    }
+    saveExamState(state)
+  }, [hydrated, isResumable, answered, answers, current, persistMode, questions.length, test.category.code, test.category.name, test.category.slug, test.id, test.testNumber, timeLimit])
 
   // ── Submit ──────────────────────────────────────────────────────────────
   const handleFinish = useCallback(() => {
@@ -118,6 +188,7 @@ export function ExamRunner({ data, mode = "normal", timeLimit = null, isGuest = 
         }
 
         sessionStorage.setItem("dgt:guest-result", JSON.stringify(result))
+        clearExamState()
         router.push("/preview-results")
       } catch (err) {
         submittedRef.current = false
@@ -147,6 +218,7 @@ export function ExamRunner({ data, mode = "normal", timeLimit = null, isGuest = 
           throw new Error(body.error ?? "Error al guardar el intento")
         }
         const data = (await res.json()) as SubmitAttemptResponse
+        clearExamState()
         router.push(data.redirectUrl)
       } catch (err) {
         submittedRef.current = false
