@@ -132,27 +132,30 @@ async function main() {
   const isActive = chosen.status === "active" || chosen.status === "trialing"
   const priceId  = chosen.items.data[0]?.price?.id ?? null
   const periodEnd = (chosen as Stripe.Subscription & { current_period_end?: number }).current_period_end
+  const cancelAtPeriodEnd = Boolean(chosen.cancel_at_period_end)
 
   console.log()
-  console.log(`→ Usando ${chosen.id} (status=${chosen.status})`)
+  console.log(`→ Usando ${chosen.id} (status=${chosen.status}, cancelAtPeriodEnd=${cancelAtPeriodEnd})`)
 
   const isAdmin = user.role === "ADMIN"
   await db.user.update({
     where: { id: user.id },
     data: {
-      stripeCustomerId:             customer.id,
-      stripeSubscriptionId:         chosen.id,
-      subscriptionStatus:           chosen.status,
-      subscriptionPriceId:          priceId,
-      subscriptionCurrentPeriodEnd: periodEnd ? new Date(periodEnd * 1000) : null,
+      stripeCustomerId:              customer.id,
+      stripeSubscriptionId:          chosen.id,
+      subscriptionStatus:            chosen.status,
+      subscriptionPriceId:           priceId,
+      subscriptionCurrentPeriodEnd:  periodEnd ? new Date(periodEnd * 1000) : null,
+      subscriptionCancelAtPeriodEnd: cancelAtPeriodEnd,
       ...(isAdmin ? {} : { role: isActive ? "SUBSCRIBER" : "USER" }),
     },
   })
 
   console.log(`✅ BBDD actualizada:`)
-  console.log(`   role:              ${isAdmin ? "ADMIN (no tocado)" : isActive ? "SUBSCRIBER" : "USER"}`)
-  console.log(`   subscriptionStatus: ${chosen.status}`)
-  if (periodEnd) console.log(`   currentPeriodEnd:  ${new Date(periodEnd * 1000).toISOString()}`)
+  console.log(`   role:                ${isAdmin ? "ADMIN (no tocado)" : isActive ? "SUBSCRIBER" : "USER"}`)
+  console.log(`   subscriptionStatus:  ${chosen.status}`)
+  console.log(`   cancelAtPeriodEnd:   ${cancelAtPeriodEnd}`)
+  if (periodEnd) console.log(`   currentPeriodEnd:    ${new Date(periodEnd * 1000).toISOString()}`)
 }
 
 main()

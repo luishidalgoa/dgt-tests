@@ -41,6 +41,10 @@ model User {
   subscriptionStatus           String?   // "active" | "past_due" | "canceled" | "trialing" | "incomplete" | null
   subscriptionPriceId          String?
   subscriptionCurrentPeriodEnd DateTime?
+  /// true = el usuario ha cancelado la suscripción y NO se renovará al
+  /// final del periodo (subscriptionCurrentPeriodEnd marca el fin real).
+  /// false = sigue activa y se renovará automáticamente al final del periodo.
+  subscriptionCancelAtPeriodEnd Boolean  @default(false)
   // ── UX ────────────────────────────────────────────────────────────
   hasSeenWelcome  Boolean       @default(false)   // legacy, no usado; ver acknowledgments
   /** JSON String[] con los ids de notificaciones que el usuario ya ha

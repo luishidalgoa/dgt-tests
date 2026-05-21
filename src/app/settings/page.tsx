@@ -132,32 +132,61 @@ export default async function SettingsPage() {
           </div>
         </div>
 
-        {/* Detalles */}
-        {full && !admin && (
-          <div
-            style={{
-              padding: "10px 12px",
-              borderRadius: 10,
-              background: "rgba(168, 85, 247, 0.06)",
-              border: "1px solid rgba(168, 85, 247, 0.15)",
-              fontSize: 12.5,
-              color: "var(--slate-600)",
-              marginBottom: 14,
-            }}
-          >
-            <div>
-              Estado:{" "}
-              <b style={{ color: user.subscriptionStatus === "active" ? "var(--green-d)" : "var(--amber-d)" }}>
-                {user.subscriptionStatus ?? "—"}
-              </b>
-            </div>
-            {periodEnd && (
-              <div style={{ marginTop: 4 }}>
-                Próxima renovación: <b>{periodEnd}</b>
+        {/* Detalles de la suscripción */}
+        {full && !admin && (() => {
+          const willRenew = !user.subscriptionCancelAtPeriodEnd
+          const accent = willRenew ? "var(--green-d)" : "var(--amber-d)"
+          const accentBg = willRenew ? "rgba(34, 197, 94, 0.06)" : "rgba(245, 158, 11, 0.08)"
+          const accentBorder = willRenew ? "rgba(34, 197, 94, 0.20)" : "rgba(245, 158, 11, 0.25)"
+          return (
+            <div
+              style={{
+                padding: "12px 14px",
+                borderRadius: 10,
+                background: accentBg,
+                border: `1px solid ${accentBorder}`,
+                fontSize: 13,
+                color: "var(--slate-700)",
+                marginBottom: 14,
+                display: "flex",
+                flexDirection: "column",
+                gap: 6,
+              }}
+            >
+              <div>
+                Estado:{" "}
+                <b style={{ color: user.subscriptionStatus === "active" ? "var(--green-d)" : "var(--amber-d)" }}>
+                  {user.subscriptionStatus ?? "—"}
+                </b>
               </div>
-            )}
-          </div>
-        )}
+              <div>
+                Renovación automática:{" "}
+                <b style={{ color: accent }}>
+                  {willRenew ? "✓ Activada" : "✗ Desactivada"}
+                </b>
+              </div>
+              {periodEnd && (
+                <div>
+                  {willRenew ? "Próxima renovación" : "Termina"}: <b>{periodEnd}</b>
+                </div>
+              )}
+              {!willRenew && (
+                <div
+                  style={{
+                    marginTop: 4,
+                    fontSize: 12,
+                    color: "var(--amber-d)",
+                    fontStyle: "italic",
+                  }}
+                >
+                  Has cancelado la suscripción. Mantienes el acceso PRO hasta la fecha
+                  indicada. Si cambias de opinión, puedes reactivarla desde el portal
+                  de gestión sin perder nada.
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         {/* CTAs */}
         {admin ? (

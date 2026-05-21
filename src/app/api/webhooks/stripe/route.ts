@@ -142,6 +142,7 @@ async function onSubscriptionUpdated(sub: Stripe.Subscription) {
   const priceId  = sub.items.data[0]?.price?.id ?? null
   // current_period_end es opcional en algunos planes; lo manejamos defensivamente
   const periodEnd = (sub as Stripe.Subscription & { current_period_end?: number }).current_period_end ?? null
+  const cancelAtPeriodEnd = Boolean(sub.cancel_at_period_end)
 
   // Solo cambiamos role si NO es admin (los admins son intocables)
   const current = await db.user.findUnique({
@@ -153,11 +154,12 @@ async function onSubscriptionUpdated(sub: Stripe.Subscription) {
   await db.user.update({
     where: { id: userId },
     data: {
-      stripeCustomerId:             customerId,
-      stripeSubscriptionId:         sub.id,
-      subscriptionStatus:           status,
-      subscriptionPriceId:          priceId,
-      subscriptionCurrentPeriodEnd: periodEnd ? new Date(periodEnd * 1000) : null,
+      stripeCustomerId:              customerId,
+      stripeSubscriptionId:          sub.id,
+      subscriptionStatus:            status,
+      subscriptionPriceId:           priceId,
+      subscriptionCurrentPeriodEnd:  periodEnd ? new Date(periodEnd * 1000) : null,
+      subscriptionCancelAtPeriodEnd: cancelAtPeriodEnd,
       // role: SUBSCRIBER si activa, USER si no — pero nunca tocamos ADMIN
       ...(isAdmin ? {} : { role: isActive ? "SUBSCRIBER" : "USER" }),
     },
@@ -182,9 +184,10 @@ async function onSubscriptionDeleted(sub: Stripe.Subscription) {
   await db.user.update({
     where: { id: userId },
     data: {
-      subscriptionStatus:           "canceled",
-      subscriptionCurrentPeriodEnd: null,
-      stripeSubscriptionId:         null,
+      subscriptionStatus:            "canceled",
+      subscriptionCurrentPeriodEnd:  null,
+      subscriptionCancelAtPeriodEnd: false,
+      stripeSubscriptionId:          null,
       ...(isAdmin ? {} : { role: "USER" }),
     },
   })
