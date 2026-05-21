@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { Inter, JetBrains_Mono } from "next/font/google"
 import { getCurrentUser } from "@/lib/auth"
+import { getQuotaStatus } from "@/lib/aiQuota"
 import { Navbar } from "@/components/Navbar"
 import "./globals.css"
 
@@ -32,6 +33,7 @@ export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const user = await getCurrentUser()
+  const quota = user ? await getQuotaStatus(user.id) : null
 
   return (
     <html
@@ -44,6 +46,8 @@ export default async function RootLayout({
           user={
             user ? { username: user.username, displayName: user.displayName } : null
           }
+          aiTokensRemaining={quota?.remaining}
+          aiTokensMax={quota?.max}
         />
         <main className="flex-1 mx-auto w-full max-w-[1200px] px-6 py-7">
           {children}
