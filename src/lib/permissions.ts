@@ -5,7 +5,7 @@
  *   - USER:       cuenta gratis. Acceso solo a los 7 primeros tests de
  *                 Permiso B + 10 tokens IA/mes.
  *   - SUBSCRIBER: usuario con suscripción Stripe activa. Acceso total
- *                 + 50 tokens IA/mes.
+ *                 + AI_TOKENS_PRO tokens IA/mes (ver constante abajo).
  *   - ADMIN:      acceso total sin pagar. Asignado a mano por script.
  *
  * El rol SUBSCRIBER se gestiona automáticamente desde el webhook de
@@ -23,7 +23,7 @@ export const FREE_TEST_LIMIT = 7
 
 /** Tokens IA por mes según plan. */
 export const AI_TOKENS_FREE = 10
-export const AI_TOKENS_PRO  = 50
+export const AI_TOKENS_PRO  = 60
 
 export type UserForGate = Pick<User, "role" | "subscriptionStatus"> | null
 

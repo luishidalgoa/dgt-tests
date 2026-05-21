@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 import { ackNotification } from "@/lib/client-acks"
 import { PRO_PRICE_LABEL } from "@/lib/pricing"
+import { AI_TOKENS_FREE, AI_TOKENS_PRO } from "@/lib/permissions"
 
 interface Props {
   /** Id de la notificación (siempre "welcome-v1" por ahora). */
@@ -31,7 +32,7 @@ const FREE_HIGHLIGHTS = [
   "Modo práctica con feedback",
   "Modo examen real (30 min)",
   "Historial + estadísticas",
-  "10 análisis IA al mes",
+  `${AI_TOKENS_FREE} análisis IA al mes`,
 ]
 
 const PRO_HIGHLIGHTS = [
@@ -39,7 +40,7 @@ const PRO_HIGHLIGHTS = [
   "Tests por tema + test de errores",
   "Manual completo en flipbook",
   "Modo competición multijugador",
-  "50 análisis IA al mes",
+  `${AI_TOKENS_PRO} análisis IA al mes`,
 ]
 
 export function WelcomeModal({ notificationId, username }: Props) {

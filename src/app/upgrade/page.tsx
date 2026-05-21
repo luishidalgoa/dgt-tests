@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { getCurrentUser } from "@/lib/auth"
-import { hasFullAccess, planLabel } from "@/lib/permissions"
+import { hasFullAccess, planLabel, AI_TOKENS_FREE, AI_TOKENS_PRO } from "@/lib/permissions"
 import { CheckoutButton } from "@/components/CheckoutButton"
 import { PRO_PRICE_LABEL } from "@/lib/pricing"
 import {
@@ -18,28 +18,28 @@ import {
 export const dynamic = "force-dynamic"
 
 const FREE_FEATURES = [
-  { label: "7 primeros tests de Permiso B", included: true },
-  { label: "Modo práctica con feedback",     included: true },
-  { label: "Modo examen real (30 min)",      included: true },
-  { label: "Historial y estadísticas",        included: true },
-  { label: "10 análisis IA al mes",          included: true },
+  { label: "7 primeros tests de Permiso B",     included: true },
+  { label: "Modo práctica con feedback",         included: true },
+  { label: "Modo examen real (30 min)",         included: true },
+  { label: "Historial y estadísticas",            included: true },
+  { label: `${AI_TOKENS_FREE} análisis IA al mes`,        included: true },
   { label: "Todas las categorías (+100 tests)",  included: false },
-  { label: "Tests por temas",                included: false },
-  { label: "Test de errores (repite fallos)",  included: false },
-  { label: "Manual completo (flipbook)",      included: false },
-  { label: "Modo competición multijugador",   included: false },
-  { label: "50 análisis IA al mes",          included: false },
+  { label: "Tests por temas",                    included: false },
+  { label: "Test de errores (repite fallos)",    included: false },
+  { label: "Manual completo (flipbook)",         included: false },
+  { label: "Modo competición multijugador",     included: false },
+  { label: `${AI_TOKENS_PRO} análisis IA al mes`,        included: false },
 ] as const
 
 const PRO_FEATURES = [
-  { label: "Todo lo del plan gratuito",       included: true },
+  { label: "Todo lo del plan gratuito",         included: true },
   { label: "Todas las categorías (+100 tests)",  included: true },
-  { label: "Tests por temas concretos",       included: true },
-  { label: "Test de errores ilimitado",       included: true },
-  { label: "Manual completo en flipbook",     included: true },
-  { label: "Modo competición hasta 4 jug.",   included: true },
-  { label: "50 análisis IA al mes",          included: true },
-  { label: "Cancela cuando quieras",         included: true },
+  { label: "Tests por temas concretos",          included: true },
+  { label: "Test de errores ilimitado",          included: true },
+  { label: "Manual completo en flipbook",        included: true },
+  { label: "Modo competición hasta 4 jug.",      included: true },
+  { label: `${AI_TOKENS_PRO} análisis IA al mes`,        included: true },
+  { label: "Cancela cuando quieras",            included: true },
 ] as const
 
 export default async function UpgradePage() {
