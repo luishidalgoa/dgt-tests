@@ -87,7 +87,7 @@ export function AuthForm({ mode }: AuthFormProps) {
               maxLength={isLogin ? 120 : 40}
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
-              placeholder={isLogin ? "luis o tu@email.com" : "tu_usuario"}
+              placeholder={isLogin ? "tu usuario o tu@email.com" : "tu_usuario"}
               // En register solo letras minúsculas/números/_.-
               {...(isLogin ? {} : { pattern: "[a-zA-Z0-9_.\\-]+" })}
             />
