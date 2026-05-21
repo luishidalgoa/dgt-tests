@@ -88,15 +88,15 @@ export default async function SettingsPage() {
               color: lowQuota ? "var(--red-600)" : "rgb(126, 34, 206)",
             }}
           >
-            {quota.used}
+            {quota.remaining}
           </div>
           <div style={{ fontSize: 16, color: "var(--slate-500)", fontWeight: 700 }}>/ {quota.max}</div>
           <div style={{ marginLeft: "auto", fontSize: 12, color: "var(--slate-500)", fontWeight: 600 }}>
-            quedan <b style={{ color: lowQuota ? "var(--red-600)" : "var(--ink)" }}>{quota.remaining}</b>
+            consumiste <b style={{ color: "var(--ink)" }}>{quota.used}</b>
           </div>
         </div>
 
-        {/* Barra de progreso */}
+        {/* Barra de progreso: representa los tokens restantes (baja al consumir) */}
         <div
           style={{
             height: 10,
@@ -107,7 +107,7 @@ export default async function SettingsPage() {
         >
           <div
             style={{
-              width: `${Math.min(100, percent)}%`,
+              width: `${Math.max(0, 100 - percent)}%`,
               height: "100%",
               background: lowQuota
                 ? "linear-gradient(90deg, var(--red-500), var(--red-600))"
@@ -118,9 +118,7 @@ export default async function SettingsPage() {
         </div>
 
         <p style={{ fontSize: 12, color: "var(--slate-500)", marginTop: 12, marginBottom: 0, lineHeight: 1.5 }}>
-          Cada análisis cuesta <b>1 token</b>, tanto si la respuesta es nueva como si está
-          cacheada. El cache solo nos ahorra dinero a nosotros (no llamamos a Gemini),
-          pero el coste para ti sigue siendo el mismo.
+          Cada análisis cuesta <b>1 token</b>.
         </p>
       </div>
     </div>

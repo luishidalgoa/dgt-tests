@@ -194,11 +194,11 @@ export function AIExplainPanel({
             }}
           >
             <span>
-              Quota mensual:{" "}
+              Te quedan{" "}
               <b style={{ color: quota.remaining <= 5 ? "var(--red-600)" : "rgb(126, 34, 206)" }}>
-                {quota.used}/{quota.max}
+                {quota.remaining}/{quota.max}
               </b>{" "}
-              <span style={{ color: "var(--slate-500)" }}>· se resetea el 1 del próximo mes</span>
+              tokens <span style={{ color: "var(--slate-500)" }}>· reset el 1 del próximo mes</span>
             </span>
           </div>
         )}
@@ -271,10 +271,7 @@ export function AIExplainPanel({
                 lineHeight: 1.4,
               }}
             >
-              Cada análisis (nuevo o cacheado) cuesta 1 token de tu quota
-              mensual. Si la pregunta ya fue analizada antes, la respuesta
-              llega al instante (no llamamos a Gemini), pero igualmente se
-              descuenta 1 token.
+              Cada análisis cuesta 1 token de tu quota mensual.
             </p>
           </div>
         )}
