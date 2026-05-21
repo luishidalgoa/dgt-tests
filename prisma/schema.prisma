@@ -38,7 +38,11 @@ model User {
   subscriptionPriceId          String?
   subscriptionCurrentPeriodEnd DateTime?
   // ── UX ────────────────────────────────────────────────────────────
-  hasSeenWelcome  Boolean       @default(false)
+  hasSeenWelcome  Boolean       @default(false)   // legacy, no usado; ver acknowledgments
+  /** JSON String[] con los ids de notificaciones que el usuario ya ha
+   *  marcado como vistas (welcome, actualizaciones de términos, etc.).
+   *  Ver src/lib/notifications.ts para el registro. */
+  acknowledgments String        @default("[]")
   attempts        ExamAttempt[]
   hostedParties   Party[]       @relation("HostedParties")
   partyPlays      PartyPlayer[] @relation("PartyParticipations")

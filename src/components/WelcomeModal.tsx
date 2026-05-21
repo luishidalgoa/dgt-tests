@@ -18,10 +18,10 @@ import {
 } from "lucide-react"
 
 interface Props {
-  /** Solo mostramos el modal si el usuario no lo ha visto. */
-  shouldShow: boolean
+  /** Id de la notificación (siempre "welcome-v1" por ahora). */
+  notificationId: string
   /** displayName para personalizar el saludo. */
-  username:   string
+  username:       string
 }
 
 const FREE_HIGHLIGHTS = [
@@ -40,7 +40,7 @@ const PRO_HIGHLIGHTS = [
   "50 análisis IA al mes",
 ]
 
-export function WelcomeModal({ shouldShow, username }: Props) {
+export function WelcomeModal({ notificationId, username }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [loadingPro, setLoadingPro] = useState(false)
@@ -49,16 +49,19 @@ export function WelcomeModal({ shouldShow, username }: Props) {
 
   // Pequeño delay para no saltar a la cara
   useEffect(() => {
-    if (!shouldShow) return
     const t = setTimeout(() => setOpen(true), 250)
     return () => clearTimeout(t)
-  }, [shouldShow])
+  }, [])
 
   async function dismiss() {
     setOpen(false)
     startTransition(async () => {
       try {
-        await fetch("/api/users/me/seen-welcome", { method: "POST" })
+        await fetch("/api/users/me/ack", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ key: notificationId }),
+        })
         router.refresh()
       } catch {
         // ignore
@@ -81,16 +84,20 @@ export function WelcomeModal({ shouldShow, username }: Props) {
       }
       const { url } = (await res.json()) as { url: string }
       if (!url) throw new Error("Sin url de Stripe")
-      // Marcamos seen-welcome ANTES de redirigir
-      try { await fetch("/api/users/me/seen-welcome", { method: "POST" }) } catch {}
+      // Marcamos ack ANTES de redirigir
+      try {
+        await fetch("/api/users/me/ack", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ key: notificationId }),
+        })
+      } catch {}
       window.location.href = url
     } catch (err) {
       setErrorPro(err instanceof Error ? err.message : "Error desconocido")
       setLoadingPro(false)
     }
   }
-
-  if (!shouldShow) return null
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) dismiss() }}>

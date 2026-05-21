@@ -4,7 +4,10 @@ import { Inter, JetBrains_Mono } from "next/font/google"
 import { getCurrentUser } from "@/lib/auth"
 import { getQuotaStatus } from "@/lib/aiQuota"
 import { planLabel } from "@/lib/permissions"
+import { firstPendingNotification } from "@/lib/notifications"
 import { Navbar } from "@/components/Navbar"
+import { UserNotifications } from "@/components/UserNotifications"
+import { CookieConsent } from "@/components/CookieConsent"
 import "./globals.css"
 
 const inter = Inter({
@@ -36,6 +39,8 @@ export default async function RootLayout({
   const user = await getCurrentUser()
   const quota = user ? await getQuotaStatus(user.id) : null
   const plan  = planLabel(user) ?? undefined
+  // Primera notificación one-time pendiente para este usuario (welcome, etc.)
+  const pendingNotif = user ? firstPendingNotification(user) : null
 
   return (
     <html
@@ -55,6 +60,12 @@ export default async function RootLayout({
         <main className="flex-1 mx-auto w-full max-w-[1200px] px-6 py-7">
           {children}
         </main>
+        {user && (
+          <UserNotifications
+            pendingId={pendingNotif?.id ?? null}
+            username={user.displayName ?? user.username}
+          />
+        )}
         <footer
           style={{
             marginTop: 32,
@@ -82,7 +93,15 @@ export default async function RootLayout({
           >
             portfolio →
           </a>
+          {" · "}
+          <Link
+            href="/privacidad"
+            style={{ color: "var(--slate-500)", textDecoration: "none" }}
+          >
+            Privacidad y cookies
+          </Link>
         </footer>
+        <CookieConsent />
       </body>
     </html>
   )
