@@ -1,7 +1,7 @@
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 import Link from "next/link"
 import { db } from "@/lib/db"
-import { requireUser } from "@/lib/auth"
+import { getCurrentUser } from "@/lib/auth"
 import { ExamRunner } from "@/components/ExamRunner"
 import {
   ChevronLeft,
@@ -10,8 +10,11 @@ import {
   History,
   Trophy,
   RotateCw,
+  Lock,
 } from "lucide-react"
 import type { TestRunnerData } from "@/types/exam"
+
+export const dynamic = "force-dynamic"
 
 const PASS_THRESHOLD = 0.9
 
@@ -23,12 +26,17 @@ interface PageProps {
 }
 
 export default async function ExamPage({ params, searchParams }: PageProps) {
-  const user = await requireUser()
+  const user = await getCurrentUser()
   const { categoria, testNum } = await params
   const sp = await searchParams
   const examMode = sp.mode === "examen"
   const testNumber = parseInt(testNum, 10)
   if (Number.isNaN(testNumber)) notFound()
+
+  // Bloquear modo examen para invitados
+  if (examMode && !user) {
+    redirect(`/login?redirect=/${categoria}/${testNumber}?mode=examen`)
+  }
 
   const test = await db.test.findFirst({
     where: {
@@ -54,23 +62,25 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
 
   // Pantalla de selección de modo
   if (!sp.mode) {
-    // Cargar intentos previos del usuario para ESTE test
-    const pastAttempts = await db.examAttempt.findMany({
-      where: {
-        userId:     user.id,
-        testId:     test.id,
-        finishedAt: { not: null },
-      },
-      orderBy: { startedAt: "desc" },
-      take:    20,
-      select:  {
-        id:        true,
-        score:     true,
-        total:     true,
-        startedAt: true,
-        mode:      true,
-      },
-    })
+    // Cargar intentos previos del usuario para ESTE test (solo si está logueado)
+    const pastAttempts = user
+      ? await db.examAttempt.findMany({
+          where: {
+            userId:     user.id,
+            testId:     test.id,
+            finishedAt: { not: null },
+          },
+          orderBy: { startedAt: "desc" },
+          take:    20,
+          select:  {
+            id:        true,
+            score:     true,
+            total:     true,
+            startedAt: true,
+            mode:      true,
+          },
+        })
+      : []
 
     return (
       <div>
@@ -120,39 +130,78 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
             </Link>
           </div>
 
-          <div className="card-soft warm" style={{ padding: 26 }}>
-            <div className="flex items-center gap-3 mb-4">
-              <div
-                className="flex items-center justify-center rounded-xl"
-                style={{
-                  width: 52,
-                  height: 52,
-                  background: "linear-gradient(135deg, var(--amber), var(--red-500))",
-                  color: "#fff",
-                  boxShadow: "0 8px 18px -10px rgba(239, 68, 68, 0.5)",
-                }}
+          {user ? (
+            <div className="card-soft warm" style={{ padding: 26 }}>
+              <div className="flex items-center gap-3 mb-4">
+                <div
+                  className="flex items-center justify-center rounded-xl"
+                  style={{
+                    width: 52,
+                    height: 52,
+                    background: "linear-gradient(135deg, var(--amber), var(--red-500))",
+                    color: "#fff",
+                    boxShadow: "0 8px 18px -10px rgba(239, 68, 68, 0.5)",
+                  }}
+                >
+                  <Timer className="h-6 w-6" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-extrabold m-0">Examen real</h2>
+                  <p className="text-sm m-0" style={{ color: "var(--slate-500)" }}>
+                    30 min · simula la DGT
+                  </p>
+                </div>
+              </div>
+              <Link
+                href={`/${categoria}/${testNumber}?mode=examen`}
+                className="btn-amber"
+                style={{ width: "100%" }}
               >
-                <Timer className="h-6 w-6" />
-              </div>
-              <div>
-                <h2 className="text-xl font-extrabold m-0">Examen real</h2>
-                <p className="text-sm m-0" style={{ color: "var(--slate-500)" }}>
-                  30 min · simula la DGT
-                </p>
-              </div>
+                Empezar examen
+              </Link>
             </div>
-            <Link
-              href={`/${categoria}/${testNumber}?mode=examen`}
-              className="btn-amber"
-              style={{ width: "100%" }}
+          ) : (
+            <div
+              className="card-soft"
+              style={{
+                padding: 26,
+                opacity: 0.85,
+                border: "1.5px dashed var(--slate-300)",
+                background: "rgba(148, 163, 184, 0.06)",
+              }}
             >
-              Empezar examen
-            </Link>
-          </div>
+              <div className="flex items-center gap-3 mb-4">
+                <div
+                  className="flex items-center justify-center rounded-xl"
+                  style={{
+                    width: 52,
+                    height: 52,
+                    background: "var(--slate-200)",
+                    color: "var(--slate-500)",
+                  }}
+                >
+                  <Lock className="h-6 w-6" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-extrabold m-0">Examen real</h2>
+                  <p className="text-sm m-0" style={{ color: "var(--slate-500)" }}>
+                    Solo para usuarios registrados
+                  </p>
+                </div>
+              </div>
+              <Link
+                href={`/login?redirect=/${categoria}/${testNumber}?mode=examen`}
+                className="btn-secondary"
+                style={{ width: "100%" }}
+              >
+                Iniciar sesión para acceder
+              </Link>
+            </div>
+          )}
         </div>
 
         {/* Intentos previos */}
-        {pastAttempts.length > 0 && (
+        {user && pastAttempts.length > 0 && (
           <section>
             <div className="dash-section-title" style={{ margin: "8px 4px 14px" }}>
               <h3 style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -212,6 +261,34 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
   }
 
   // Construir payload para el ExamRunner
+  // Para invitados, pre-cargar las soluciones (correctOptionId) y explicaciones
+  // ya que no hay POST al servidor — todo se corrige en cliente.
+  const isGuest = !user
+
+  // Cargar opciones con isCorrect cuando es invitado
+  const questionsWithSolutions = isGuest
+    ? await db.question.findMany({
+        where: { id: { in: test.testQuestions.map((tq) => tq.question.id) } },
+        select: {
+          id: true,
+          explicacion: true,
+          options: {
+            select: { id: true, isCorrect: true },
+          },
+        },
+      })
+    : []
+
+  const solutionsMap = new Map(
+    questionsWithSolutions.map((q) => [
+      q.id,
+      {
+        correctOptionId: q.options.find((o) => o.isCorrect)?.id ?? null,
+        explicacion:     q.explicacion ?? null,
+      },
+    ])
+  )
+
   const data: TestRunnerData = {
     test: {
       id:             test.id,
@@ -234,6 +311,9 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
         letra: o.letra,
         texto: o.texto,
       })),
+      // Solo se envía al cliente cuando es invitado
+      correctOptionId: isGuest ? solutionsMap.get(tq.question.id)?.correctOptionId ?? null : undefined,
+      explicacion:     isGuest ? solutionsMap.get(tq.question.id)?.explicacion ?? null : undefined,
     })),
   }
 
@@ -249,6 +329,7 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
       <ExamRunner
         data={data}
         timeLimit={examMode ? EXAM_DURATION_SECONDS : null}
+        isGuest={isGuest}
       />
     </div>
   )

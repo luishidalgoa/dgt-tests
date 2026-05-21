@@ -1,8 +1,9 @@
 "use client"
 
 import { useTransition } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { LogOut } from "lucide-react"
+import { LogOut, Settings } from "lucide-react"
 
 interface HeaderUserProps {
   username: string
@@ -24,8 +25,15 @@ export function HeaderUser({ username }: HeaderUserProps) {
 
   return (
     <div className="avatar">
-      <span className="pic" aria-hidden="true">{initial}</span>
-      <span className="name">{username}</span>
+      <Link
+        href="/settings"
+        title="Configuración"
+        style={{ display: "inline-flex", alignItems: "center", gap: 10, textDecoration: "none", color: "inherit" }}
+      >
+        <span className="pic" aria-hidden="true">{initial}</span>
+        <span className="name">{username}</span>
+        <Settings className="h-3.5 w-3.5" style={{ color: "var(--slate-400)" }} />
+      </Link>
       <button
         type="button"
         className="logout"

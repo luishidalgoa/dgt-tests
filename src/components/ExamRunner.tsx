@@ -35,6 +35,8 @@ interface ExamRunnerProps {
   mode?: "normal" | "errores"
   /** Duración en segundos del temporizador. null = sin tiempo. */
   timeLimit?: number | null
+  /** Si true, corregir en cliente y enviar a /preview-results en vez de POST /api/attempts. */
+  isGuest?: boolean
 }
 
 function formatTime(seconds: number): string {
@@ -43,7 +45,7 @@ function formatTime(seconds: number): string {
   return `${m}:${s}`
 }
 
-export function ExamRunner({ data, mode = "normal", timeLimit = null }: ExamRunnerProps) {
+export function ExamRunner({ data, mode = "normal", timeLimit = null, isGuest = false }: ExamRunnerProps) {
   const router = useRouter()
   const [current, setCurrent] = useState(0)
   const [answers, setAnswers] = useState<Record<number, number | null>>({})
@@ -64,6 +66,50 @@ export function ExamRunner({ data, mode = "normal", timeLimit = null }: ExamRunn
     if (submittedRef.current) return
     submittedRef.current = true
     setError(null)
+
+    // ── Modo invitado: corregir en cliente y guardar en sessionStorage ──
+    if (isGuest) {
+      try {
+        let score = 0
+        const answerDetails = questions.map((qu) => {
+          const selectedOptionId = answers[qu.id] ?? null
+          const isCorrect =
+            selectedOptionId !== null && selectedOptionId === qu.correctOptionId
+          if (isCorrect) score++
+          return {
+            questionId:       qu.id,
+            enunciado:        qu.enunciado,
+            imagen:           qu.imagen,
+            codigoTema:       qu.codigoTema,
+            options:          qu.options,
+            correctOptionId:  qu.correctOptionId ?? null,
+            selectedOptionId,
+            isCorrect,
+            explicacion:      qu.explicacion ?? null,
+          }
+        })
+
+        const result = {
+          test: {
+            id:         test.id,
+            testNumber: test.testNumber,
+            category:   test.category,
+          },
+          score,
+          total: questions.length,
+          mode,
+          finishedAt: new Date().toISOString(),
+          answers: answerDetails,
+        }
+
+        sessionStorage.setItem("dgt:guest-result", JSON.stringify(result))
+        router.push("/preview-results")
+      } catch (err) {
+        submittedRef.current = false
+        setError(err instanceof Error ? err.message : "Error al corregir el test")
+      }
+      return
+    }
 
     const payload: SubmitAttemptPayload = {
       testId: test.id,
@@ -92,7 +138,7 @@ export function ExamRunner({ data, mode = "normal", timeLimit = null }: ExamRunn
         setError(err instanceof Error ? err.message : "Error desconocido")
       }
     })
-  }, [answers, mode, questions, router, test.id])
+  }, [answers, isGuest, mode, questions, router, test.id, test.testNumber, test.category])
 
   // ── Temporizador ────────────────────────────────────────────────────────
   useEffect(() => {

@@ -1,14 +1,14 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { db } from "@/lib/db"
-import { requireUser } from "@/lib/auth"
+import { getCurrentUser } from "@/lib/auth"
 import { getTemaName } from "@/lib/temas"
 import { ExamRunner } from "@/components/ExamRunner"
-import { Card, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ChevronLeft, BookMarked, Sparkles } from "lucide-react"
 import type { TestRunnerData } from "@/types/exam"
+
+export const dynamic = "force-dynamic"
 
 interface PageProps {
   params: Promise<{ prefix: string }>
@@ -16,7 +16,7 @@ interface PageProps {
 }
 
 export default async function TemaPage({ params, searchParams }: PageProps) {
-  const user = await requireUser()
+  const user = await getCurrentUser()
   const { prefix: rawPrefix } = await params
   const sp = await searchParams
   const prefix = decodeURIComponent(rawPrefix)
@@ -33,20 +33,24 @@ export default async function TemaPage({ params, searchParams }: PageProps) {
 
   // Vista de selección
   if (!requested) {
-    // Calcular stats del tema del usuario
-    const answered = await db.answer.count({
-      where: {
-        questionId: { in: allQuestionIds.map((q) => q.id) },
-        attempt:    { userId: user.id },
-      },
-    })
-    const correct = await db.answer.count({
-      where: {
-        questionId: { in: allQuestionIds.map((q) => q.id) },
-        isCorrect: true,
-        attempt:    { userId: user.id },
-      },
-    })
+    // Calcular stats del tema del usuario (solo si está logueado)
+    const answered = user
+      ? await db.answer.count({
+          where: {
+            questionId: { in: allQuestionIds.map((q) => q.id) },
+            attempt:    { userId: user.id },
+          },
+        })
+      : 0
+    const correct = user
+      ? await db.answer.count({
+          where: {
+            questionId: { in: allQuestionIds.map((q) => q.id) },
+            isCorrect: true,
+            attempt:    { userId: user.id },
+          },
+        })
+      : 0
     const acc = answered > 0 ? (correct / answered) * 100 : null
 
     const options = [10, 20, 30, totalAvailable].filter(
@@ -125,6 +129,15 @@ export default async function TemaPage({ params, searchParams }: PageProps) {
           <p style={{ fontSize: 12, color: "var(--slate-500)", marginTop: 18, marginBottom: 0 }}>
             Las preguntas se seleccionan en orden aleatorio entre las {totalAvailable} disponibles.
           </p>
+
+          {!user && (
+            <p style={{ fontSize: 12, color: "var(--slate-500)", marginTop: 8, marginBottom: 0, fontStyle: "italic" }}>
+              Modo invitado: tu progreso no se guardará.{" "}
+              <Link href="/register" style={{ color: "var(--orange-600)", fontWeight: 700 }}>
+                Crear cuenta
+              </Link>
+            </p>
+          )}
         </div>
       </div>
     )
@@ -133,6 +146,8 @@ export default async function TemaPage({ params, searchParams }: PageProps) {
   // Generar test aleatorio del tema
   const shuffled = [...allQuestionIds].sort(() => Math.random() - 0.5)
   const selectedIds = shuffled.slice(0, requested).map((q) => q.id)
+
+  const isGuest = !user
 
   const questions = await db.question.findMany({
     where: { id: { in: selectedIds } },
@@ -160,6 +175,9 @@ export default async function TemaPage({ params, searchParams }: PageProps) {
       imagen:     q.imagen,
       codigoTema: q.codigoTema,
       options:    q.options.map((o) => ({ id: o.id, letra: o.letra, texto: o.texto })),
+      // Para invitados, incluir solución para corrección en cliente
+      correctOptionId: isGuest ? q.options.find((o) => o.isCorrect)?.id ?? null : undefined,
+      explicacion:     isGuest ? q.explicacion ?? null : undefined,
     })),
   }
 
@@ -175,7 +193,7 @@ export default async function TemaPage({ params, searchParams }: PageProps) {
         <Badge variant="secondary" className="font-mono">{prefix}</Badge>
         <span className="text-slate-500">— {getTemaName(prefix)}</span>
       </div>
-      <ExamRunner data={data} mode="errores" />
+      <ExamRunner data={data} mode="errores" isGuest={isGuest} />
     </div>
   )
 }

@@ -13,6 +13,10 @@ export interface QuestionData {
   imagen: string | null
   codigoTema: string | null
   options: OptionData[]
+  /** Solo viene del servidor cuando el usuario es invitado (corrección en cliente) */
+  correctOptionId?: number | null
+  /** Solo viene del servidor cuando el usuario es invitado */
+  explicacion?: string | null
 }
 
 export interface TestRunnerData {

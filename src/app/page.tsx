@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { db } from "@/lib/db"
-import { requireUser } from "@/lib/auth"
-import { Play, Zap, AlertTriangle } from "lucide-react"
+import { getCurrentUser } from "@/lib/auth"
+import { Play, Zap, AlertTriangle, LogIn, UserPlus, Sparkles } from "lucide-react"
 
 export const dynamic = "force-dynamic"
 
@@ -39,13 +39,18 @@ function timeAgo(date: Date): string {
 }
 
 export default async function HomePage() {
-  const user = await requireUser()
+  const user = await getCurrentUser()
 
-  // Categorías + nº de tests
+  // Categorías + nº de tests (siempre, también para guests)
   const categories = await db.category.findMany({
     include: { _count: { select: { tests: true } } },
     orderBy: { id: "asc" },
   })
+
+  // ── Modo invitado ───────────────────────────────────────────────────────
+  if (!user) {
+    return <GuestDashboard categories={categories} />
+  }
 
   // Stats del usuario
   const [totalAttempts, totalAnswers, correctAnswers, recentAttempts] = await Promise.all([
@@ -304,6 +309,86 @@ export default async function HomePage() {
             )
           })
         )}
+      </section>
+    </div>
+  )
+}
+
+
+// ── Dashboard alternativo para invitados (sin login) ──────────────────────────
+type GuestCategory = { id: number; slug: string; name: string; description: string | null; _count: { tests: number } }
+
+function GuestDashboard({ categories }: { categories: GuestCategory[] }) {
+  return (
+    <div className="dash-grid">
+      {/* Hero invitado */}
+      <section className="dash-welcome dash-full" style={{ padding: 32 }}>
+        <div>
+          <h2 style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Sparkles className="h-7 w-7" style={{ color: "var(--amber)" }} />
+            Bienvenido a DGT Tests
+          </h2>
+          <p style={{ fontSize: 15, lineHeight: 1.5 }}>
+            Estás navegando como <b>invitado</b>. Puedes practicar tests del temario sin registrarte,
+            pero <b>tu progreso no se guardará</b>. Crea una cuenta gratis para guardar tu historial,
+            ver estadísticas y desbloquear el modo examen y el test de errores.
+          </p>
+        </div>
+        <div className="flex gap-2 flex-wrap" style={{ marginTop: 14 }}>
+          <Link href="/register" className="btn-primary">
+            <UserPlus className="h-4 w-4" />
+            Crear cuenta gratis
+          </Link>
+          <Link href="/login" className="btn-secondary">
+            <LogIn className="h-4 w-4" />
+            Iniciar sesión
+          </Link>
+        </div>
+      </section>
+
+      {/* Categorías (browsing libre) */}
+      <div className="dash-section-title">
+        <h3>Categorías</h3>
+        <Link className="more" href="/temas">Ver por temas →</Link>
+      </div>
+
+      <div className="dash-cats">
+        {categories.map((c) => {
+          const theme = CATEGORY_THEMES[c.slug] ?? { className: "blue", icon: "📚" }
+          return (
+            <Link key={c.id} href={`/${c.slug}`} className={`dash-cat ${theme.className}`}>
+              <div>
+                <div className="ico">{theme.icon}</div>
+                <h4>{c.name}</h4>
+                <div className="meta">
+                  {c._count.tests} {c._count.tests === 1 ? "test" : "tests"}
+                  {c.description ? " · " + c.description.split(".")[0] : ""}
+                </div>
+              </div>
+              <div className="progress">Modo práctica</div>
+            </Link>
+          )
+        })}
+      </div>
+
+      {/* Recordatorio de features bloqueadas */}
+      <section className="dash-full card-soft" style={{ padding: 22 }}>
+        <h3 style={{ margin: 0, marginBottom: 12, fontSize: 14, fontWeight: 800, color: "var(--slate-500)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+          🔒 Disponible al iniciar sesión
+        </h3>
+        <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
+          {[
+            { icon: <Zap className="h-4 w-4" />, label: "Test de errores (repite lo que fallas)" },
+            { icon: <Play className="h-4 w-4" />, label: "Modo examen con cronómetro" },
+            { icon: <AlertTriangle className="h-4 w-4" />, label: "Historial y estadísticas" },
+            { icon: <Sparkles className="h-4 w-4" />, label: "Modo competición multijugador" },
+          ].map((it, i) => (
+            <li key={i} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, color: "var(--slate-700)" }}>
+              <span style={{ color: "var(--orange-600)" }}>{it.icon}</span>
+              {it.label}
+            </li>
+          ))}
+        </ul>
       </section>
     </div>
   )

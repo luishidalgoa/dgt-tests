@@ -1,39 +1,68 @@
 import Link from "next/link"
 import { db } from "@/lib/db"
-import { requireUser } from "@/lib/auth"
+import { getCurrentUser } from "@/lib/auth"
 import { getTemaName } from "@/lib/temas"
 import { ChevronLeft, BookMarked, ArrowRight } from "lucide-react"
 
+export const dynamic = "force-dynamic"
+
 export default async function TemasPage() {
-  const user = await requireUser()
+  const user = await getCurrentUser()
 
-  const raw = await db.$queryRaw<
-    { prefix: string; totalQuestions: bigint; totalAnswers: bigint; correctAnswers: bigint }[]
-  >`
-    SELECT
-      CASE
-        WHEN INSTR(q.codigoTema, '-') > 0
-        THEN SUBSTR(q.codigoTema, 1, INSTR(q.codigoTema, '-') - 1)
-        ELSE q.codigoTema
-      END                                          AS prefix,
-      COUNT(DISTINCT q.id)                         AS totalQuestions,
-      COUNT(a.id)                                  AS totalAnswers,
-      COALESCE(SUM(CASE WHEN a.isCorrect = 1 THEN 1 ELSE 0 END), 0) AS correctAnswers
-    FROM questions q
-    LEFT JOIN answers a ON a.questionId = q.id
-    LEFT JOIN exam_attempts ea ON ea.id = a.attemptId AND ea.userId = ${user.id}
-    WHERE q.codigoTema IS NOT NULL
-      AND (a.id IS NULL OR ea.id IS NOT NULL)
-    GROUP BY prefix
-    ORDER BY prefix
-  `
+  // Para invitados: solo conteo de preguntas por tema (sin stats personales).
+  // Para usuarios logueados: además, contar respuestas y aciertos.
+  let temas: { prefix: string; totalQuestions: number; totalAnswers: number; correctAnswers: number }[]
 
-  const temas = raw.map((r) => ({
-    prefix:         r.prefix.trim(),
-    totalQuestions: Number(r.totalQuestions),
-    totalAnswers:   Number(r.totalAnswers),
-    correctAnswers: Number(r.correctAnswers),
-  }))
+  if (user) {
+    const raw = await db.$queryRaw<
+      { prefix: string; totalQuestions: bigint; totalAnswers: bigint; correctAnswers: bigint }[]
+    >`
+      SELECT
+        CASE
+          WHEN INSTR(q.codigoTema, '-') > 0
+          THEN SUBSTR(q.codigoTema, 1, INSTR(q.codigoTema, '-') - 1)
+          ELSE q.codigoTema
+        END                                          AS prefix,
+        COUNT(DISTINCT q.id)                         AS totalQuestions,
+        COUNT(a.id)                                  AS totalAnswers,
+        COALESCE(SUM(CASE WHEN a.isCorrect = 1 THEN 1 ELSE 0 END), 0) AS correctAnswers
+      FROM questions q
+      LEFT JOIN answers a ON a.questionId = q.id
+      LEFT JOIN exam_attempts ea ON ea.id = a.attemptId AND ea.userId = ${user.id}
+      WHERE q.codigoTema IS NOT NULL
+        AND (a.id IS NULL OR ea.id IS NOT NULL)
+      GROUP BY prefix
+      ORDER BY prefix
+    `
+    temas = raw.map((r) => ({
+      prefix:         r.prefix.trim(),
+      totalQuestions: Number(r.totalQuestions),
+      totalAnswers:   Number(r.totalAnswers),
+      correctAnswers: Number(r.correctAnswers),
+    }))
+  } else {
+    const raw = await db.$queryRaw<
+      { prefix: string; totalQuestions: bigint }[]
+    >`
+      SELECT
+        CASE
+          WHEN INSTR(q.codigoTema, '-') > 0
+          THEN SUBSTR(q.codigoTema, 1, INSTR(q.codigoTema, '-') - 1)
+          ELSE q.codigoTema
+        END                                          AS prefix,
+        COUNT(DISTINCT q.id)                         AS totalQuestions
+      FROM questions q
+      WHERE q.codigoTema IS NOT NULL
+      GROUP BY prefix
+      ORDER BY prefix
+    `
+    temas = raw.map((r) => ({
+      prefix:         r.prefix.trim(),
+      totalQuestions: Number(r.totalQuestions),
+      totalAnswers:   0,
+      correctAnswers: 0,
+    }))
+  }
 
   return (
     <div>
@@ -51,6 +80,30 @@ export default async function TemasPage() {
           <p className="lead">Practica preguntas de un tema concreto del temario.</p>
         </div>
       </header>
+
+      {!user && (
+        <div
+          className="card-soft"
+          style={{
+            padding: "12px 16px",
+            marginBottom: 16,
+            fontSize: 13.5,
+            color: "var(--slate-600)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <span>
+            Estás en <b>modo invitado</b>. Puedes practicar por tema, pero los aciertos no se guardarán.
+          </span>
+          <Link href="/register" className="btn-secondary" style={{ fontSize: 13 }}>
+            Crear cuenta
+          </Link>
+        </div>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {temas.map((t) => {
