@@ -1,23 +1,36 @@
 import Link from "next/link"
 import { db } from "@/lib/db"
 import { requireUser } from "@/lib/auth"
+import {
+  ChevronLeft,
+  Trophy,
+  Lightbulb,
+  XCircle,
+  History as HistoryIcon,
+} from "lucide-react"
 
 export const dynamic = "force-dynamic"
 
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import {
-  ChevronLeft,
-  CheckCircle2,
-  XCircle,
-  Trophy,
-  Lightbulb,
-  History as HistoryIcon,
-  ArrowRight,
-} from "lucide-react"
-
 const PASS_THRESHOLD = 0.9
+
+const CAT_COLORS: Record<string, string> = {
+  "permiso-b":    "linear-gradient(135deg, #0ea5e9, #0284c7)",
+  "repaso-final": "linear-gradient(135deg, #f97316, #ea580c)",
+  "adas":         "linear-gradient(135deg, #a855f7, #7c3aed)",
+}
+
+function timeAgo(date: Date): string {
+  const diff = Date.now() - date.getTime()
+  const m = Math.floor(diff / 60000)
+  if (m < 1)   return "hace unos segundos"
+  if (m < 60)  return `hace ${m} min`
+  const h = Math.floor(m / 60)
+  if (h < 24)  return `hace ${h} h`
+  const d = Math.floor(h / 24)
+  if (d === 1) return "ayer"
+  if (d < 7)   return `hace ${d} días`
+  return date.toLocaleDateString("es-ES")
+}
 
 export default async function HistorialPage() {
   const user = await requireUser()
@@ -31,7 +44,6 @@ export default async function HistorialPage() {
     },
   })
 
-  // Stats agregadas del usuario
   const [totalAttempts, byCategory] = await Promise.all([
     db.examAttempt.count({ where: { userId: user.id, finishedAt: { not: null } } }),
     db.$queryRaw<
@@ -54,39 +66,54 @@ export default async function HistorialPage() {
   ])
 
   return (
-    <div className="space-y-6">
-      <Link href="/" className="text-sm text-slate-600 hover:text-slate-900 inline-flex items-center gap-1">
+    <div>
+      <Link href="/" className="back-link">
         <ChevronLeft className="h-4 w-4" />
         Inicio
       </Link>
 
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-          <HistoryIcon className="h-7 w-7" />
-          Historial
-        </h1>
-        <p className="text-slate-600 mt-1">
-          {totalAttempts} {totalAttempts === 1 ? "intento completado" : "intentos completados"}
-        </p>
-      </div>
+      <header className="page-header">
+        <div>
+          <h1 style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <HistoryIcon className="h-7 w-7" />
+            Historial
+          </h1>
+          <p className="lead">
+            {totalAttempts} {totalAttempts === 1 ? "intento completado" : "intentos completados"}
+          </p>
+        </div>
+      </header>
 
       {/* Stats por categoría */}
       {byCategory.length > 0 && (
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-3 mb-6">
           {byCategory.map((c) => {
             const sumScore = Number(c.sumScore)
             const sumTotal = Number(c.sumTotal)
             const pct = sumTotal > 0 ? Math.round((sumScore / sumTotal) * 100) : 0
+            const grad = CAT_COLORS[c.categorySlug] ?? "linear-gradient(135deg, #94a3b8, #64748b)"
             return (
-              <Card key={c.categoryId}>
-                <CardContent className="p-4">
-                  <div className="text-xs text-slate-500">{c.categoryName}</div>
-                  <div className="text-2xl font-bold mt-1">{pct}%</div>
-                  <div className="text-sm text-slate-600">
-                    {Number(c.total)} intentos · {sumScore}/{sumTotal} aciertos
-                  </div>
-                </CardContent>
-              </Card>
+              <div key={c.categoryId} className="card-soft" style={{ padding: 18 }}>
+                <div
+                  style={{
+                    display: "inline-block",
+                    width: 32,
+                    height: 4,
+                    borderRadius: 2,
+                    background: grad,
+                    marginBottom: 10,
+                  }}
+                />
+                <div style={{ fontSize: 12, color: "var(--slate-500)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                  {c.categoryName}
+                </div>
+                <div className="font-mono-tabular" style={{ fontSize: 32, fontWeight: 900, marginTop: 4, letterSpacing: "-0.03em" }}>
+                  {pct}%
+                </div>
+                <div style={{ fontSize: 13, color: "var(--slate-500)", fontWeight: 500 }}>
+                  {Number(c.total)} intentos · {sumScore}/{sumTotal} aciertos
+                </div>
+              </div>
             )
           })}
         </div>
@@ -94,69 +121,53 @@ export default async function HistorialPage() {
 
       {/* Listado */}
       {attempts.length === 0 ? (
-        <Card>
-          <CardContent className="p-10 text-center space-y-3">
-            <p className="text-slate-500">Aún no has completado ningún test.</p>
-            <Button asChild>
-              <Link href="/">
-                Ir a la página de inicio
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="empty-state">
+          <span className="ico">📊</span>
+          Aún no has completado ningún test.<br />
+          <Link href="/" className="btn-primary" style={{ marginTop: 18, display: "inline-flex" }}>
+            Empezar un test →
+          </Link>
+        </div>
       ) : (
-        <div className="space-y-2">
+        <div className="card-soft" style={{ padding: 8 }}>
           {attempts.map((a) => {
-            const score = a.score ?? 0
-            const passed = score / a.total >= PASS_THRESHOLD
+            const score    = a.score ?? 0
+            const ratio    = score / a.total
+            const passed   = ratio >= PASS_THRESHOLD
             const isErrors = a.mode === "errores"
             const href = isErrors
               ? `/historial/${a.id}`
               : `/${a.test?.category.slug}/${a.test?.testNumber}/resultado/${a.id}`
+            const light = passed ? "green" : ratio >= 0.7 ? "amber" : "red"
 
             return (
-              <Link key={a.id} href={href}>
-                <Card className="hover:shadow-sm hover:border-slate-300 transition cursor-pointer">
-                  <CardContent className="p-4 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      {passed ? (
-                        <Trophy className="h-5 w-5 text-emerald-500 flex-shrink-0" />
-                      ) : isErrors ? (
-                        <Lightbulb className="h-5 w-5 text-amber-500 flex-shrink-0" />
-                      ) : (
-                        <XCircle className="h-5 w-5 text-amber-500 flex-shrink-0" />
-                      )}
-                      <div className="min-w-0">
-                        <div className="font-medium truncate">
-                          {isErrors
-                            ? "Test de errores"
-                            : `${a.test?.category.name ?? ""} · Test ${a.test?.testNumber ?? ""}`}
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          {a.startedAt.toLocaleString("es-ES")}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-4 flex-shrink-0">
-                      {isErrors && (
-                        <Badge variant="outline" className="text-amber-700 border-amber-200">
-                          Errores
-                        </Badge>
-                      )}
-                      <div className="text-right">
-                        <div className={`text-xl font-bold font-mono ${passed ? "text-emerald-600" : ""}`}>
-                          {score}<span className="text-slate-400">/{a.total}</span>
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          {Math.round((score / a.total) * 100)}%
-                        </div>
-                      </div>
-                      <ArrowRight className="h-4 w-4 text-slate-400" />
-                    </div>
-                  </CardContent>
-                </Card>
+              <Link key={a.id} href={href} className="dash-row-item">
+                <span className={`dash-light ${light}`} aria-hidden="true" />
+                <div className="dash-row-title">
+                  {isErrors ? (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      <Lightbulb className="h-4 w-4" style={{ color: "var(--amber)" }} />
+                      Test de errores
+                    </span>
+                  ) : passed ? (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      <Trophy className="h-4 w-4" style={{ color: "var(--green)" }} />
+                      {a.test?.category.name ?? ""} · Test {a.test?.testNumber ?? ""}
+                    </span>
+                  ) : (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      <XCircle className="h-4 w-4" style={{ color: "var(--amber)" }} />
+                      {a.test?.category.name ?? ""} · Test {a.test?.testNumber ?? ""}
+                    </span>
+                  )}
+                  <small>
+                    {a.mode === "examen" ? "Examen real" : a.mode === "errores" ? "Repaso de errores" : "Práctica"}
+                    {" · "}
+                    {timeAgo(a.startedAt)}
+                  </small>
+                </div>
+                <div className="dash-score">{score}/{a.total}</div>
+                <div className="dash-ts">{Math.round(ratio * 100)}%</div>
               </Link>
             )
           })}

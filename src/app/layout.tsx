@@ -1,18 +1,19 @@
 import type { Metadata } from "next"
-import { Geist, Geist_Mono } from "next/font/google"
-import Link from "next/link"
+import { Inter, JetBrains_Mono } from "next/font/google"
 import { getCurrentUser } from "@/lib/auth"
-import { HeaderUser } from "@/components/HeaderUser"
+import { Navbar } from "@/components/Navbar"
 import "./globals.css"
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800", "900"],
 })
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-jetbrains-mono",
   subsets: ["latin"],
+  weight: ["500", "600", "700"],
 })
 
 export const metadata: Metadata = {
@@ -34,51 +35,18 @@ export default async function RootLayout({
   return (
     <html
       lang="es"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col bg-slate-50 text-slate-900">
-        <header className="border-b bg-white sticky top-0 z-10">
-          <div className="mx-auto max-w-6xl px-4 py-4 flex items-center justify-between gap-4">
-            <Link href="/" className="text-xl font-bold tracking-tight">
-              DGT&nbsp;Tests
-            </Link>
-            {user && (
-              <nav className="flex gap-6 text-sm flex-1 justify-center">
-                <Link href="/" className="hover:text-slate-700">
-                  Inicio
-                </Link>
-                <Link href="/temas" className="hover:text-slate-700">
-                  Por temas
-                </Link>
-                <Link href="/stats" className="hover:text-slate-700">
-                  Stats
-                </Link>
-                <Link href="/historial" className="hover:text-slate-700">
-                  Historial
-                </Link>
-                <Link href="/test-errores" className="hover:text-slate-700 font-medium text-amber-600">
-                  Test de errores
-                </Link>
-              </nav>
-            )}
-            {user ? (
-              <HeaderUser username={user.displayName ?? user.username} />
-            ) : (
-              <Link href="/login" className="text-sm font-medium hover:text-slate-700">
-                Iniciar sesión
-              </Link>
-            )}
-          </div>
-        </header>
-        <main className="flex-1 mx-auto w-full max-w-6xl px-4 py-8">
+      <body className="min-h-full flex flex-col">
+        <Navbar
+          user={
+            user ? { username: user.username, displayName: user.displayName } : null
+          }
+        />
+        <main className="flex-1 mx-auto w-full max-w-[1200px] px-6 py-7">
           {children}
         </main>
-        <footer className="border-t bg-white">
-          <div className="mx-auto max-w-6xl px-4 py-4 text-xs text-slate-500">
-            DGT Tests · Local · {new Date().getFullYear()}
-          </div>
-        </footer>
       </body>
     </html>
   )

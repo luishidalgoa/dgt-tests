@@ -86,19 +86,41 @@ export default async function ResultPage({ params }: PageProps) {
       </Link>
 
       {/* Resumen */}
-      <Card className={passed ? "border-emerald-200 bg-emerald-50/30" : "border-amber-200 bg-amber-50/30"}>
-        <CardContent className="p-6 flex flex-col md:flex-row md:items-center gap-6 justify-between">
+      <div
+        className="card-soft warm"
+        style={{
+          padding: 28,
+          marginTop: 16,
+          marginBottom: 22,
+          borderColor: passed ? "rgba(34,197,94,0.35)" : "rgba(245,158,11,0.35)",
+          background: passed
+            ? "linear-gradient(120deg, rgba(34,197,94,0.10) 0%, #fff 60%)"
+            : "linear-gradient(120deg, rgba(245,158,11,0.10) 0%, #fff 60%)",
+        }}
+      >
+        <div className="flex flex-col md:flex-row md:items-center gap-6 justify-between">
           <div className="flex items-center gap-4">
-            {passed ? (
-              <Trophy className="h-12 w-12 text-emerald-500" />
-            ) : (
-              <RotateCw className="h-12 w-12 text-amber-500" />
-            )}
+            <div
+              className="flex items-center justify-center rounded-2xl"
+              style={{
+                width: 64,
+                height: 64,
+                background: passed
+                  ? "linear-gradient(135deg, var(--green), var(--green-d))"
+                  : "linear-gradient(135deg, var(--amber), var(--orange-600))",
+                color: "#fff",
+                boxShadow: passed
+                  ? "0 10px 22px -10px rgba(34,197,94,0.6)"
+                  : "0 10px 22px -10px rgba(234,88,12,0.5)",
+              }}
+            >
+              {passed ? <Trophy className="h-8 w-8" /> : <RotateCw className="h-8 w-8" />}
+            </div>
             <div>
-              <h1 className="text-2xl font-bold">
+              <h1 className="text-2xl font-extrabold m-0" style={{ letterSpacing: "-0.02em" }}>
                 {passed ? "¡Aprobado!" : "Necesitas mejorar"}
               </h1>
-              <p className="text-slate-600">
+              <p className="m-0 mt-1" style={{ color: "var(--slate-500)", fontSize: 13.5, fontWeight: 500 }}>
                 {attempt.test
                   ? `${attempt.test.category.name} · Test ${attempt.test.testNumber}`
                   : "Test de errores"}
@@ -110,41 +132,38 @@ export default async function ResultPage({ params }: PageProps) {
 
           <div className="flex gap-6 text-center">
             <div>
-              <div className="text-3xl font-bold font-mono">
-                {score}<span className="text-slate-400">/{total}</span>
+              <div className="font-mono-tabular" style={{ fontSize: 32, fontWeight: 900, letterSpacing: "-0.03em" }}>
+                {score}
+                <span style={{ color: "var(--slate-400)" }}>/{total}</span>
               </div>
-              <div className="text-xs text-slate-500">Aciertos</div>
+              <div style={{ fontSize: 11, color: "var(--slate-500)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Aciertos</div>
             </div>
             <div>
-              <div className="text-3xl font-bold font-mono text-red-500">{wrong}</div>
-              <div className="text-xs text-slate-500">Fallos</div>
+              <div className="font-mono-tabular" style={{ fontSize: 32, fontWeight: 900, color: "var(--red-500)" }}>{wrong}</div>
+              <div style={{ fontSize: 11, color: "var(--slate-500)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Fallos</div>
             </div>
             {blanks > 0 && (
               <div>
-                <div className="text-3xl font-bold font-mono text-slate-400">{blanks}</div>
-                <div className="text-xs text-slate-500">Blancos</div>
+                <div className="font-mono-tabular" style={{ fontSize: 32, fontWeight: 900, color: "var(--slate-400)" }}>{blanks}</div>
+                <div style={{ fontSize: 11, color: "var(--slate-500)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Blancos</div>
               </div>
             )}
           </div>
 
           <div className="flex flex-col gap-2">
             {attempt.test && (
-              <Button asChild>
-                <Link href={`/${attempt.test.category.slug}/${attempt.test.testNumber}`}>
-                  <RotateCw className="h-4 w-4" />
-                  Repetir test
-                </Link>
-              </Button>
-            )}
-            <Button variant="outline" asChild>
-              <Link href="/test-errores">
-                <Lightbulb className="h-4 w-4" />
-                Test de errores
+              <Link href={`/${attempt.test.category.slug}/${attempt.test.testNumber}`} className="btn-primary">
+                <RotateCw className="h-4 w-4" />
+                Repetir test
               </Link>
-            </Button>
+            )}
+            <Link href="/test-errores" className="btn-secondary">
+              <Lightbulb className="h-4 w-4" />
+              Test de errores
+            </Link>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Detalle pregunta a pregunta */}
       <div className="space-y-4">

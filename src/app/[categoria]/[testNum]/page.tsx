@@ -3,9 +3,6 @@ import Link from "next/link"
 import { db } from "@/lib/db"
 import { requireUser } from "@/lib/auth"
 import { ExamRunner } from "@/components/ExamRunner"
-import { Card, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import {
   ChevronLeft,
   BookOpen,
@@ -76,114 +73,134 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
     })
 
     return (
-      <div className="space-y-6">
-        <Link
-          href={`/${categoria}`}
-          className="text-sm text-slate-600 hover:text-slate-900 inline-flex items-center gap-1"
-        >
+      <div>
+        <Link href={`/${categoria}`} className="back-link">
           <ChevronLeft className="h-4 w-4" />
           Volver a {test.category.name}
         </Link>
 
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <Badge variant="secondary">{test.category.code}</Badge>
-            <span className="text-sm text-slate-500">{test.category.name}</span>
+        <header className="page-header">
+          <div>
+            <h1>Test {test.testNumber}</h1>
+            <p className="lead">
+              {test.category.name} · {test.testQuestions.length} preguntas
+            </p>
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            Test {test.testNumber}
-          </h1>
-          <p className="text-slate-600 mt-1">
-            {test.testQuestions.length} preguntas
-          </p>
+          <span className="badge">[{test.category.code}]</span>
+        </header>
+
+        <div className="grid gap-4 md:grid-cols-2 mb-6">
+          <div className="card-soft" style={{ padding: 26 }}>
+            <div className="flex items-center gap-3 mb-4">
+              <div
+                className="flex items-center justify-center rounded-xl"
+                style={{
+                  width: 52,
+                  height: 52,
+                  background: "linear-gradient(135deg, #0ea5e9, #0284c7)",
+                  color: "#fff",
+                  boxShadow: "0 8px 18px -10px rgba(2, 132, 199, 0.6)",
+                }}
+              >
+                <BookOpen className="h-6 w-6" />
+              </div>
+              <div>
+                <h2 className="text-xl font-extrabold m-0">Modo práctica</h2>
+                <p className="text-sm m-0" style={{ color: "var(--slate-500)" }}>
+                  Sin tiempo. Navega libre.
+                </p>
+              </div>
+            </div>
+            <Link
+              href={`/${categoria}/${testNumber}?mode=practica`}
+              className="btn-secondary w-full"
+              style={{ width: "100%" }}
+            >
+              Empezar práctica →
+            </Link>
+          </div>
+
+          <div className="card-soft warm" style={{ padding: 26 }}>
+            <div className="flex items-center gap-3 mb-4">
+              <div
+                className="flex items-center justify-center rounded-xl"
+                style={{
+                  width: 52,
+                  height: 52,
+                  background: "linear-gradient(135deg, var(--amber), var(--red-500))",
+                  color: "#fff",
+                  boxShadow: "0 8px 18px -10px rgba(239, 68, 68, 0.5)",
+                }}
+              >
+                <Timer className="h-6 w-6" />
+              </div>
+              <div>
+                <h2 className="text-xl font-extrabold m-0">Examen real</h2>
+                <p className="text-sm m-0" style={{ color: "var(--slate-500)" }}>
+                  30 min · simula la DGT
+                </p>
+              </div>
+            </div>
+            <Link
+              href={`/${categoria}/${testNumber}?mode=examen`}
+              className="btn-amber"
+              style={{ width: "100%" }}
+            >
+              Empezar examen
+            </Link>
+          </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <Card className="hover:shadow-md hover:border-slate-300 transition">
-            <CardContent className="p-6 space-y-4">
-              <div className="flex items-center gap-3">
-                <BookOpen className="h-8 w-8 text-slate-700" />
-                <div>
-                  <h2 className="text-xl font-semibold">Modo práctica</h2>
-                  <p className="text-sm text-slate-600">
-                    Sin temporizador. Navega libremente y corrige cuando quieras.
-                  </p>
-                </div>
-              </div>
-              <Button asChild className="w-full">
-                <Link href={`/${categoria}/${testNumber}?mode=practica`}>
-                  Empezar práctica
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-md hover:border-amber-200 transition">
-            <CardContent className="p-6 space-y-4">
-              <div className="flex items-center gap-3">
-                <Timer className="h-8 w-8 text-amber-500" />
-                <div>
-                  <h2 className="text-xl font-semibold">Modo examen real</h2>
-                  <p className="text-sm text-slate-600">
-                    30 minutos. Simula las condiciones del examen oficial DGT.
-                  </p>
-                </div>
-              </div>
-              <Button asChild className="w-full bg-amber-500 hover:bg-amber-600">
-                <Link href={`/${categoria}/${testNumber}?mode=examen`}>
-                  Empezar examen
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Intentos previos de este test */}
+        {/* Intentos previos */}
         {pastAttempts.length > 0 && (
           <section>
-            <h2 className="text-xl font-semibold flex items-center gap-2 mb-3">
-              <History className="h-5 w-5" />
-              Tus intentos en este test
-              <Badge variant="outline" className="ml-2">{pastAttempts.length}</Badge>
-            </h2>
-            <div className="space-y-2">
+            <div className="dash-section-title" style={{ margin: "8px 4px 14px" }}>
+              <h3 style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <History className="h-5 w-5" />
+                Tus intentos en este test
+                <span className="badge" style={{ marginLeft: 6, padding: "3px 9px", fontSize: 12 }}>
+                  {pastAttempts.length}
+                </span>
+              </h3>
+            </div>
+            <div className="card-soft" style={{ padding: 8 }}>
               {pastAttempts.map((a) => {
-                const score = a.score ?? 0
+                const score  = a.score ?? 0
                 const passed = score / a.total >= PASS_THRESHOLD
                 return (
                   <Link
                     key={a.id}
                     href={`/${categoria}/${testNumber}/resultado/${a.id}`}
+                    className="dash-row-item"
                   >
-                    <Card className="hover:shadow-sm hover:border-slate-300 transition cursor-pointer">
-                      <CardContent className="p-3 flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                          {passed ? (
-                            <Trophy className="h-5 w-5 text-emerald-500 flex-shrink-0" />
-                          ) : (
-                            <RotateCw className="h-5 w-5 text-amber-500 flex-shrink-0" />
-                          )}
-                          <div className="min-w-0">
-                            <div className="text-sm">
-                              {a.startedAt.toLocaleString("es-ES")}
-                            </div>
-                            {a.mode === "examen" && (
-                              <Badge variant="outline" className="text-xs text-amber-700 border-amber-200 mt-1">
-                                Examen real
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className={`text-lg font-bold font-mono ${passed ? "text-emerald-600" : ""}`}>
-                            {score}<span className="text-slate-400">/{a.total}</span>
-                          </div>
-                          <div className="text-xs text-slate-500">
-                            {Math.round((score / a.total) * 100)}%
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                    <span
+                      className="dash-light"
+                      aria-hidden="true"
+                      style={{
+                        background: passed ? "var(--green)" : score / a.total >= 0.7 ? "var(--amber)" : "var(--red-500)",
+                        boxShadow: passed
+                          ? "0 0 0 4px rgba(34,197,94,0.18)"
+                          : score / a.total >= 0.7
+                          ? "0 0 0 4px rgba(245,158,11,0.18)"
+                          : "0 0 0 4px rgba(239,68,68,0.18)",
+                      }}
+                    />
+                    <div className="dash-row-title">
+                      {passed ? (
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                          <Trophy className="h-4 w-4" style={{ color: "var(--green)" }} />
+                          {a.startedAt.toLocaleString("es-ES")}
+                        </span>
+                      ) : (
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                          <RotateCw className="h-4 w-4" style={{ color: "var(--amber)" }} />
+                          {a.startedAt.toLocaleString("es-ES")}
+                        </span>
+                      )}
+                      <small>{a.mode === "examen" ? "Examen real" : "Práctica"}</small>
+                    </div>
+                    <div className="dash-score">{score}/{a.total}</div>
+                    <div className="dash-ts">{Math.round((score / a.total) * 100)}%</div>
                   </Link>
                 )
               })}

@@ -209,13 +209,12 @@ export function ExamRunner({ data, mode = "normal", timeLimit = null }: ExamRunn
       </div>
 
       {/* Pregunta + opciones */}
-      <Card>
-        <CardContent className="p-6">
-          <div className="grid gap-6 md:grid-cols-[300px_1fr]">
+      <div className="card-soft" style={{ padding: 24 }}>
+        <div className="grid gap-6 md:grid-cols-[300px_1fr]">
             {/* Imagen */}
             <div className="space-y-3">
               {q.imagen ? (
-                <div className="relative aspect-square bg-slate-100 rounded overflow-hidden">
+                <div className="relative aspect-square rounded-xl overflow-hidden" style={{ background: "var(--slate-100)" }}>
                   <Image
                     src={`/images/${q.imagen}`}
                     alt={`Pregunta ${current + 1}`}
@@ -226,12 +225,18 @@ export function ExamRunner({ data, mode = "normal", timeLimit = null }: ExamRunn
                   />
                 </div>
               ) : (
-                <div className="aspect-square bg-slate-50 rounded flex items-center justify-center text-slate-300 text-sm">
+                <div
+                  className="aspect-square rounded-xl flex items-center justify-center text-sm"
+                  style={{ background: "var(--slate-100)", color: "var(--slate-300)" }}
+                >
                   sin imagen
                 </div>
               )}
               {q.codigoTema && (
-                <div className="text-xs text-slate-500 font-mono text-center">
+                <div
+                  className="text-xs text-center font-mono-tabular"
+                  style={{ color: "var(--slate-500)" }}
+                >
                   {q.codigoTema}
                 </div>
               )}
@@ -240,10 +245,21 @@ export function ExamRunner({ data, mode = "normal", timeLimit = null }: ExamRunn
             {/* Enunciado + opciones */}
             <div className="space-y-4">
               <div className="flex items-start gap-3">
-                <Badge variant="secondary" className="text-base font-bold mt-0.5">
+                <span
+                  className="font-mono-tabular"
+                  style={{
+                    background: "linear-gradient(180deg, var(--orange-500), var(--red-600))",
+                    color: "#fff",
+                    fontWeight: 800,
+                    fontSize: 14,
+                    padding: "4px 10px",
+                    borderRadius: 8,
+                    marginTop: 2,
+                  }}
+                >
                   {current + 1}
-                </Badge>
-                <h2 className="text-lg font-medium leading-snug">{q.enunciado}</h2>
+                </span>
+                <h2 className="text-lg font-semibold leading-snug m-0">{q.enunciado}</h2>
               </div>
 
               <div className="space-y-2 mt-4">
@@ -255,23 +271,46 @@ export function ExamRunner({ data, mode = "normal", timeLimit = null }: ExamRunn
                       key={opt.id}
                       type="button"
                       onClick={() => selectOption(opt.id)}
-                      className={`w-full text-left p-3 rounded-lg border transition flex items-start gap-3 ${
-                        isSelected
-                          ? "border-slate-900 bg-slate-100"
-                          : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
-                      }`}
+                      className="w-full text-left transition flex items-start gap-3"
+                      style={{
+                        padding: 14,
+                        borderRadius: 14,
+                        border: `2px solid ${isSelected ? "var(--orange-500)" : "var(--slate-200)"}`,
+                        background: isSelected ? "rgba(249, 115, 22, 0.08)" : "#fff",
+                        boxShadow: isSelected ? "0 8px 18px -10px rgba(249, 115, 22, 0.4)" : "none",
+                      }}
                     >
                       <span
-                        className={`flex-shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-sm ${
-                          isSelected
-                            ? "border-slate-900 bg-slate-900 text-white"
-                            : "border-slate-300 text-slate-600"
-                        }`}
+                        className="flex-shrink-0 flex items-center justify-center font-bold"
+                        style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: "50%",
+                          fontSize: 14,
+                          background: isSelected
+                            ? "linear-gradient(180deg, var(--orange-500), var(--red-600))"
+                            : "transparent",
+                          color: isSelected ? "#fff" : "var(--slate-600)",
+                          border: isSelected ? "0" : "2px solid var(--slate-300)",
+                          boxShadow: isSelected ? "0 6px 12px -4px rgba(220, 38, 38, 0.45)" : "none",
+                        }}
                       >
                         {opt.letra}
                       </span>
-                      <span className="leading-snug pt-1 flex-1">{opt.texto}</span>
-                      <kbd className="hidden md:inline-block flex-shrink-0 text-[10px] text-slate-400 border border-slate-200 rounded px-1.5 py-0.5 font-mono mt-1">
+                      <span className="leading-snug pt-1.5 flex-1" style={{ fontSize: 15 }}>
+                        {opt.texto}
+                      </span>
+                      <kbd
+                        className="hidden md:inline-block flex-shrink-0 mt-1"
+                        style={{
+                          fontSize: 10,
+                          color: "var(--slate-400)",
+                          border: "1px solid var(--slate-200)",
+                          borderRadius: 4,
+                          padding: "1px 6px",
+                          fontFamily: "var(--font-mono)",
+                        }}
+                      >
                         {hint}
                       </kbd>
                     </button>
@@ -280,8 +319,7 @@ export function ExamRunner({ data, mode = "normal", timeLimit = null }: ExamRunn
               </div>
             </div>
           </div>
-        </CardContent>
-      </Card>
+      </div>
 
       {/* Controles de navegación */}
       <div className="flex items-center justify-between gap-4">

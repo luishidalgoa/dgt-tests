@@ -1,10 +1,9 @@
 "use client"
 
 import { useState, useTransition } from "react"
+import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Card, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Loader2, LogIn, UserPlus } from "lucide-react"
+import { Eye, Lock, User } from "lucide-react"
 
 interface AuthFormProps {
   mode: "login" | "register"
@@ -17,6 +16,7 @@ export function AuthForm({ mode }: AuthFormProps) {
 
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
+  const [showPwd, setShowPwd]   = useState(false)
   const [remember, setRemember] = useState(true)
   const [error, setError]       = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -50,112 +50,95 @@ export function AuthForm({ mode }: AuthFormProps) {
   }
 
   return (
-    <div className="min-h-[60vh] flex items-center justify-center">
-      <Card className="w-full max-w-sm">
-        <CardContent className="p-6 space-y-5">
-          <div className="text-center space-y-1">
-            <h1 className="text-2xl font-bold">
-              {isLogin ? "Iniciar sesión" : "Crear cuenta"}
-            </h1>
-            <p className="text-sm text-slate-600">
-              {isLogin
-                ? "Bienvenido de nuevo a DGT Tests"
-                : "Registra una cuenta para guardar tu progreso"}
-            </p>
+    <div className="auth-page">
+      <section className="auth-card" role="dialog" aria-labelledby="auth-title">
+        <div className="auth-emoji" aria-hidden="true">🚗</div>
+        <h1 id="auth-title" className="auth-title">
+          {isLogin ? "¡Hola, conductor!" : "Bienvenido a bordo"}
+        </h1>
+        <p className="auth-sub">
+          {isLogin
+            ? "Prepárate para aprobar a la primera"
+            : "Crea tu cuenta y empieza a practicar"}
+        </p>
+
+        <form onSubmit={handleSubmit} noValidate>
+          <label htmlFor="username" className="auth-label">Usuario</label>
+          <div className="auth-field">
+            <span className="ico" aria-hidden="true"><User size={20} /></span>
+            <input
+              id="username"
+              type="text"
+              autoComplete="username"
+              required
+              minLength={3}
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="tu_usuario"
+            />
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <label htmlFor="username" className="text-sm font-medium">
-                Usuario
-              </label>
-              <input
-                id="username"
-                type="text"
-                autoComplete="username"
-                required
-                minLength={3}
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
-                placeholder="Tu nombre de usuario"
-              />
-            </div>
+          <label htmlFor="password" className="auth-label">Contraseña</label>
+          <div className="auth-field">
+            <span className="ico" aria-hidden="true"><Lock size={20} /></span>
+            <input
+              id="password"
+              type={showPwd ? "text" : "password"}
+              autoComplete={isLogin ? "current-password" : "new-password"}
+              required
+              minLength={isLogin ? 1 : 6}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={isLogin ? "••••••••••" : "Mínimo 6 caracteres"}
+            />
+            <button
+              type="button"
+              className="eye"
+              onClick={() => setShowPwd((v) => !v)}
+              aria-label={showPwd ? "Ocultar contraseña" : "Mostrar contraseña"}
+            >
+              <Eye size={20} />
+            </button>
+          </div>
 
-            <div className="space-y-1.5">
-              <label htmlFor="password" className="text-sm font-medium">
-                Contraseña
-              </label>
-              <input
-                id="password"
-                type="password"
-                autoComplete={isLogin ? "current-password" : "new-password"}
-                required
-                minLength={isLogin ? 1 : 6}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
-                placeholder={isLogin ? "Tu contraseña" : "Mínimo 6 caracteres"}
-              />
-            </div>
-
-            {isLogin && (
-              <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
+          {isLogin && (
+            <div className="auth-row">
+              <label className="auth-remember">
                 <input
                   type="checkbox"
                   checked={remember}
                   onChange={(e) => setRemember(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
                 />
+                <span className="auth-check" aria-hidden="true">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="3"
+                    strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                </span>
                 Recordarme en este dispositivo
               </label>
-            )}
+            </div>
+          )}
 
-            {error && (
-              <div className="rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-700">
-                {error}
-              </div>
-            )}
+          {error && <div className="auth-error">{error}</div>}
 
-            <Button type="submit" className="w-full" disabled={isPending}>
-              {isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Procesando...
-                </>
-              ) : isLogin ? (
-                <>
-                  <LogIn className="h-4 w-4" />
-                  Entrar
-                </>
-              ) : (
-                <>
-                  <UserPlus className="h-4 w-4" />
-                  Crear cuenta
-                </>
-              )}
-            </Button>
-          </form>
+          <button type="submit" className="auth-cta" disabled={isPending}>
+            <span aria-hidden="true">🚦</span>
+            {isPending ? "Procesando..." : isLogin ? "Arrancar" : "Crear cuenta"}
+          </button>
 
-          <div className="text-center text-sm text-slate-600">
-            {isLogin ? (
-              <>
-                ¿No tienes cuenta?{" "}
-                <a href="/register" className="font-medium text-slate-900 hover:underline">
-                  Regístrate
-                </a>
-              </>
-            ) : (
-              <>
-                ¿Ya tienes cuenta?{" "}
-                <a href="/login" className="font-medium text-slate-900 hover:underline">
-                  Inicia sesión
-                </a>
-              </>
-            )}
+          <div className="auth-divider">
+            {isLogin ? "o si eres nuevo" : "¿ya tienes cuenta?"}
           </div>
-        </CardContent>
-      </Card>
+
+          <Link href={isLogin ? "/register" : "/login"} className="auth-signup">
+            {isLogin ? "Crea tu cuenta gratis →" : "Inicia sesión →"}
+          </Link>
+        </form>
+      </section>
+
+      <div className="auth-footer-stripe">DGT TESTS · APRUEBA A LA PRIMERA</div>
     </div>
   )
 }
