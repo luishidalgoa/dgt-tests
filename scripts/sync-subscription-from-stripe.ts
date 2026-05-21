@@ -17,6 +17,7 @@
  */
 import Stripe from "stripe"
 import { db } from "@/lib/db"
+import { getSubscriptionPeriodEnd } from "@/lib/stripe"
 
 async function main() {
   const username = process.argv[2]
@@ -121,7 +122,7 @@ async function main() {
   console.log(`\n📋 ${subs.data.length} suscripción(es) en Stripe:`)
   for (const s of subs.data) {
     const pid = s.items.data[0]?.price?.id ?? "—"
-    const periodEnd = (s as Stripe.Subscription & { current_period_end?: number }).current_period_end
+    const periodEnd = getSubscriptionPeriodEnd(s)
     console.log(`   ${s.id} · status=${s.status} · price=${pid}` +
       (periodEnd ? ` · periodEnd=${new Date(periodEnd * 1000).toISOString().slice(0, 10)}` : ""))
   }
@@ -131,7 +132,7 @@ async function main() {
   const chosen = active ?? subs.data[0]
   const isActive = chosen.status === "active" || chosen.status === "trialing"
   const priceId  = chosen.items.data[0]?.price?.id ?? null
-  const periodEnd = (chosen as Stripe.Subscription & { current_period_end?: number }).current_period_end
+  const periodEnd = getSubscriptionPeriodEnd(chosen)
   const cancelAtPeriodEnd = Boolean(chosen.cancel_at_period_end)
 
   console.log()

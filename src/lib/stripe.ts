@@ -39,3 +39,26 @@ export function appUrl(path: string = "/"): string {
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:4321"
   return new URL(path, base).toString()
 }
+
+/**
+ * Extrae el `current_period_end` (en segundos epoch) de una Subscription.
+ *
+ * Importante: a partir de la API '2024-09-30.acacia' Stripe movió
+ * `current_period_end` del top-level de Subscription a los items
+ * (`items.data[i].current_period_end`), porque una sub puede tener items
+ * con periodos distintos. Para nuestro caso (1 sub = 1 item), el valor es
+ * idéntico al campo viejo cuando existe.
+ *
+ * Esta función prueba primero la ubicación nueva y cae al campo viejo
+ * para versiones de API más antiguas. Devuelve `null` si no encuentra
+ * ninguno.
+ */
+export function getSubscriptionPeriodEnd(sub: Stripe.Subscription): number | null {
+  const fromItem = sub.items?.data?.[0]?.current_period_end
+  if (typeof fromItem === "number") return fromItem
+
+  const topLevel = (sub as Stripe.Subscription & { current_period_end?: number }).current_period_end
+  if (typeof topLevel === "number") return topLevel
+
+  return null
+}

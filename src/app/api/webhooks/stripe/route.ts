@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import type Stripe from "stripe"
 import { db } from "@/lib/db"
-import { getStripe, STRIPE_WEBHOOK_SECRET } from "@/lib/stripe"
+import { getStripe, STRIPE_WEBHOOK_SECRET, getSubscriptionPeriodEnd } from "@/lib/stripe"
 
 /**
  * Stripe webhook handler.
@@ -140,8 +140,7 @@ async function onSubscriptionUpdated(sub: Stripe.Subscription) {
   const status = sub.status                          // active, past_due, canceled, trialing, ...
   const isActive = status === "active" || status === "trialing"
   const priceId  = sub.items.data[0]?.price?.id ?? null
-  // current_period_end es opcional en algunos planes; lo manejamos defensivamente
-  const periodEnd = (sub as Stripe.Subscription & { current_period_end?: number }).current_period_end ?? null
+  const periodEnd = getSubscriptionPeriodEnd(sub)
   const cancelAtPeriodEnd = Boolean(sub.cancel_at_period_end)
 
   // Solo cambiamos role si NO es admin (los admins son intocables)
@@ -184,12 +183,10 @@ async function onSubscriptionDeleted(sub: Stripe.Subscription) {
   // Preservamos la fecha en la que la suscripción terminó para poder
   // mostrar "Tu plan PRO caducó el X" en /settings. Preferimos `ended_at`
   // (set por Stripe cuando la sub efectivamente termina), y caemos a
-  // `current_period_end` si por alguna razón no viene.
-  const subExt = sub as Stripe.Subscription & {
-    ended_at?:           number | null
-    current_period_end?: number | null
-  }
-  const endedTs = subExt.ended_at ?? subExt.current_period_end ?? null
+  // `current_period_end` (top-level o por-item) si por alguna razón no
+  // viene.
+  const endedTs = (sub as Stripe.Subscription & { ended_at?: number | null }).ended_at
+    ?? getSubscriptionPeriodEnd(sub)
   const endedAt = endedTs ? new Date(endedTs * 1000) : null
 
   await db.user.update({
