@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -75,42 +75,8 @@ export function AIExplainPanel({
   const [result, setResult]   = useState<AIResult | null>(null)
   const [cached, setCached]   = useState(false)
   const [quota, setQuota]     = useState<MonthlyQuota | null>(null)
-  /** true cuando ya hemos consultado el cache al menos una vez */
-  const [checkedCache, setCheckedCache] = useState(false)
 
   const noQuota = remaining <= 0
-
-  // Al abrir el modal: consulta el cache (sin gastar quota)
-  useEffect(() => {
-    if (!open || checkedCache) return
-    let cancelled = false
-    ;(async () => {
-      try {
-        const res = await fetch(
-          `/api/ai/explain?questionId=${questionId}&withImage=${hasImage}`,
-          { method: "GET" }
-        )
-        if (cancelled) return
-        if (res.status === 200) {
-          const data = (await res.json()) as { cached: boolean; result: AIResult; quota?: MonthlyQuota }
-          setResult(data.result)
-          setCached(true)
-          if (data.quota) setQuota(data.quota)
-          onResult?.(data.result)
-          // Cache hit → no consume quota
-          onConsume(true)
-        }
-        // 204: nada cacheado todavía, esperamos al click del usuario
-      } catch {
-        // ignore — el usuario verá el CTA y podrá disparar manualmente
-      } finally {
-        if (!cancelled) setCheckedCache(true)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [open, checkedCache, questionId, hasImage, onConsume, onResult])
 
   async function askAI() {
     if (noQuota || loading) return
@@ -237,26 +203,8 @@ export function AIExplainPanel({
           </div>
         )}
 
-        {/* Estado: comprobando cache */}
-        {!checkedCache && !result && (
-          <div
-            style={{
-              padding: 24,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 10,
-              color: "var(--slate-500)",
-              fontSize: 13.5,
-            }}
-          >
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Comprobando si ya hay análisis...
-          </div>
-        )}
-
-        {/* Estado: cache vacío → CTA para generar */}
-        {checkedCache && !result && !loading && !error && (
+        {/* Estado inicial: CTA para generar */}
+        {!result && !loading && !error && (
           <div className="space-y-3">
             <div
               style={{
@@ -269,7 +217,7 @@ export function AIExplainPanel({
                 color: "var(--slate-700)",
               }}
             >
-              La IA analizará la pregunta y te dará en una sola respuesta:
+              La IA te dará en una sola respuesta:
               <ul style={{ margin: "8px 0 0 18px", padding: 0, fontSize: 13 }}>
                 <li>La idea clave del concepto</li>
                 <li>Por qué la opción correcta es la correcta</li>
@@ -313,7 +261,7 @@ export function AIExplainPanel({
               }}
             >
               <Wand2 className="h-4 w-4" />
-              {noQuota ? "Sin quota disponible" : "Generar análisis"}
+              {noQuota ? "Sin quota disponible" : "Generar análisis · 1 token"}
             </button>
             <p
               style={{
@@ -323,8 +271,10 @@ export function AIExplainPanel({
                 lineHeight: 1.4,
               }}
             >
-              La respuesta se guarda. Si esta pregunta se vuelve a analizar en
-              el futuro, se reutiliza sin consumir cuota.
+              Cada análisis (nuevo o cacheado) cuesta 1 token de tu quota
+              mensual. Si la pregunta ya fue analizada antes, la respuesta
+              llega al instante (no llamamos a Gemini), pero igualmente se
+              descuenta 1 token.
             </p>
           </div>
         )}
@@ -380,7 +330,7 @@ export function AIExplainPanel({
                   letterSpacing: "0.05em",
                 }}
               >
-                Respuesta cacheada · sin gasto de IA
+                Respuesta reutilizada del cache
               </div>
             )}
 

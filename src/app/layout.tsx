@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import Link from "next/link"
 import { Inter, JetBrains_Mono } from "next/font/google"
 import { getCurrentUser } from "@/lib/auth"
 import { Navbar } from "@/components/Navbar"
@@ -47,6 +48,34 @@ export default async function RootLayout({
         <main className="flex-1 mx-auto w-full max-w-[1200px] px-6 py-7">
           {children}
         </main>
+        <footer
+          style={{
+            marginTop: 32,
+            padding: "18px 24px",
+            borderTop: "1px solid var(--slate-200)",
+            background: "rgba(255,255,255,0.55)",
+            textAlign: "center",
+            fontSize: 12.5,
+            color: "var(--slate-500)",
+          }}
+        >
+          Hecho por{" "}
+          <Link
+            href="/sobre"
+            style={{ color: "var(--orange-600)", fontWeight: 700, textDecoration: "none" }}
+          >
+            Luis Hidalgo
+          </Link>
+          {" · "}
+          <a
+            href="https://luishidalgoa.vercel.app/"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: "var(--slate-500)", textDecoration: "none" }}
+          >
+            portfolio →
+          </a>
+        </footer>
       </body>
     </html>
   )

@@ -79,8 +79,9 @@ export function ResultsAIButton({ attemptId, questionId, explicacion, hasImage, 
           maxAllowed={MAX_PER_REVIEW}
           options={options}
           correctLetra={correctLetra}
-          onConsume={(cached) => {
-            if (!cached) sync(Math.max(0, remaining - 1))
+          onConsume={() => {
+            // Tanto cache hit como miss descuentan en server
+            sync(Math.max(0, remaining - 1))
           }}
           onResult={(res) => setAiResult(res)}
         />

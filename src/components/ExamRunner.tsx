@@ -538,9 +538,10 @@ export function ExamRunner({ data, mode = "normal", timeLimit = null, isGuest = 
                         ? q.options.find((o) => o.id === q.correctOptionId)?.letra
                         : undefined
                     }
-                    onConsume={(cached) => {
-                      // Las respuestas cacheadas no descuentan quota
-                      if (!cached) setAiRemaining((r) => Math.max(0, r - 1))
+                    onConsume={() => {
+                      // Tanto cache hit como miss descuentan ya en server,
+                      // sincronizamos el contador local
+                      setAiRemaining((r) => Math.max(0, r - 1))
                     }}
                     onResult={(res) => {
                       setAiResults((prev) => ({ ...prev, [q.id]: res }))

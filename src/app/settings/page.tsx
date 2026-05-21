@@ -118,8 +118,9 @@ export default async function SettingsPage() {
         </div>
 
         <p style={{ fontSize: 12, color: "var(--slate-500)", marginTop: 12, marginBottom: 0, lineHeight: 1.5 }}>
-          Cada vez que pides un análisis nuevo a la IA gastas 1 token. Las respuestas que ya están
-          cacheadas (porque otro usuario o tú mismo las analizaste antes) <b>no consumen quota</b>.
+          Cada análisis cuesta <b>1 token</b>, tanto si la respuesta es nueva como si está
+          cacheada. El cache solo nos ahorra dinero a nosotros (no llamamos a Gemini),
+          pero el coste para ti sigue siendo el mismo.
         </p>
       </div>
     </div>
