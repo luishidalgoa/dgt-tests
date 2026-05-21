@@ -102,13 +102,12 @@ describe("/api/ai/explain POST — cobro de tokens", () => {
 
   it("Fase 79: scope per-attempt — pagado en attempt 5 NO exime de attempt 6", async () => {
     // Llamada 1: usuario pidió IA dentro del attempt 5
-    vi.mocked(db.userAiPaid.findFirst).mockImplementation(async ({ where }) => {
-      const w = where as { attemptId?: number | null }
-      if (w.attemptId === 5) {
+    vi.mocked(db.userAiPaid.findFirst).mockImplementation((async (args: { where?: { attemptId?: number | null } }) => {
+      if (args?.where?.attemptId === 5) {
         return { id: 1, userId: 1, questionId: 100, withImage: false, attemptId: 5, paidAt: new Date() } as never
       }
       return null  // no encontrado para attempt 6
-    })
+    }) as never)
 
     const resA = await POST(postBody({ questionId: 100, attemptId: 5 }))
     expect((await resA.json()).charged).toBe(false)
@@ -123,13 +122,12 @@ describe("/api/ai/explain POST — cobro de tokens", () => {
 
   it("si el user pagó SIN attemptId (modo práctica), un attempt sí cobra", async () => {
     // Práctica = attemptId: null
-    vi.mocked(db.userAiPaid.findFirst).mockImplementation(async ({ where }) => {
-      const w = where as { attemptId?: number | null }
-      if (w.attemptId === null) {
+    vi.mocked(db.userAiPaid.findFirst).mockImplementation((async (args: { where?: { attemptId?: number | null } }) => {
+      if (args?.where?.attemptId === null) {
         return { id: 1, userId: 1, questionId: 100, withImage: false, attemptId: null, paidAt: new Date() } as never
       }
       return null
-    })
+    }) as never)
 
     // El attempt 5 SÍ cobra (scope distinto)
     const res = await POST(postBody({ questionId: 100, attemptId: 5 }))
@@ -205,13 +203,12 @@ describe("/api/ai/explain GET — comprobación sin cobrar", () => {
   })
 
   it("respeta el scope per-attempt", async () => {
-    vi.mocked(db.userAiPaid.findFirst).mockImplementation(async ({ where }) => {
-      const w = where as { attemptId?: number | null }
-      if (w.attemptId === 5) {
+    vi.mocked(db.userAiPaid.findFirst).mockImplementation((async (args: { where?: { attemptId?: number | null } }) => {
+      if (args?.where?.attemptId === 5) {
         return { id: 1 } as never
       }
       return null
-    })
+    }) as never)
     vi.mocked(db.aICacheEntry.findUnique).mockResolvedValue(fakeCacheRow as never)
 
     // GET con attemptId=5 → encuentra pago
