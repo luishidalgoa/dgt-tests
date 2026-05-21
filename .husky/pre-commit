@@ -1,0 +1,14 @@
+#!/usr/bin/env sh
+# Pre-commit hook: solo se ejecuta cuando hay archivos en el stage.
+#
+# 1. lint-staged → eslint --fix sobre los archivos modificados
+# 2. vitest run  → suite completa (es rápida, <2s). Bloquea el commit si
+#                  algún test falla.
+#
+# Si necesitas saltarte el hook puntualmente: git commit --no-verify
+# (úsalo con cabeza).
+
+set -e
+
+npx lint-staged
+npm test
