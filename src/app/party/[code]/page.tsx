@@ -4,7 +4,8 @@ import { db } from "@/lib/db"
 import { PartyLobby } from "@/components/PartyLobby"
 import { getCurrentUser } from "@/lib/auth"
 import { getPartyMembership } from "@/lib/party-me"
-import { canJoinPartyWithCategory } from "@/lib/permissions"
+import { hasFullAccess } from "@/lib/permissions"
+import { partyHasProQuestions } from "@/lib/party"
 import { Lock, Crown } from "lucide-react"
 
 export const dynamic = "force-dynamic"
@@ -24,11 +25,15 @@ export default async function PartyPage({ params }: PageProps) {
   const me   = await getCurrentUser()
   const mine = await getPartyMembership(party.id)
 
-  // ── Gating por plan: si la party usa contenido PRO y el usuario no es
-  //    PRO/admin (y NO es ya miembro), mostramos un upsell. Los miembros
-  //    existentes siguen viendo la lobby normal. ──
+  // ── Gating por tier de las preguntas reales: si la party tiene
+  //    preguntas PRO y el usuario no es PRO/admin (y NO es ya miembro),
+  //    mostramos upsell. ──
   const isAlreadyMember = !!mine
-  const canJoin = canJoinPartyWithCategory(me, party.category?.slug ?? null)
+  let canJoin = hasFullAccess(me)
+  if (!canJoin && !isAlreadyMember) {
+    const questionIds: number[] = JSON.parse(party.questionIds)
+    canJoin = !(await partyHasProQuestions(questionIds))
+  }
   if (!isAlreadyMember && !canJoin) {
     return (
       <div style={{ maxWidth: 560, margin: "0 auto" }}>

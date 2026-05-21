@@ -75,19 +75,9 @@ export function isTestLocked(
   return !canAccessTest(user, categoriaSlug, testNumber)
 }
 
-/**
- * ¿Puede el usuario unirse a una party cuyo contenido viene de esta categoría?
- * - PRO/ADMIN: siempre sí
- * - Free/guest: solo si la categoría es la free (permiso-b)
- * - Si la party no tiene categoría asignada (preguntas mezcladas), solo PRO/ADMIN
- */
-export function canJoinPartyWithCategory(
-  user: UserForGate,
-  categoriaSlug: string | null | undefined
-): boolean {
-  if (hasFullAccess(user)) return true
-  return categoriaSlug === FREE_CATEGORY_SLUG
-}
+// NOTE: el gating de party ya NO se basa en la categoría de la party, sino
+// en el tier (FREE/PRO) de las preguntas reales que la party contiene. Ver
+// src/lib/party.ts → partyHasProQuestions().
 
 /** Quota mensual de tokens IA aplicable. */
 export function getEffectiveTokenQuota(user: UserForGate): number {

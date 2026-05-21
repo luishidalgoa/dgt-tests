@@ -71,26 +71,38 @@ export function scoreForAnswer(isCorrect: boolean, timeMs: number): number {
 /**
  * Devuelve una selección aleatoria de N question.id de una categoría
  * (o de todo el banco si no se pasa categoría).
+ *
+ * @param onlyTier · si se pasa, restringe a preguntas de ese tier.
+ *   Usado para limitar a usuarios FREE a preguntas tier=FREE.
+ *   Si es undefined, no filtra por tier (PRO/admin).
  */
 export async function pickRandomQuestionIds(
   count: number,
-  categoryId: number | null
+  categoryId: number | null,
+  onlyTier?: "FREE" | "PRO"
 ): Promise<number[]> {
   // Limitar count
   const n = Math.max(5, Math.min(60, count))
 
-  // Filtro por categoría = preguntas que pertenezcan a algún test de esa categoría
-  const where = categoryId
-    ? { testQuestions: { some: { test: { categoryId } } } }
-    : {}
+  const where: Record<string, unknown> = {}
+  if (categoryId) {
+    where.testQuestions = { some: { test: { categoryId } } }
+  }
+  if (onlyTier) {
+    where.tier = onlyTier
+  }
 
-  // Cargar todos los IDs candidatos
   const candidates = await db.question.findMany({
     where,
     select: { id: true },
   })
 
-  if (candidates.length === 0) throw new Error("Sin preguntas disponibles para esa categoría")
+  if (candidates.length === 0) {
+    const reason = onlyTier === "FREE"
+      ? "No hay preguntas gratuitas para esa categoría — suscríbete a PRO para acceder."
+      : "Sin preguntas disponibles para esa categoría"
+    throw new Error(reason)
+  }
 
   // Shuffle de Fisher-Yates y tomar los primeros n
   const ids = candidates.map((q) => q.id)
@@ -99,4 +111,17 @@ export async function pickRandomQuestionIds(
     ;[ids[i], ids[j]] = [ids[j], ids[i]]
   }
   return ids.slice(0, n)
+}
+
+/**
+ * Comprueba si una party (lista de question ids) contiene alguna pregunta
+ * tier=PRO. Útil para decidir si un usuario FREE puede unirse.
+ */
+export async function partyHasProQuestions(questionIds: number[]): Promise<boolean> {
+  if (questionIds.length === 0) return false
+  const hit = await db.question.findFirst({
+    where:  { id: { in: questionIds }, tier: "PRO" },
+    select: { id: true },
+  })
+  return !!hit
 }

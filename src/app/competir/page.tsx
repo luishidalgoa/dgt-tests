@@ -1,16 +1,14 @@
 import Link from "next/link"
-import { redirect } from "next/navigation"
 import { db } from "@/lib/db"
 import { requireUser } from "@/lib/auth"
 import { hasFullAccess } from "@/lib/permissions"
-import { Swords, ChevronLeft, Plus, Users, Trophy, ArrowRight } from "lucide-react"
+import { Swords, ChevronLeft, Plus, Users, Trophy, ArrowRight, Crown } from "lucide-react"
 
 export const dynamic = "force-dynamic"
 
 export default async function CompetirPage() {
   const user = await requireUser()
-  // Modo competición es feature PRO. Free → /upgrade
-  if (!hasFullAccess(user)) redirect("/upgrade")
+  const full = hasFullAccess(user)
 
   const myRecent = await db.party.findMany({
     where: {
@@ -50,6 +48,32 @@ export default async function CompetirPage() {
           Crear party
         </Link>
       </header>
+
+      {!full && (
+        <div
+          className="card-soft"
+          style={{
+            padding: "12px 16px",
+            marginBottom: 16,
+            fontSize: 13.5,
+            color: "var(--slate-600)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <span>
+            En el plan gratuito tus partys solo usarán <b>preguntas free</b>. Suscríbete
+            para crear partys con todo el banco de preguntas.
+          </span>
+          <Link href="/upgrade" className="btn-secondary" style={{ fontSize: 13 }}>
+            <Crown className="h-3.5 w-3.5" />
+            Ver PRO
+          </Link>
+        </div>
+      )}
 
       {myRecent.length === 0 ? (
         <div className="empty-state">

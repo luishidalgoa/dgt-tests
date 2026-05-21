@@ -78,6 +78,15 @@ model Test {
   @@map("tests")
 }
 
+/// Tier de acceso para una pregunta.
+/// - FREE: accesible para cualquier usuario (incluido el plan gratuito)
+/// - PRO:  requiere suscripción activa (o ser ADMIN)
+/// El PRO "hereda" del FREE: un PRO accede a todo, un FREE solo a FREE.
+enum ContentTier {
+  FREE
+  PRO
+}
+
 // ── Pregunta (única por externalId, compartida entre tests) ─────────────
 model Question {
   id            Int            @id @default(autoincrement())
@@ -86,11 +95,13 @@ model Question {
   enunciado     String
   explicacion   String
   imagen        String?                       // "320671.png"
+  tier          ContentTier    @default(PRO)  // marcadas FREE solo las de los 7 primeros tests permiso-b
   options       Option[]
   testQuestions TestQuestion[]
   answers       Answer[]
   partyAnswers  PartyAnswer[]
 
+  @@index([tier])
   @@map("questions")
 }
 

@@ -14,6 +14,7 @@ interface NavbarProps {
 // Links visibles para todos los usuarios logueados
 const LINKS_ALL = [
   { href: "/",             label: "Inicio"     },
+  { href: "/competir",     label: "Competir"   },
   { href: "/stats",        label: "Stats"      },
   { href: "/historial",    label: "Historial"  },
 ] as const
@@ -21,7 +22,6 @@ const LINKS_ALL = [
 // Links solo para PRO/ADMIN — features de pago
 const LINKS_PRO = [
   { href: "/temas",        label: "Por temas"  },
-  { href: "/competir",     label: "Competir"   },
 ] as const
 
 const HIDDEN_ROUTES = ["/login", "/register"]

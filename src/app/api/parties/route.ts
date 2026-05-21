@@ -16,13 +16,6 @@ const schema = z.object({
 export async function POST(req: Request) {
   // Solo usuarios logueados pueden CREAR una party
   const user = await requireUser()
-  // Crear partys es feature PRO (gating servidor-side, no se confía solo en UI)
-  if (!hasFullAccess(user)) {
-    return NextResponse.json(
-      { error: "Crear partys requiere suscripción PRO" },
-      { status: 403 }
-    )
-  }
 
   const body = await req.json().catch(() => null)
   const parsed = schema.safeParse(body)
@@ -30,9 +23,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Datos inválidos", issues: parsed.error.issues }, { status: 400 })
   }
 
+  // FREE → solo puede usar preguntas tier=FREE
+  // PRO/ADMIN → cualquier pregunta
+  const onlyTier = hasFullAccess(user) ? undefined : ("FREE" as const)
+
   let questionIds: number[]
   try {
-    questionIds = await pickRandomQuestionIds(parsed.data.totalQuestions, parsed.data.categoryId)
+    questionIds = await pickRandomQuestionIds(
+      parsed.data.totalQuestions,
+      parsed.data.categoryId,
+      onlyTier
+    )
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 400 })
   }
