@@ -6,6 +6,7 @@ import { BillingPortalButton } from "@/components/BillingPortalButton"
 import { AdminRefillTokensButton } from "@/components/AdminRefillTokensButton"
 import { getQuotaStatus } from "@/lib/aiQuota"
 import { hasFullAccess, isAdmin, planLabel } from "@/lib/permissions"
+import { PRO_PRICE_PER_MONTH } from "@/lib/pricing"
 
 export const dynamic = "force-dynamic"
 
@@ -177,7 +178,7 @@ export default async function SettingsPage() {
             }}
           >
             <Crown className="h-4 w-4" />
-            Mejorar a PRO · 5€/mes
+            Mejorar a PRO · {PRO_PRICE_PER_MONTH}
             <ArrowRight className="h-4 w-4" />
           </Link>
         )}

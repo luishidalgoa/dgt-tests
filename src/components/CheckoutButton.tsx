@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Loader2, Crown } from "lucide-react"
+import { PRO_PRICE_PER_MONTH } from "@/lib/pricing"
 
 export function CheckoutButton() {
   const [loading, setLoading] = useState(false)
@@ -56,7 +57,7 @@ export function CheckoutButton() {
         ) : (
           <>
             <Crown className="h-4 w-4" />
-            Suscribirme · 5€/mes
+            Suscribirme · {PRO_PRICE_PER_MONTH}
           </>
         )}
       </button>

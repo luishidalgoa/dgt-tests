@@ -17,6 +17,7 @@ import {
   ArrowRight,
 } from "lucide-react"
 import { ackNotification } from "@/lib/client-acks"
+import { PRO_PRICE_LABEL } from "@/lib/pricing"
 
 interface Props {
   /** Id de la notificación (siempre "welcome-v1" por ahora). */
@@ -197,7 +198,7 @@ export function WelcomeModal({ notificationId, username }: Props) {
                   backgroundClip: "text",
                 }}
               >
-                5€
+                {PRO_PRICE_LABEL}
               </span>
               <span style={{ fontSize: 13, color: "var(--slate-500)" }}>/ mes</span>
             </div>

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { getCurrentUser } from "@/lib/auth"
 import { hasFullAccess, planLabel } from "@/lib/permissions"
 import { CheckoutButton } from "@/components/CheckoutButton"
+import { PRO_PRICE_LABEL } from "@/lib/pricing"
 import {
   ChevronLeft,
   Check,
@@ -205,7 +206,7 @@ export default async function UpgradePage() {
                 backgroundClip: "text",
               }}
             >
-              5€
+              {PRO_PRICE_LABEL}
             </span>
             <span style={{ color: "var(--slate-500)", fontSize: 14, marginLeft: 6 }}>/ mes</span>
           </div>

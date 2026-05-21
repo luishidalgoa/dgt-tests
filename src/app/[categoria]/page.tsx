@@ -8,6 +8,7 @@ import {
   FREE_CATEGORY_SLUG,
   FREE_TEST_LIMIT,
 } from "@/lib/permissions"
+import { PRO_PRICE_PER_MONTH } from "@/lib/pricing"
 import { ChevronLeft, CheckCircle2, Lock } from "lucide-react"
 
 export const dynamic = "force-dynamic"
@@ -102,7 +103,7 @@ export default async function CategoryPage({ params }: PageProps) {
             <Lock className="h-5 w-5" style={{ color: "var(--orange-600)" }} />
             <span style={{ fontSize: 14 }}>
               Esta categoría está disponible <b>solo en el plan PRO</b>. Suscríbete por
-              5€/mes para acceder a todo el contenido.
+              {PRO_PRICE_PER_MONTH} para acceder a todo el contenido.
             </span>
           </div>
           <Link
@@ -110,7 +111,7 @@ export default async function CategoryPage({ params }: PageProps) {
             className="btn-primary"
             style={{ fontSize: 13 }}
           >
-            {isGuest ? "Crear cuenta gratis" : "Suscribirme · 5€/mes"}
+            {isGuest ? "Crear cuenta gratis" : `Suscribirme · ${PRO_PRICE_PER_MONTH}`}
           </Link>
         </div>
       )

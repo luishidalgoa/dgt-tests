@@ -4,12 +4,12 @@
  * Env vars necesarias (todas en .env / Vercel):
  *   STRIPE_SECRET_KEY              · sk_test_... | sk_live_...
  *   STRIPE_WEBHOOK_SECRET          · whsec_...
- *   STRIPE_PRICE_ID                · price_... (recurrente 5€/mes)
+ *   STRIPE_PRICE_ID                · price_... (recurrente 6,99€/mes)
  *   NEXT_PUBLIC_APP_URL            · https://... (usado para success_url y cancel_url)
  *
  * `STRIPE_PRICE_ID` debe apuntar a un Price (no Product) recurrente mensual
- * de 5€ en EUR. Lo creas desde https://dashboard.stripe.com/test/products
- * → "Add product" → recurring monthly → 5,00 EUR.
+ * de 6,99€ en EUR. Lo creas desde https://dashboard.stripe.com/test/products
+ * → "Add product" → recurring monthly → 6,99 EUR.
  */
 
 import Stripe from "stripe"
