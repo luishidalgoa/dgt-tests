@@ -75,9 +75,12 @@ export function isTestLocked(
   return !canAccessTest(user, categoriaSlug, testNumber)
 }
 
-// NOTE: el gating de party ya NO se basa en la categoría de la party, sino
-// en el tier (FREE/PRO) de las preguntas reales que la party contiene. Ver
-// src/lib/party.ts → partyHasProQuestions().
+// NOTE sobre Competir: el único gate por tier vive en la CREACIÓN de la
+// party (POST /api/parties), no al unirse. Si un host PRO crea una party
+// con preguntas PRO y comparte el código con un amigo FREE, el amigo se
+// une y ve las preguntas PRO igual — es la decisión consciente del host.
+// El helper partyHasProQuestions() en src/lib/party.ts queda disponible
+// por si se quiere mostrar un badge informativo en el lobby.
 
 /** Quota mensual de tokens IA aplicable. */
 export function getEffectiveTokenQuota(user: UserForGate): number {
