@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { db } from "@/lib/db"
+import { requireUser } from "@/lib/auth"
 import { getTemaName } from "@/lib/temas"
 import { ExamRunner } from "@/components/ExamRunner"
 import { Card, CardContent } from "@/components/ui/card"
@@ -15,6 +16,7 @@ interface PageProps {
 }
 
 export default async function TemaPage({ params, searchParams }: PageProps) {
+  const user = await requireUser()
   const { prefix: rawPrefix } = await params
   const sp = await searchParams
   const prefix = decodeURIComponent(rawPrefix)
@@ -31,14 +33,18 @@ export default async function TemaPage({ params, searchParams }: PageProps) {
 
   // Vista de selección
   if (!requested) {
-    // Calcular stats del tema
+    // Calcular stats del tema del usuario
     const answered = await db.answer.count({
-      where: { questionId: { in: allQuestionIds.map((q) => q.id) } },
+      where: {
+        questionId: { in: allQuestionIds.map((q) => q.id) },
+        attempt:    { userId: user.id },
+      },
     })
     const correct = await db.answer.count({
       where: {
         questionId: { in: allQuestionIds.map((q) => q.id) },
         isCorrect: true,
+        attempt:    { userId: user.id },
       },
     })
     const acc = answered > 0 ? (correct / answered) * 100 : null

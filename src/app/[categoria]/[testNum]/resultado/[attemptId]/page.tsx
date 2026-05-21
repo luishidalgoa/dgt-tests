@@ -2,6 +2,7 @@ import { notFound } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
 import { db } from "@/lib/db"
+import { requireUser } from "@/lib/auth"
 import { findManualSectionsForCodes } from "@/lib/manual"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -24,12 +25,13 @@ interface PageProps {
 const PASS_THRESHOLD = 0.9   // 90% para aprobar (27/30)
 
 export default async function ResultPage({ params }: PageProps) {
+  const user = await requireUser()
   const { categoria, testNum, attemptId } = await params
   const id = parseInt(attemptId, 10)
   if (Number.isNaN(id)) notFound()
 
-  const attempt = await db.examAttempt.findUnique({
-    where: { id },
+  const attempt = await db.examAttempt.findFirst({
+    where: { id, userId: user.id },
     include: {
       test: { include: { category: true } },
       answers: {

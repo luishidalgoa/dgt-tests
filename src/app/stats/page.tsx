@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { db } from "@/lib/db"
+import { requireUser } from "@/lib/auth"
 import { getTemaName } from "@/lib/temas"
 
 export const dynamic = "force-dynamic"
@@ -22,7 +23,9 @@ interface TemaStatsRow {
 }
 
 export default async function StatsPage() {
-  // Stats por prefijo de tema (TC X.Y)
+  const user = await requireUser()
+
+  // Stats por prefijo de tema (TC X.Y) — scoped al usuario
   const raw = await db.$queryRaw<
     { prefix: string; totalQuestions: bigint; totalAnswers: bigint; correctAnswers: bigint }[]
   >`
@@ -37,7 +40,9 @@ export default async function StatsPage() {
       COALESCE(SUM(CASE WHEN a.isCorrect = 1 THEN 1 ELSE 0 END), 0) AS correctAnswers
     FROM questions q
     LEFT JOIN answers a ON a.questionId = q.id
+    LEFT JOIN exam_attempts ea ON ea.id = a.attemptId AND ea.userId = ${user.id}
     WHERE q.codigoTema IS NOT NULL
+      AND (a.id IS NULL OR ea.id IS NOT NULL)
     GROUP BY prefix
     ORDER BY prefix
   `
@@ -49,11 +54,11 @@ export default async function StatsPage() {
     correctAnswers: Number(r.correctAnswers),
   }))
 
-  // Stats globales
+  // Stats globales del usuario
   const [totalAttempts, totalAnswers, correctAnswers] = await Promise.all([
-    db.examAttempt.count({ where: { finishedAt: { not: null } } }),
-    db.answer.count(),
-    db.answer.count({ where: { isCorrect: true } }),
+    db.examAttempt.count({ where: { userId: user.id, finishedAt: { not: null } } }),
+    db.answer.count({ where: { attempt: { userId: user.id } } }),
+    db.answer.count({ where: { isCorrect: true, attempt: { userId: user.id } } }),
   ])
 
   const globalAccuracy = totalAnswers > 0 ? (correctAnswers / totalAnswers) * 100 : 0

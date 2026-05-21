@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { db } from "@/lib/db"
+import { requireUser } from "@/lib/auth"
 import { getTemaName } from "@/lib/temas"
 
 export const dynamic = "force-dynamic"
@@ -9,7 +10,8 @@ import { Badge } from "@/components/ui/badge"
 import { ChevronLeft, BookMarked, ArrowRight } from "lucide-react"
 
 export default async function TemasPage() {
-  // Stats por prefijo de tema + nº de respuestas y aciertos
+  const user = await requireUser()
+
   const raw = await db.$queryRaw<
     { prefix: string; totalQuestions: bigint; totalAnswers: bigint; correctAnswers: bigint }[]
   >`
@@ -24,7 +26,9 @@ export default async function TemasPage() {
       COALESCE(SUM(CASE WHEN a.isCorrect = 1 THEN 1 ELSE 0 END), 0) AS correctAnswers
     FROM questions q
     LEFT JOIN answers a ON a.questionId = q.id
+    LEFT JOIN exam_attempts ea ON ea.id = a.attemptId AND ea.userId = ${user.id}
     WHERE q.codigoTema IS NOT NULL
+      AND (a.id IS NULL OR ea.id IS NOT NULL)
     GROUP BY prefix
     ORDER BY prefix
   `

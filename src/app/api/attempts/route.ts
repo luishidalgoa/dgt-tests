@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { db } from "@/lib/db"
+import { getCurrentUser } from "@/lib/auth"
 import type { SubmitAttemptResponse } from "@/types/exam"
 
 const submitSchema = z.object({
@@ -17,6 +18,12 @@ const submitSchema = z.object({
 })
 
 export async function POST(req: Request) {
+  // Requiere usuario autenticado
+  const user = await getCurrentUser()
+  if (!user) {
+    return NextResponse.json({ error: "No autenticado" }, { status: 401 })
+  }
+
   let body: unknown
   try {
     body = await req.json()
@@ -82,6 +89,7 @@ export async function POST(req: Request) {
   const attempt = await db.$transaction(async (tx) => {
     const created = await tx.examAttempt.create({
       data: {
+        userId: user.id,
         testId: validTestId,
         mode,
         total:       answers.length,

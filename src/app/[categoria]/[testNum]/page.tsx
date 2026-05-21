@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { db } from "@/lib/db"
+import { requireUser } from "@/lib/auth"
 import { ExamRunner } from "@/components/ExamRunner"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -9,8 +10,13 @@ import {
   ChevronLeft,
   BookOpen,
   Timer,
+  History,
+  Trophy,
+  RotateCw,
 } from "lucide-react"
 import type { TestRunnerData } from "@/types/exam"
+
+const PASS_THRESHOLD = 0.9
 
 const EXAM_DURATION_SECONDS = 30 * 60   // 30 minutos como en la DGT real
 
@@ -20,6 +26,7 @@ interface PageProps {
 }
 
 export default async function ExamPage({ params, searchParams }: PageProps) {
+  const user = await requireUser()
   const { categoria, testNum } = await params
   const sp = await searchParams
   const examMode = sp.mode === "examen"
@@ -50,6 +57,24 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
 
   // Pantalla de selección de modo
   if (!sp.mode) {
+    // Cargar intentos previos del usuario para ESTE test
+    const pastAttempts = await db.examAttempt.findMany({
+      where: {
+        userId:     user.id,
+        testId:     test.id,
+        finishedAt: { not: null },
+      },
+      orderBy: { startedAt: "desc" },
+      take:    20,
+      select:  {
+        id:        true,
+        score:     true,
+        total:     true,
+        startedAt: true,
+        mode:      true,
+      },
+    })
+
     return (
       <div className="space-y-6">
         <Link
@@ -112,6 +137,59 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
             </CardContent>
           </Card>
         </div>
+
+        {/* Intentos previos de este test */}
+        {pastAttempts.length > 0 && (
+          <section>
+            <h2 className="text-xl font-semibold flex items-center gap-2 mb-3">
+              <History className="h-5 w-5" />
+              Tus intentos en este test
+              <Badge variant="outline" className="ml-2">{pastAttempts.length}</Badge>
+            </h2>
+            <div className="space-y-2">
+              {pastAttempts.map((a) => {
+                const score = a.score ?? 0
+                const passed = score / a.total >= PASS_THRESHOLD
+                return (
+                  <Link
+                    key={a.id}
+                    href={`/${categoria}/${testNumber}/resultado/${a.id}`}
+                  >
+                    <Card className="hover:shadow-sm hover:border-slate-300 transition cursor-pointer">
+                      <CardContent className="p-3 flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          {passed ? (
+                            <Trophy className="h-5 w-5 text-emerald-500 flex-shrink-0" />
+                          ) : (
+                            <RotateCw className="h-5 w-5 text-amber-500 flex-shrink-0" />
+                          )}
+                          <div className="min-w-0">
+                            <div className="text-sm">
+                              {a.startedAt.toLocaleString("es-ES")}
+                            </div>
+                            {a.mode === "examen" && (
+                              <Badge variant="outline" className="text-xs text-amber-700 border-amber-200 mt-1">
+                                Examen real
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className={`text-lg font-bold font-mono ${passed ? "text-emerald-600" : ""}`}>
+                            {score}<span className="text-slate-400">/{a.total}</span>
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            {Math.round((score / a.total) * 100)}%
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                )
+              })}
+            </div>
+          </section>
+        )}
       </div>
     )
   }

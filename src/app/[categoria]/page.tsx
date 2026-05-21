@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { db } from "@/lib/db"
+import { requireUser } from "@/lib/auth"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ChevronLeft, CheckCircle2 } from "lucide-react"
@@ -10,6 +11,7 @@ interface PageProps {
 }
 
 export default async function CategoryPage({ params }: PageProps) {
+  const user = await requireUser()
   const { categoria } = await params
 
   const category = await db.category.findUnique({
@@ -20,7 +22,7 @@ export default async function CategoryPage({ params }: PageProps) {
         include: {
           _count: { select: { testQuestions: true } },
           attempts: {
-            where: { finishedAt: { not: null } },
+            where: { userId: user.id, finishedAt: { not: null } },
             orderBy: { startedAt: "desc" },
             take: 1,
             select: { score: true, total: true, startedAt: true },

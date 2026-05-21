@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { db } from "@/lib/db"
+import { requireUser } from "@/lib/auth"
 
 export const dynamic = "force-dynamic"
 
@@ -19,18 +20,20 @@ import {
 const PASS_THRESHOLD = 0.9
 
 export default async function HistorialPage() {
+  const user = await requireUser()
+
   const attempts = await db.examAttempt.findMany({
-    where: { finishedAt: { not: null } },
+    where:   { userId: user.id, finishedAt: { not: null } },
     orderBy: { startedAt: "desc" },
-    take: 50,
+    take:    50,
     include: {
       test: { include: { category: true } },
     },
   })
 
-  // Stats agregadas
+  // Stats agregadas del usuario
   const [totalAttempts, byCategory] = await Promise.all([
-    db.examAttempt.count({ where: { finishedAt: { not: null } } }),
+    db.examAttempt.count({ where: { userId: user.id, finishedAt: { not: null } } }),
     db.$queryRaw<
       { categoryId: number; categoryName: string; categorySlug: string; total: number; sumScore: number; sumTotal: number }[]
     >`
@@ -44,7 +47,7 @@ export default async function HistorialPage() {
       FROM exam_attempts ea
       LEFT JOIN tests t ON ea.testId = t.id
       LEFT JOIN categories c ON t.categoryId = c.id
-      WHERE ea.finishedAt IS NOT NULL AND t.categoryId IS NOT NULL
+      WHERE ea.userId = ${user.id} AND ea.finishedAt IS NOT NULL AND t.categoryId IS NOT NULL
       GROUP BY c.id
       ORDER BY c.id
     `,

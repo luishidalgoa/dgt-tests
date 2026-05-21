@@ -10,6 +10,19 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ── Usuario ──────────────────────────────────────────────────────────────
+model User {
+  id           Int           @id @default(autoincrement())
+  username     String        @unique
+  passwordHash String
+  displayName  String?
+  createdAt    DateTime      @default(now())
+  attempts     ExamAttempt[]
+
+  @@map("users")
+}
+
+
 // ── Categoría / Familia de exámenes ──────────────────────────────────────
 model Category {
   id          Int    @id @default(autoincrement())
@@ -81,16 +94,19 @@ model Option {
 // ── Intento de examen ────────────────────────────────────────────────────
 model ExamAttempt {
   id         Int       @id @default(autoincrement())
+  userId     Int
   testId     Int?                     // null si mode="errores"
   mode       String    @default("normal") // "normal" | "errores"
   startedAt  DateTime  @default(now())
   finishedAt DateTime?
   score      Int?                     // nº de aciertos (null hasta finalizar)
   total      Int                      // nº de preguntas en el intento
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   test       Test?     @relation(fields: [testId], references: [id], onDelete: SetNull)
   answers    Answer[]
 
-  @@index([startedAt])
+  @@index([userId, startedAt])
+  @@index([userId, testId])
   @@map("exam_attempts")
 }
 

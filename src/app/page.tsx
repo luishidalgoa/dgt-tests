@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { db } from "@/lib/db"
+import { requireUser } from "@/lib/auth"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 
 export const dynamic = "force-dynamic"
@@ -8,6 +9,8 @@ import { Badge } from "@/components/ui/badge"
 import { ArrowRight, BookOpen, History, AlertTriangle } from "lucide-react"
 
 export default async function HomePage() {
+  const user = await requireUser()
+
   const categories = await db.category.findMany({
     include: {
       _count: { select: { tests: true } },
@@ -15,23 +18,25 @@ export default async function HomePage() {
     orderBy: { id: "asc" },
   })
 
-  // Stats globales rápidos
+  // Stats del usuario actual
   const [totalAttempts, totalAnswers, recentAttempts] = await Promise.all([
-    db.examAttempt.count({ where: { finishedAt: { not: null } } }),
-    db.answer.count(),
+    db.examAttempt.count({ where: { userId: user.id, finishedAt: { not: null } } }),
+    db.answer.count({ where: { attempt: { userId: user.id } } }),
     db.examAttempt.findMany({
-      where: { finishedAt: { not: null } },
+      where:   { userId: user.id, finishedAt: { not: null } },
       orderBy: { startedAt: "desc" },
-      take: 3,
+      take:    3,
       include: { test: { include: { category: true } } },
     }),
   ])
 
-  // Errores pendientes (preguntas con última respuesta incorrecta)
+  // Errores pendientes del usuario actual
   const pendingErrors = await db.$queryRaw<{ count: bigint }[]>`
     SELECT COUNT(*) as count FROM (
       SELECT a.questionId, MAX(a.id) as lastId
       FROM answers a
+      JOIN exam_attempts ea ON ea.id = a.attemptId
+      WHERE ea.userId = ${user.id}
       GROUP BY a.questionId
     ) last
     JOIN answers a ON a.id = last.lastId

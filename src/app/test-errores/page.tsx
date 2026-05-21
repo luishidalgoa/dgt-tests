@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { db } from "@/lib/db"
+import { requireUser } from "@/lib/auth"
 import { getPendingErrorQuestionIds } from "@/lib/errors"
 import { ExamRunner } from "@/components/ExamRunner"
 import { Card, CardContent } from "@/components/ui/card"
@@ -18,10 +19,11 @@ interface PageProps {
 }
 
 export default async function TestErroresPage({ searchParams }: PageProps) {
+  const user = await requireUser()
   const sp = await searchParams
   const requested = sp.n ? Math.max(1, Math.min(parseInt(sp.n, 10), 100)) : null
 
-  const errorIds = await getPendingErrorQuestionIds()
+  const errorIds = await getPendingErrorQuestionIds(user.id)
   const total = errorIds.length
 
   // Caso 1: no se ha pedido tamaño todavía → mostrar pantalla de selección
