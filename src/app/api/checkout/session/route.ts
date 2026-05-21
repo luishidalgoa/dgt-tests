@@ -29,33 +29,39 @@ export async function POST() {
   const stripe = getStripe()
 
   // 1. Crear/recuperar Customer
-  //    Defendemos contra dos problemas:
-  //    a) "cross-ambiente": un customer creado en LIVE no existe en TEST.
-  //    b) "orphans": si el id guardado se perdió o nunca se guardó, antes
-  //       creábamos otro nuevo a ciegas — eso generaba duplicados en
-  //       Stripe (un user con 2 customers, uno cobrando sin que la app
-  //       lo sepa). Ahora, antes de crear, buscamos por metadata.appUserId.
-  let customerId: string | null = user.stripeCustomerId
-  if (customerId) {
+  //    Lógica en 3 pasos:
+  //    a) Si BBDD tiene stripeCustomerId, intentar retrieve. Si funciona,
+  //       usar ese. Si no (borrado, cross-ambiente), NO buscamos por
+  //       metadata — el índice de search es eventually consistent y nos
+  //       devolvería el mismo zombi durante minutos/horas. Mejor crear
+  //       uno nuevo limpio y dejar de pelearnos con el cache de Stripe.
+  //    b) Si BBDD NO tiene stripeCustomerId, sí buscamos por metadata por
+  //       si hay un customer huérfano de antes (validando cada candidato).
+  //    c) Si nada de eso, creamos uno nuevo.
+  let customerId: string | null = null
+  let hadStaleDbId = false
+
+  if (user.stripeCustomerId) {
     try {
-      const existing = await stripe.customers.retrieve(customerId)
+      const existing = await stripe.customers.retrieve(user.stripeCustomerId)
       if (existing.deleted) {
-        customerId = null
+        hadStaleDbId = true
+      } else {
+        customerId = user.stripeCustomerId
       }
     } catch (err) {
-      // Most likely "No such customer" (ambiente distinto). Forzamos recreación.
+      // No existe (borrado o cross-ambiente). Marcamos para limpiar BBDD.
       console.warn(
-        `[checkout] stripeCustomerId '${customerId}' no existe en este ambiente: ${err instanceof Error ? err.message : err}. Buscando por metadata.`
+        `[checkout] stripeCustomerId '${user.stripeCustomerId}' no existe en Stripe (${err instanceof Error ? err.message : err}). Creando uno nuevo.`
       )
-      customerId = null
+      hadStaleDbId = true
     }
   }
 
-  // Fallback: buscar por metadata.appUserId antes de crear uno nuevo.
-  // Importante: el índice de customers.search es EVENTUALLY CONSISTENT,
-  // así que puede devolver customers que ya fueron borrados. Validamos
-  // cada candidato con retrieve antes de usarlo.
-  if (!customerId) {
+  // Solo buscamos por metadata si la BBDD NUNCA tuvo customer — para
+  // descubrir orphans antiguos. Si tenía y se borró, vamos directo a
+  // crear uno nuevo (evita el problema del índice stale).
+  if (!customerId && !hadStaleDbId && !user.stripeCustomerId) {
     try {
       const search = await stripe.customers.search({
         query: `metadata['appUserId']:'${user.id}'`,
@@ -69,15 +75,11 @@ export async function POST() {
             if (fresh.deleted) continue
             customerId = candidate.id
             console.log(
-              `[checkout] Reusando customer '${customerId}' encontrado por metadata (validado).` +
-              (search.data.length > 1
-                ? ` ⚠ Hay ${search.data.length} customers con appUserId=${user.id} — considera limpiar duplicados (npm run stripe:audit).`
-                : "")
+              `[checkout] Reusando customer huérfano '${customerId}' (encontrado por metadata).` +
+              (search.data.length > 1 ? ` ⚠ Hay ${search.data.length} candidatos — corre npm run stripe:audit.` : "")
             )
             break
           } catch {
-            // Search devolvió un customer pero retrieve no lo encuentra
-            // (índice stale tras un delete reciente). Lo ignoramos.
             console.warn(
               `[checkout] search devolvió '${candidate.id}' pero retrieve falló — índice stale, ignoro.`
             )
@@ -91,8 +93,6 @@ export async function POST() {
         }
       }
     } catch (err) {
-      // customers.search puede tardar unos segundos en indexar customers
-      // recién creados. Si falla, seguimos con el flujo de creación.
       console.warn(
         `[checkout] customers.search falló (sigo y creo uno nuevo): ${err instanceof Error ? err.message : err}`
       )
@@ -113,6 +113,9 @@ export async function POST() {
       where: { id: user.id },
       data:  { stripeCustomerId: customerId },
     })
+    if (hadStaleDbId) {
+      console.log(`[checkout] BBDD limpiada: ahora stripeCustomerId='${customerId}' (sustituye al zombi).`)
+    }
   }
 
   // 2. Crear Checkout Session
