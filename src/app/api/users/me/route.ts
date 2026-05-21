@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { db } from "@/lib/db"
-import { getCurrentUser } from "@/lib/auth"
+import { getCurrentUser, normalizeUsername, normalizeEmail } from "@/lib/auth"
 import { getSessionForWrite } from "@/lib/session"
 
 const schema = z.object({
@@ -30,10 +30,11 @@ export async function PATCH(req: Request) {
     )
   }
 
-  // ── Username: si cambia, comprobar unicidad ──
-  if (parsed.data.username !== user.username) {
+  // ── Username: normalizar a minúsculas + comprobar unicidad si cambia ──
+  const normalizedUsername = normalizeUsername(parsed.data.username)
+  if (normalizedUsername !== user.username) {
     const existing = await db.user.findUnique({
-      where: { username: parsed.data.username },
+      where: { username: normalizedUsername },
     })
     if (existing && existing.id !== user.id) {
       return NextResponse.json(
@@ -46,7 +47,7 @@ export async function PATCH(req: Request) {
   // ── Email: normalizar (lowercase + trim) y comprobar unicidad si cambia ──
   // Si llega "" o null, lo guardamos como null (borrar).
   const normalizedEmail = parsed.data.email
-    ? parsed.data.email.toLowerCase().trim() || null
+    ? normalizeEmail(parsed.data.email) || null
     : null
 
   if (normalizedEmail && normalizedEmail !== user.email) {
@@ -64,8 +65,8 @@ export async function PATCH(req: Request) {
   const updated = await db.user.update({
     where: { id: user.id },
     data: {
-      username:    parsed.data.username,
-      displayName: parsed.data.displayName ?? parsed.data.username,
+      username:    normalizedUsername,
+      displayName: parsed.data.displayName ?? normalizedUsername,
       // Solo tocamos el email si vino en el payload (undefined = no tocar)
       ...(parsed.data.email !== undefined ? { email: normalizedEmail } : {}),
     },

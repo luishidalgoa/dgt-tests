@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Eye, Lock, User } from "lucide-react"
+import { AtSign, Eye, Lock, User } from "lucide-react"
 
 interface AuthFormProps {
   mode: "login" | "register"
@@ -14,11 +14,13 @@ export function AuthForm({ mode }: AuthFormProps) {
   const searchParams = useSearchParams()
   const redirectTo = searchParams.get("redirect") ?? "/"
 
-  const [username, setUsername] = useState("")
-  const [password, setPassword] = useState("")
-  const [showPwd, setShowPwd]   = useState(false)
-  const [remember, setRemember] = useState(true)
-  const [error, setError]       = useState<string | null>(null)
+  // En login se acepta usuario O email en el mismo campo.
+  const [identifier, setIdentifier] = useState("")
+  const [email,      setEmail]      = useState("")           // solo register
+  const [password,   setPassword]   = useState("")
+  const [showPwd,    setShowPwd]    = useState(false)
+  const [remember,   setRemember]   = useState(true)
+  const [error,      setError]      = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
   const isLogin = mode === "login"
@@ -30,8 +32,8 @@ export function AuthForm({ mode }: AuthFormProps) {
     startTransition(async () => {
       try {
         const payload = isLogin
-          ? { username, password, remember }
-          : { username, password }
+          ? { identifier, password, remember }
+          : { username: identifier, email, password }
         const res = await fetch(`/api/auth/${mode}`, {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
@@ -63,20 +65,67 @@ export function AuthForm({ mode }: AuthFormProps) {
         </p>
 
         <form onSubmit={handleSubmit} noValidate>
-          <label htmlFor="username" className="auth-label">Usuario</label>
+          <label htmlFor="identifier" className="auth-label">
+            {isLogin ? "Usuario o email" : "Usuario"}
+          </label>
           <div className="auth-field">
             <span className="ico" aria-hidden="true"><User size={20} /></span>
             <input
-              id="username"
+              id="identifier"
               type="text"
-              autoComplete="username"
+              autoComplete={isLogin ? "username" : "username"}
               required
-              minLength={3}
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="tu_usuario"
+              minLength={isLogin ? 1 : 3}
+              maxLength={isLogin ? 120 : 40}
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              placeholder={isLogin ? "luis o tu@email.com" : "tu_usuario"}
+              // En register solo letras minúsculas/números/_.-
+              {...(isLogin ? {} : { pattern: "[a-zA-Z0-9_.\\-]+" })}
             />
           </div>
+          {!isLogin && (
+            <p
+              style={{
+                fontSize: 11.5,
+                color: "var(--slate-500)",
+                marginTop: -4,
+                marginBottom: 14,
+                paddingLeft: 4,
+              }}
+            >
+              Letras minúsculas, números, _ . - (no distingue mayúsculas)
+            </p>
+          )}
+
+          {!isLogin && (
+            <>
+              <label htmlFor="email" className="auth-label">Email</label>
+              <div className="auth-field">
+                <span className="ico" aria-hidden="true"><AtSign size={20} /></span>
+                <input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="tu@email.com"
+                />
+              </div>
+              <p
+                style={{
+                  fontSize: 11.5,
+                  color: "var(--slate-500)",
+                  marginTop: -4,
+                  marginBottom: 14,
+                  paddingLeft: 4,
+                }}
+              >
+                Para recuperar contraseña y avisos importantes.
+              </p>
+            </>
+          )}
 
           <label htmlFor="password" className="auth-label">Contraseña</label>
           <div className="auth-field">

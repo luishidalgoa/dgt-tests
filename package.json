@@ -17,6 +17,7 @@
     "user:seed": "tsx --env-file=.env scripts/seed-user.ts",
     "user:role": "tsx --env-file=.env scripts/set-role.ts",
     "user:fake-subscribe": "tsx --env-file=.env scripts/fake-subscribe.ts",
+    "user:lowercase": "tsx --env-file=.env scripts/lowercase-usernames.ts",
     "questions:tag-tiers": "tsx --env-file=.env scripts/tag-question-tiers.ts",
     "stripe:check": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/test-stripe.ts",
     "stripe:sync-user": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/sync-subscription-from-stripe.ts",
