@@ -23,6 +23,7 @@
     "stripe:sync-user": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/sync-subscription-from-stripe.ts",
     "stripe:setup-test": "tsx --env-file=.env.local scripts/setup-stripe-test.ts",
     "stripe:audit": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/audit-stripe-customers.ts",
+    "stripe:listen": "stripe listen --forward-to http://localhost:4321/api/webhooks/stripe",
     "images:copy": "tsx scripts/copy-images.ts",
     "manual:import": "tsx --env-file=.env scripts/import-manual.ts",
     "ingest": "npm run db:seed && npm run images:copy && npm run manual:import"
