@@ -74,6 +74,14 @@ export function AuthForm({ mode }: AuthFormProps) {
               id="identifier"
               type="text"
               autoComplete={isLogin ? "username" : "username"}
+              // Críticos para móvil: el teclado iOS/Android capitaliza
+              // y autocorrige por defecto, lo que rompe el match contra
+              // BBDD aunque normalicemos en servidor (la 1ª letra "L" o
+              // un sustitutivo de autocorrect en email da 401).
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              inputMode={isLogin ? "email" : "text"}
               required
               minLength={isLogin ? 1 : 3}
               maxLength={isLogin ? 120 : 40}
@@ -107,6 +115,10 @@ export function AuthForm({ mode }: AuthFormProps) {
                   id="email"
                   type="email"
                   autoComplete="email"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  inputMode="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -134,6 +146,11 @@ export function AuthForm({ mode }: AuthFormProps) {
               id="password"
               type={showPwd ? "text" : "password"}
               autoComplete={isLogin ? "current-password" : "new-password"}
+              // Cuando showPwd=true el input es type="text" y el teclado móvil
+              // intenta autocorregir/capitalizar la contraseña.
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               required
               minLength={isLogin ? 1 : 6}
               value={password}
@@ -143,8 +160,13 @@ export function AuthForm({ mode }: AuthFormProps) {
             <button
               type="button"
               className="eye"
+              // preventDefault en mouseDown evita que el botón robe el foco al
+              // input en iOS Safari (que tiraba el toggle al cerrar el teclado).
+              onMouseDown={(e) => e.preventDefault()}
+              onTouchStart={(e) => e.stopPropagation()}
               onClick={() => setShowPwd((v) => !v)}
               aria-label={showPwd ? "Ocultar contraseña" : "Mostrar contraseña"}
+              aria-pressed={showPwd}
             >
               <Eye size={20} />
             </button>

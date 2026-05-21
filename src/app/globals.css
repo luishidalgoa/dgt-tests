@@ -188,17 +188,26 @@ body {
 }
 .auth-field .eye {
   position: absolute;
-  right: 12px;
+  right: 6px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--slate-400);
   background: transparent;
   border: 0;
-  padding: 6px;
-  border-radius: 8px;
+  /* Tap target mínimo 44x44 (Apple HIG) para que responda bien en móvil. */
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
   cursor: pointer;
+  /* Evita el highlight azul al tocar en iOS y los retrasos de tap. */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
-.auth-field .eye:hover {
+.auth-field .eye:hover,
+.auth-field .eye:active {
   color: var(--orange-600);
   background: rgba(249, 115, 22, 0.08);
 }

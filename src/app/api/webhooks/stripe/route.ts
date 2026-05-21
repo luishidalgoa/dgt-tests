@@ -181,11 +181,22 @@ async function onSubscriptionDeleted(sub: Stripe.Subscription) {
   })
   const isAdmin = current?.role === "ADMIN"
 
+  // Preservamos la fecha en la que la suscripción terminó para poder
+  // mostrar "Tu plan PRO caducó el X" en /settings. Preferimos `ended_at`
+  // (set por Stripe cuando la sub efectivamente termina), y caemos a
+  // `current_period_end` si por alguna razón no viene.
+  const subExt = sub as Stripe.Subscription & {
+    ended_at?:           number | null
+    current_period_end?: number | null
+  }
+  const endedTs = subExt.ended_at ?? subExt.current_period_end ?? null
+  const endedAt = endedTs ? new Date(endedTs * 1000) : null
+
   await db.user.update({
     where: { id: userId },
     data: {
       subscriptionStatus:            "canceled",
-      subscriptionCurrentPeriodEnd:  null,
+      subscriptionCurrentPeriodEnd:  endedAt,
       subscriptionCancelAtPeriodEnd: false,
       stripeSubscriptionId:          null,
       ...(isAdmin ? {} : { role: "USER" }),

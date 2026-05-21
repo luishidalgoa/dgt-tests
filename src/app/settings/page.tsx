@@ -16,13 +16,39 @@ export default async function SettingsPage() {
   const plan = planLabel(user)
   const admin = isAdmin(user)
   const full  = hasFullAccess(user)
-  const periodEnd = user.subscriptionCurrentPeriodEnd
-    ? new Date(user.subscriptionCurrentPeriodEnd).toLocaleDateString("es-ES", {
+
+  // ── Estado de la suscripción para el panel ────────────────────────────
+  // Calculamos un "variant" único que decide texto, color y comportamiento:
+  //   - "renewing"  → activa, se va a renovar el día indicado
+  //   - "ending"    → activa pero cancelada al final del periodo
+  //   - "expired"   → ya terminó (cancelada o pasada de fecha)
+  //   - null        → nunca tuvo suscripción (no mostramos panel de fechas)
+  type SubVariant = "renewing" | "ending" | "expired"
+  const periodEndDate = user.subscriptionCurrentPeriodEnd
+    ? new Date(user.subscriptionCurrentPeriodEnd)
+    : null
+  const periodEnd = periodEndDate
+    ? periodEndDate.toLocaleDateString("es-ES", {
         day: "numeric",
         month: "long",
         year: "numeric",
       })
     : null
+  let subVariant: SubVariant | null = null
+  if (periodEndDate && !admin) {
+    const isCanceledStatus =
+      user.subscriptionStatus === "canceled" ||
+      user.subscriptionStatus === "incomplete_expired" ||
+      user.subscriptionStatus === "unpaid"
+    const isPastDate = periodEndDate.getTime() < Date.now()
+    if (isCanceledStatus || isPastDate) {
+      subVariant = "expired"
+    } else if (user.subscriptionCancelAtPeriodEnd) {
+      subVariant = "ending"
+    } else {
+      subVariant = "renewing"
+    }
+  }
 
   const percent = Math.round((quota.used / quota.max) * 100)
   const resetDate = new Date(quota.resetsAt).toLocaleDateString("es-ES", {
@@ -132,19 +158,35 @@ export default async function SettingsPage() {
           </div>
         </div>
 
-        {/* Detalles de la suscripción */}
-        {full && !admin && (() => {
-          const willRenew = !user.subscriptionCancelAtPeriodEnd
-          const accent = willRenew ? "var(--green-d)" : "var(--amber-d)"
-          const accentBg = willRenew ? "rgba(34, 197, 94, 0.06)" : "rgba(245, 158, 11, 0.08)"
-          const accentBorder = willRenew ? "rgba(34, 197, 94, 0.20)" : "rgba(245, 158, 11, 0.25)"
+        {/* Detalles de la suscripción — visible siempre que haya historial */}
+        {subVariant && periodEnd && (() => {
+          const palette = {
+            renewing: {
+              accent: "var(--green-d)",
+              bg:     "rgba(34, 197, 94, 0.06)",
+              border: "rgba(34, 197, 94, 0.20)",
+              dateLabel: "Próxima renovación",
+            },
+            ending: {
+              accent: "var(--amber-d)",
+              bg:     "rgba(245, 158, 11, 0.08)",
+              border: "rgba(245, 158, 11, 0.25)",
+              dateLabel: "Termina",
+            },
+            expired: {
+              accent: "var(--slate-500)",
+              bg:     "var(--slate-100)",
+              border: "var(--slate-200)",
+              dateLabel: "Caducó",
+            },
+          }[subVariant]
           return (
             <div
               style={{
                 padding: "12px 14px",
                 borderRadius: 10,
-                background: accentBg,
-                border: `1px solid ${accentBorder}`,
+                background: palette.bg,
+                border: `1px solid ${palette.border}`,
                 fontSize: 13,
                 color: "var(--slate-700)",
                 marginBottom: 14,
@@ -153,24 +195,27 @@ export default async function SettingsPage() {
                 gap: 6,
               }}
             >
-              <div>
-                Estado:{" "}
-                <b style={{ color: user.subscriptionStatus === "active" ? "var(--green-d)" : "var(--amber-d)" }}>
-                  {user.subscriptionStatus ?? "—"}
-                </b>
-              </div>
-              <div>
-                Renovación automática:{" "}
-                <b style={{ color: accent }}>
-                  {willRenew ? "✓ Activada" : "✗ Desactivada"}
-                </b>
-              </div>
-              {periodEnd && (
-                <div>
-                  {willRenew ? "Próxima renovación" : "Termina"}: <b>{periodEnd}</b>
-                </div>
+              {/* Estado + renovación: solo tiene sentido si la sub está viva */}
+              {subVariant !== "expired" && (
+                <>
+                  <div>
+                    Estado:{" "}
+                    <b style={{ color: user.subscriptionStatus === "active" ? "var(--green-d)" : "var(--amber-d)" }}>
+                      {user.subscriptionStatus ?? "—"}
+                    </b>
+                  </div>
+                  <div>
+                    Renovación automática:{" "}
+                    <b style={{ color: palette.accent }}>
+                      {subVariant === "renewing" ? "✓ Activada" : "✗ Desactivada"}
+                    </b>
+                  </div>
+                </>
               )}
-              {!willRenew && (
+              <div>
+                {palette.dateLabel}: <b style={{ color: palette.accent }}>{periodEnd}</b>
+              </div>
+              {subVariant === "ending" && (
                 <div
                   style={{
                     marginTop: 4,
@@ -182,6 +227,19 @@ export default async function SettingsPage() {
                   Has cancelado la suscripción. Mantienes el acceso PRO hasta la fecha
                   indicada. Si cambias de opinión, puedes reactivarla desde el portal
                   de gestión sin perder nada.
+                </div>
+              )}
+              {subVariant === "expired" && (
+                <div
+                  style={{
+                    marginTop: 4,
+                    fontSize: 12,
+                    color: "var(--slate-500)",
+                    fontStyle: "italic",
+                  }}
+                >
+                  Tu suscripción PRO terminó. Puedes reactivarla cuando quieras desde
+                  el botón de abajo.
                 </div>
               )}
             </div>
