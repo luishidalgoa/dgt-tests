@@ -22,7 +22,7 @@ const FREE_FEATURES = [
   { label: "Modo examen real (30 min)",      included: true },
   { label: "Historial y estadísticas",        included: true },
   { label: "10 análisis IA al mes",          included: true },
-  { label: "Todas las categorías (501 tests)",  included: false },
+  { label: "Todas las categorías (+100 tests)",  included: false },
   { label: "Tests por temas",                included: false },
   { label: "Test de errores (repite fallos)",  included: false },
   { label: "Manual completo (flipbook)",      included: false },
@@ -32,7 +32,7 @@ const FREE_FEATURES = [
 
 const PRO_FEATURES = [
   { label: "Todo lo del plan gratuito",       included: true },
-  { label: "Todas las categorías (501 tests)",  included: true },
+  { label: "Todas las categorías (+100 tests)",  included: true },
   { label: "Tests por temas concretos",       included: true },
   { label: "Test de errores ilimitado",       included: true },
   { label: "Manual completo en flipbook",     included: true },
@@ -276,7 +276,7 @@ export default async function UpgradePage() {
         }}
       >
         <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-          <Trophy className="h-4 w-4" /> 501 preguntas reales
+          <Trophy className="h-4 w-4" /> +100 tests con preguntas reales
         </span>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
           <Zap className="h-4 w-4" /> IA Gemini para entender cada respuesta

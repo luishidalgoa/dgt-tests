@@ -33,7 +33,7 @@ const FREE_HIGHLIGHTS = [
 ]
 
 const PRO_HIGHLIGHTS = [
-  "Todas las categorías (501 tests)",
+  "Todas las categorías (+100 tests)",
   "Tests por tema + test de errores",
   "Manual completo en flipbook",
   "Modo competición multijugador",
