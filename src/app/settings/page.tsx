@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth"
 import { ChevronLeft, Settings, Sparkles, Crown, Shield, ArrowRight } from "lucide-react"
 import { SettingsForm } from "@/components/SettingsForm"
 import { BillingPortalButton } from "@/components/BillingPortalButton"
+import { AdminRefillTokensButton } from "@/components/AdminRefillTokensButton"
 import { getQuotaStatus } from "@/lib/aiQuota"
 import { hasFullAccess, isAdmin, planLabel } from "@/lib/permissions"
 
@@ -262,6 +263,9 @@ export default async function SettingsPage() {
         <p style={{ fontSize: 12, color: "var(--slate-500)", marginTop: 12, marginBottom: 0, lineHeight: 1.5 }}>
           Cada análisis cuesta <b>1 token</b>.
         </p>
+
+        {/* Admin: botón para recargarse tokens manualmente */}
+        {admin && <AdminRefillTokensButton />}
       </div>
     </div>
   )

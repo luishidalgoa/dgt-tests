@@ -1,9 +1,10 @@
 "use client"
 
-import { useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { LogOut, Settings, Sparkles, Crown, Shield } from "lucide-react"
+import { AI_QUOTA_CHANGED_EVENT, type MonthlyQuota } from "@/components/AIExplainPanel"
 
 type Plan = "FREE" | "PRO" | "ADMIN"
 
@@ -18,6 +19,26 @@ export function HeaderUser({ username, aiTokensRemaining, aiTokensMax, plan }: H
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
+  // Estado local del contador (inicializado desde props del server) que
+  // se actualiza en vivo cuando AIExplainPanel emite el evento.
+  const [liveRemaining, setLiveRemaining] = useState(aiTokensRemaining)
+  const [liveMax,       setLiveMax]       = useState(aiTokensMax)
+
+  // Sincronizar si las props del server cambian (cambio de página / refresh)
+  useEffect(() => { setLiveRemaining(aiTokensRemaining) }, [aiTokensRemaining])
+  useEffect(() => { setLiveMax(aiTokensMax) }, [aiTokensMax])
+
+  // Escuchar el evento del panel IA para actualizar al instante
+  useEffect(() => {
+    function onChange(e: Event) {
+      const { detail } = e as CustomEvent<MonthlyQuota>
+      if (typeof detail?.remaining === "number") setLiveRemaining(detail.remaining)
+      if (typeof detail?.max === "number")       setLiveMax(detail.max)
+    }
+    window.addEventListener(AI_QUOTA_CHANGED_EVENT, onChange)
+    return () => window.removeEventListener(AI_QUOTA_CHANGED_EVENT, onChange)
+  }, [])
+
   function handleLogout() {
     startTransition(async () => {
       await fetch("/api/auth/logout", { method: "POST" })
@@ -27,8 +48,8 @@ export function HeaderUser({ username, aiTokensRemaining, aiTokensMax, plan }: H
   }
 
   const initial = (username[0] ?? "?").toUpperCase()
-  const hasQuota = typeof aiTokensRemaining === "number" && typeof aiTokensMax === "number"
-  const lowQuota = hasQuota && aiTokensRemaining! <= 5
+  const hasQuota = typeof liveRemaining === "number" && typeof liveMax === "number"
+  const lowQuota = hasQuota && liveRemaining! <= 5
 
   return (
     <div className="avatar">
@@ -42,7 +63,7 @@ export function HeaderUser({ username, aiTokensRemaining, aiTokensMax, plan }: H
         {plan && <PlanBadge plan={plan} />}
         {hasQuota && (
           <span
-            title={`Te quedan ${aiTokensRemaining} de ${aiTokensMax} tokens IA este mes`}
+            title={`Te quedan ${liveRemaining} de ${liveMax} tokens IA este mes`}
             className="font-mono-tabular"
             style={{
               display: "inline-flex",
@@ -59,10 +80,11 @@ export function HeaderUser({ username, aiTokensRemaining, aiTokensMax, plan }: H
               border: lowQuota
                 ? "1px solid rgba(239, 68, 68, 0.30)"
                 : "1px solid rgba(168, 85, 247, 0.25)",
+              transition: "background 0.2s, color 0.2s",
             }}
           >
             <Sparkles className="h-3 w-3" />
-            {aiTokensRemaining}/{aiTokensMax}
+            {liveRemaining}/{liveMax}
           </span>
         )}
         <Settings className="h-3.5 w-3.5" style={{ color: "var(--slate-400)" }} />

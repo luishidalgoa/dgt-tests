@@ -34,6 +34,15 @@ export interface MonthlyQuota {
   resetsAt:  string
 }
 
+/** Evento usado para que el chip de tokens en el navbar se actualice
+ *  en vivo cuando la IA consume quota (sin esperar a router.refresh). */
+export const AI_QUOTA_CHANGED_EVENT = "dgt:ai-quota-changed"
+
+function emitQuotaChange(quota: MonthlyQuota) {
+  if (typeof window === "undefined") return
+  window.dispatchEvent(new CustomEvent(AI_QUOTA_CHANGED_EVENT, { detail: quota }))
+}
+
 interface Props {
   questionId:   number
   /** Explicación oficial — sobre la que se aplica el subrayado. */
@@ -90,13 +99,19 @@ export function AIExplainPanel({
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        if (body.quota) setQuota(body.quota)
+        if (body.quota) {
+          setQuota(body.quota)
+          emitQuotaChange(body.quota)
+        }
         throw new Error(body.error ?? "Error al consultar la IA")
       }
       const data = (await res.json()) as { cached: boolean; result: AIResult; quota?: MonthlyQuota }
       setResult(data.result)
       setCached(data.cached)
-      if (data.quota) setQuota(data.quota)
+      if (data.quota) {
+        setQuota(data.quota)
+        emitQuotaChange(data.quota)
+      }
       onResult?.(data.result)
       onConsume(data.cached)
     } catch (err) {
@@ -152,7 +167,9 @@ export function AIExplainPanel({
         </button>
       </DialogTrigger>
 
-      <DialogContent className="!max-w-[min(94vw,640px)] !w-[min(94vw,640px)]">
+      <DialogContent
+        className="!max-w-[min(94vw,640px)] !w-[min(94vw,640px)] !max-h-[90vh] overflow-y-auto"
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5" style={{ color: "rgb(168, 85, 247)" }} />
