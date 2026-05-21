@@ -1,14 +1,20 @@
 /**
- * Rasteriza src/app/icon.svg → icon.png (512x512) y apple-icon.png (180x180).
+ * Rasteriza src/app/icon.svg a varios PNG en public/stripe/ para usar
+ * como logo de producto, business logo, etc. en el Dashboard de Stripe.
  *
  *   npx tsx scripts/generate-icons.ts
  *
- * Después de ejecutarlo, BORRA los .svg para evitar que Next.js sirva ambos:
- *   - src/app/icon.svg
- *   - src/app/apple-icon.svg
+ * Stripe acepta JPG/PNG square, máx 5MB. La recomendación oficial:
+ *   - Logo de producto:  1024x1024 PNG con fondo transparente o color
+ *   - Branding logo:     128x128 PNG (mínimo) — Dashboard → Settings → Branding
+ *   - Icon (Checkout):   256x256 PNG cuadrado
+ *
+ * El SVG en src/app/icon.svg sigue siendo el favicon real de la app
+ * (Next.js lo sirve automáticamente). Estos PNG son SOLO para subirlos
+ * manualmente al Dashboard de Stripe.
  */
 import sharp from "sharp"
-import { readFileSync, writeFileSync, existsSync } from "node:fs"
+import { readFileSync, existsSync } from "node:fs"
 import { resolve } from "node:path"
 
 async function main() {
@@ -20,34 +26,26 @@ async function main() {
   }
 
   const svgBuf = readFileSync(svgIn)
+  const outDir = resolve(root, "public/stripe")
 
-  // 1. icon.png — favicon principal (512x512 para que se vea nítido en cualquier sitio)
-  const iconOut = resolve(root, "src/app/icon.png")
-  await sharp(svgBuf, { density: 512 })
-    .resize(512, 512)
-    .png({ compressionLevel: 9 })
-    .toFile(iconOut)
-  console.log(`✓ ${iconOut} (512x512)`)
+  const variants: { name: string; size: number; desc: string }[] = [
+    { name: "logo-1024.png", size: 1024, desc: "Producto en Stripe Checkout / Dashboard" },
+    { name: "logo-512.png",  size:  512, desc: "General / redes sociales" },
+    { name: "logo-256.png",  size:  256, desc: "Icon en Stripe Checkout" },
+    { name: "logo-128.png",  size:  128, desc: "Branding logo en Stripe Dashboard (mínimo)" },
+  ]
 
-  // 2. apple-icon.png — para iOS al añadir a pantalla de inicio (180x180 es lo estándar)
-  const appleOut = resolve(root, "src/app/apple-icon.png")
-  await sharp(svgBuf, { density: 512 })
-    .resize(180, 180)
-    .png({ compressionLevel: 9 })
-    .toFile(appleOut)
-  console.log(`✓ ${appleOut} (180x180)`)
+  for (const v of variants) {
+    const out = resolve(outDir, v.name)
+    await sharp(svgBuf, { density: Math.max(256, v.size) })
+      .resize(v.size, v.size)
+      .png({ compressionLevel: 9 })
+      .toFile(out)
+    console.log(`✓ public/stripe/${v.name} (${v.size}×${v.size}) — ${v.desc}`)
+  }
 
-  // 3. Opcional: favicon clásico 32x32 (algunos navegadores lo prefieren pequeño)
-  const favOut = resolve(root, "public/favicon.png")
-  await sharp(svgBuf, { density: 256 })
-    .resize(32, 32)
-    .png({ compressionLevel: 9 })
-    .toFile(favOut)
-  console.log(`✓ ${favOut} (32x32)`)
-
-  console.log("\nRecuerda: ahora borra los SVG para que Next sirva los PNG:")
-  console.log("  rm src/app/icon.svg")
-  console.log("  rm src/app/apple-icon.svg")
+  console.log("\n→ Usa public/stripe/logo-1024.png al crear el producto")
+  console.log("  en https://dashboard.stripe.com/products → Add product → Image")
 }
 
 main().catch((e) => { console.error("❌", e); process.exit(1) })
