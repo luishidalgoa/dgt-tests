@@ -5,6 +5,7 @@ import Image from "next/image"
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -71,6 +72,9 @@ export function QuestionImage({ src, alt, title, size = 300 }: Props) {
       >
         <DialogHeader>
           <DialogTitle className="text-sm">{title ?? alt}</DialogTitle>
+          <DialogDescription className="sr-only">
+            Vista ampliada de la imagen de la pregunta.
+          </DialogDescription>
         </DialogHeader>
         <div
           className="relative w-full"

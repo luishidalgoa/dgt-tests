@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -182,6 +183,10 @@ export function AIExplainPanel({
               {remaining}/{maxAllowed}
             </span>
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            Análisis con IA de la pregunta actual: idea clave, justificación de la respuesta correcta,
+            explicación de las otras opciones y subrayado de las frases clave.
+          </DialogDescription>
         </DialogHeader>
 
         {/* Estado: comprobando cache */}

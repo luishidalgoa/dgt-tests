@@ -7,6 +7,7 @@ import { Progress } from "@/components/ui/progress"
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -610,6 +611,9 @@ export function ExamRunner({ data, mode = "normal", timeLimit = null, isGuest = 
             <DialogContent className="max-w-md">
               <DialogHeader>
                 <DialogTitle>Mapa de preguntas</DialogTitle>
+                <DialogDescription className="sr-only">
+                  Cuadrícula con todas las preguntas del test para saltar entre ellas.
+                </DialogDescription>
               </DialogHeader>
               <div className="grid grid-cols-6 gap-2 mt-2">
                 {questions.map((qu, i) => {
