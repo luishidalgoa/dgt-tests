@@ -1,16 +1,18 @@
 /**
  * Cambia el role de un usuario.
  *
- *   npx tsx --env-file=.env scripts/set-role.ts <username> <USER|SUBSCRIBER|ADMIN>
+ * La lógica vive en src/lib/setUserRole.ts (testeada). Este archivo es
+ * un CLI wrapper finísimo.
  *
- * Ejemplos:
- *   npx tsx --env-file=.env scripts/set-role.ts luishidalgoa ADMIN
- *   npx tsx --env-file=.env scripts/set-role.ts pepito USER
+ *   # Por defecto carga .env + .env.local → si .env.local sobreescribe
+ *   #   TURSO a vacío (setup Fase 82), hits SQLite local.
+ *   npm run user:role -- luishidalgoa ADMIN
+ *
+ *   # Para hits explícitos a prod Turso (ignora .env.local):
+ *   npm run user:role:prod -- luishidalgoa ADMIN
  */
 import { db } from "@/lib/db"
-
-const VALID_ROLES = ["USER", "SUBSCRIBER", "ADMIN"] as const
-type Role = (typeof VALID_ROLES)[number]
+import { parseRoleArg, setUserRole } from "@/lib/setUserRole"
 
 async function main() {
   const [username, rawRole] = process.argv.slice(2)
@@ -18,31 +20,22 @@ async function main() {
     console.error("Uso: set-role.ts <username> <USER|SUBSCRIBER|ADMIN>")
     process.exit(1)
   }
-  const role = rawRole.toUpperCase() as Role
-  if (!VALID_ROLES.includes(role)) {
-    console.error(`Rol inválido. Usa uno de: ${VALID_ROLES.join(", ")}`)
+
+  const parsed = parseRoleArg(rawRole)
+  if ("error" in parsed) {
+    console.error(parsed.error)
     process.exit(1)
   }
 
-  const user = await db.user.findUnique({ where: { username } })
-  if (!user) {
-    console.error(`No existe el usuario '${username}'`)
+  const result = await setUserRole(db, username, parsed.role)
+  if (!result.ok) {
+    console.error(result.error)
     process.exit(1)
   }
 
-  const updated = await db.user.update({
-    where: { username },
-    data:  { role },
-  })
-
-  console.log(`✓ ${updated.username} (id ${updated.id}) → role = ${updated.role}`)
+  console.log(`✓ ${result.user.username} (id ${result.user.id}) → role = ${result.user.role}`)
 }
 
 main()
-  .catch((e) => {
-    console.error("❌", e)
-    process.exit(1)
-  })
-  .finally(async () => {
-    await db.$disconnect()
-  })
+  .catch((e) => { console.error("❌", e); process.exit(1) })
+  .finally(async () => { await db.$disconnect() })
