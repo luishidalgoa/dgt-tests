@@ -6,6 +6,7 @@ import { findManualSectionsForCodes } from "@/lib/manual"
 import { Badge } from "@/components/ui/badge"
 import { ManualButton } from "@/components/ManualButton"
 import { QuestionImage } from "@/components/QuestionImage"
+import { ResultsAIButton } from "@/components/ResultsAIButton"
 import {
   ChevronLeft,
   CheckCircle2,
@@ -334,6 +335,16 @@ export default async function ResultPage({ params }: PageProps) {
                     <div style={{ marginTop: 10 }}>
                       <ManualButton section={manualSection} />
                     </div>
+                  )}
+
+                  {/* Botón IA — quota compartida entre preguntas del mismo attempt */}
+                  {a.question.explicacion && (
+                    <ResultsAIButton
+                      attemptId={attempt.id}
+                      questionId={a.question.id}
+                      explicacion={a.question.explicacion}
+                      hasImage={Boolean(a.question.imagen)}
+                    />
                   )}
 
                   {/* Explicación expandible (estilo práctica) */}
