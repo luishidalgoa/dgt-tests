@@ -52,6 +52,9 @@ export async function POST() {
   }
 
   // Fallback: buscar por metadata.appUserId antes de crear uno nuevo.
+  // Importante: el índice de customers.search es EVENTUALLY CONSISTENT,
+  // así que puede devolver customers que ya fueron borrados. Validamos
+  // cada candidato con retrieve antes de usarlo.
   if (!customerId) {
     try {
       const search = await stripe.customers.search({
@@ -59,19 +62,33 @@ export async function POST() {
         limit: 5,
       })
       if (search.data.length > 0) {
-        // Si hay varios, preferimos el más reciente (ordena por created desc)
         const sorted = [...search.data].sort((a, b) => b.created - a.created)
-        customerId = sorted[0].id
-        console.warn(
-          `[checkout] Reusando customer existente '${customerId}' encontrado por metadata.` +
-          (search.data.length > 1
-            ? ` ⚠ Hay ${search.data.length} customers con appUserId=${user.id} — considera limpiar duplicados (npm run stripe:audit).`
-            : "")
-        )
-        await db.user.update({
-          where: { id: user.id },
-          data:  { stripeCustomerId: customerId },
-        })
+        for (const candidate of sorted) {
+          try {
+            const fresh = await stripe.customers.retrieve(candidate.id)
+            if (fresh.deleted) continue
+            customerId = candidate.id
+            console.log(
+              `[checkout] Reusando customer '${customerId}' encontrado por metadata (validado).` +
+              (search.data.length > 1
+                ? ` ⚠ Hay ${search.data.length} customers con appUserId=${user.id} — considera limpiar duplicados (npm run stripe:audit).`
+                : "")
+            )
+            break
+          } catch {
+            // Search devolvió un customer pero retrieve no lo encuentra
+            // (índice stale tras un delete reciente). Lo ignoramos.
+            console.warn(
+              `[checkout] search devolvió '${candidate.id}' pero retrieve falló — índice stale, ignoro.`
+            )
+          }
+        }
+        if (customerId) {
+          await db.user.update({
+            where: { id: user.id },
+            data:  { stripeCustomerId: customerId },
+          })
+        }
       }
     } catch (err) {
       // customers.search puede tardar unos segundos en indexar customers
