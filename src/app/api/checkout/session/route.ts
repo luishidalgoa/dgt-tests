@@ -29,13 +29,33 @@ export async function POST() {
   const stripe = getStripe()
 
   // 1. Crear/recuperar Customer
-  let customerId = user.stripeCustomerId
+  //    Defendemos contra "cross-ambiente": un customer creado en LIVE no
+  //    existe en TEST y viceversa. Si el id guardado no resuelve, creamos
+  //    uno nuevo en el ambiente actual.
+  let customerId: string | null = user.stripeCustomerId
+  if (customerId) {
+    try {
+      const existing = await stripe.customers.retrieve(customerId)
+      if (existing.deleted) {
+        customerId = null
+      }
+    } catch (err) {
+      // Most likely "No such customer" (ambiente distinto). Forzamos recreación.
+      console.warn(
+        `[checkout] stripeCustomerId '${customerId}' no existe en este ambiente: ${err instanceof Error ? err.message : err}. Creando uno nuevo.`
+      )
+      customerId = null
+    }
+  }
   if (!customerId) {
     const customer = await stripe.customers.create({
       // No usamos email porque no lo pedimos en registro; usamos username
       // como referencia interna.
       metadata: { appUserId: String(user.id), username: user.username },
       name: user.displayName ?? user.username,
+      // Si el usuario tiene email guardado, lo usamos para que Stripe lo
+      // muestre prerellenado en el Checkout
+      ...(user.email ? { email: user.email } : {}),
     })
     customerId = customer.id
     await db.user.update({
