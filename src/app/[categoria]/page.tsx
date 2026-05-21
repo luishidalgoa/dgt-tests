@@ -1,13 +1,16 @@
 import Link from "next/link"
-import { notFound, redirect } from "next/navigation"
+import { notFound } from "next/navigation"
 import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
+import {
+  canAccessTest,
+  hasFullAccess,
+  FREE_CATEGORY_SLUG,
+  FREE_TEST_LIMIT,
+} from "@/lib/permissions"
 import { ChevronLeft, CheckCircle2, Lock } from "lucide-react"
 
 export const dynamic = "force-dynamic"
-
-const GUEST_CATEGORY_SLUG = "permiso-b"
-const GUEST_TEST_LIMIT = 7
 
 interface PageProps {
   params: Promise<{ categoria: string }>
@@ -16,11 +19,6 @@ interface PageProps {
 export default async function CategoryPage({ params }: PageProps) {
   const user = await getCurrentUser()
   const { categoria } = await params
-
-  // Invitados: solo permiso-b. Otras categorías → al dashboard guest.
-  if (!user && categoria !== GUEST_CATEGORY_SLUG) {
-    redirect("/")
-  }
 
   const category = await db.category.findUnique({
     where: { slug: categoria },
@@ -37,7 +35,7 @@ export default async function CategoryPage({ params }: PageProps) {
                 select: { score: true, total: true },
               }
             : {
-                where: { id: -1 }, // empty: no attempts for guests
+                where: { id: -1 },
                 take: 0,
                 select: { score: true, total: true },
               },
@@ -49,6 +47,75 @@ export default async function CategoryPage({ params }: PageProps) {
   if (!category) notFound()
 
   const passThreshold = 0.9
+  const fullAccess = hasFullAccess(user)
+  const isGuest = !user
+
+  // Banner explicativo: cuántos tests están desbloqueados
+  let banner: React.ReactNode = null
+  if (!fullAccess) {
+    if (categoria === FREE_CATEGORY_SLUG) {
+      banner = (
+        <div
+          className="card-soft"
+          style={{
+            padding: "12px 16px",
+            marginBottom: 16,
+            fontSize: 13.5,
+            color: "var(--slate-600)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <span>
+            {isGuest ? "Como invitado" : "En el plan gratuito"} tienes acceso a los{" "}
+            <b>{FREE_TEST_LIMIT} primeros tests</b>. El resto requiere suscripción.
+          </span>
+          <Link
+            href={isGuest ? "/register" : "/upgrade"}
+            className="btn-secondary"
+            style={{ fontSize: 13 }}
+          >
+            {isGuest ? "Crear cuenta" : "Desbloquear todo"}
+          </Link>
+        </div>
+      )
+    } else {
+      // Categoría que para free está completamente bloqueada
+      banner = (
+        <div
+          className="card-soft warm"
+          style={{
+            padding: "16px 18px",
+            marginBottom: 16,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+            borderColor: "rgba(249, 115, 22, 0.35)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <Lock className="h-5 w-5" style={{ color: "var(--orange-600)" }} />
+            <span style={{ fontSize: 14 }}>
+              Esta categoría está disponible <b>solo en el plan PRO</b>. Suscríbete por
+              5€/mes para acceder a todo el contenido.
+            </span>
+          </div>
+          <Link
+            href={isGuest ? "/register" : "/upgrade"}
+            className="btn-primary"
+            style={{ fontSize: 13 }}
+          >
+            {isGuest ? "Crear cuenta gratis" : "Suscribirme · 5€/mes"}
+          </Link>
+        </div>
+      )
+    }
+  }
 
   return (
     <div>
@@ -65,29 +132,7 @@ export default async function CategoryPage({ params }: PageProps) {
         <span className="badge">[{category.code}]</span>
       </header>
 
-      {!user && (
-        <div
-          className="card-soft"
-          style={{
-            padding: "12px 16px",
-            marginBottom: 16,
-            fontSize: 13.5,
-            color: "var(--slate-600)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            flexWrap: "wrap",
-          }}
-        >
-          <span>
-            Como <b>invitado</b> tienes acceso a los <b>{GUEST_TEST_LIMIT} primeros tests</b>. Tu progreso no se guarda.
-          </span>
-          <Link href="/register" className="btn-secondary" style={{ fontSize: 13 }}>
-            Crear cuenta
-          </Link>
-        </div>
-      )}
+      {banner}
 
       <div className="tile-grid">
         {category.tests.map((t) => {
@@ -96,27 +141,33 @@ export default async function CategoryPage({ params }: PageProps) {
           const total  = lastAttempt?.total ?? t._count.testQuestions
           const passed = score !== null && score >= Math.ceil(total * passThreshold)
           const failed = score !== null && !passed
-          const lockedForGuest = !user && t.testNumber > GUEST_TEST_LIMIT
+          const locked = !canAccessTest(user, category.slug, t.testNumber)
 
-          if (lockedForGuest) {
+          if (locked) {
             return (
               <Link
                 key={t.id}
-                href="/register"
+                href={isGuest ? "/register" : "/upgrade"}
                 className="tile"
                 style={{
-                  opacity: 0.55,
+                  opacity: 0.62,
                   borderStyle: "dashed",
                   background: "rgba(148, 163, 184, 0.06)",
+                  filter: "grayscale(0.4)",
                 }}
-                title="Crea una cuenta para desbloquear"
+                title={isGuest ? "Regístrate para desbloquear" : "Suscríbete para desbloquear"}
               >
-                <div className="tile-label" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                <div
+                  className="tile-label"
+                  style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+                >
                   <Lock className="h-3 w-3" />
                   Test
                 </div>
                 <div className="tile-num">{t.testNumber}</div>
-                <div className="tile-pending">Crea cuenta</div>
+                <div className="tile-pending">
+                  {isGuest ? "Crea cuenta" : "Plan PRO"}
+                </div>
               </Link>
             )
           }
@@ -135,7 +186,9 @@ export default async function CategoryPage({ params }: PageProps) {
                   {score}/{total}
                 </div>
               ) : (
-                <div className="tile-pending">{user ? "Sin hacer" : `${t._count.testQuestions} preguntas`}</div>
+                <div className="tile-pending">
+                  {user ? "Sin hacer" : `${t._count.testQuestions} preguntas`}
+                </div>
               )}
             </Link>
           )

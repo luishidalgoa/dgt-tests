@@ -2,6 +2,7 @@ import Link from "next/link"
 import { redirect } from "next/navigation"
 import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
+import { hasFullAccess } from "@/lib/permissions"
 import { getTemaName } from "@/lib/temas"
 import { ChevronLeft, BookMarked, ArrowRight, BookOpen } from "lucide-react"
 
@@ -12,6 +13,8 @@ export default async function TemasPage() {
 
   // /temas no está disponible en modo invitado
   if (!user) redirect("/")
+  // Tampoco para free — es contenido PRO
+  if (!hasFullAccess(user)) redirect("/upgrade")
 
   // Para invitados: solo conteo de preguntas por tema (sin stats personales).
   // Para usuarios logueados: además, contar respuestas y aciertos.

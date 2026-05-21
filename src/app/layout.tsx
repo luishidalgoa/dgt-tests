@@ -3,6 +3,7 @@ import Link from "next/link"
 import { Inter, JetBrains_Mono } from "next/font/google"
 import { getCurrentUser } from "@/lib/auth"
 import { getQuotaStatus } from "@/lib/aiQuota"
+import { planLabel } from "@/lib/permissions"
 import { Navbar } from "@/components/Navbar"
 import "./globals.css"
 
@@ -34,6 +35,7 @@ export default async function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   const user = await getCurrentUser()
   const quota = user ? await getQuotaStatus(user.id) : null
+  const plan  = planLabel(user) ?? undefined
 
   return (
     <html
@@ -48,6 +50,7 @@ export default async function RootLayout({
           }
           aiTokensRemaining={quota?.remaining}
           aiTokensMax={quota?.max}
+          plan={plan}
         />
         <main className="flex-1 mx-auto w-full max-w-[1200px] px-6 py-7">
           {children}

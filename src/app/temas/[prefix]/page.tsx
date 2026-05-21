@@ -4,6 +4,8 @@ import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
 import { getTemaName } from "@/lib/temas"
 import { ExamRunner } from "@/components/ExamRunner"
+import { getEffectiveTokenQuota, hasFullAccess } from "@/lib/permissions"
+import { getQuotaStatus } from "@/lib/aiQuota"
 import { Badge } from "@/components/ui/badge"
 import { ChevronLeft, BookMarked, Sparkles } from "lucide-react"
 import type { TestRunnerData } from "@/types/exam"
@@ -18,6 +20,8 @@ interface PageProps {
 export default async function TemaPage({ params, searchParams }: PageProps) {
   const user = await getCurrentUser()
   if (!user) redirect("/")
+  // /temas y /test-errores son features PRO. Free users → /upgrade.
+  if (!hasFullAccess(user)) redirect("/upgrade")
   const { prefix: rawPrefix } = await params
   const sp = await searchParams
   const prefix = decodeURIComponent(rawPrefix)
@@ -186,7 +190,8 @@ export default async function TemaPage({ params, searchParams }: PageProps) {
       <ExamRunner
         data={data}
         mode="errores"
-        aiQuota={Number(process.env.AI_QUESTIONS_PER_EXAM ?? 5)}
+        aiQuota={getEffectiveTokenQuota(user)}
+        aiQuotaRemaining={(await getQuotaStatus(user.id)).remaining}
       />
     </div>
   )

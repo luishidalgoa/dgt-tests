@@ -11,16 +11,34 @@ datasource db {
 }
 
 // ── Usuario ──────────────────────────────────────────────────────────────
+// Roles: USER (free), SUBSCRIBER (suscripción activa), ADMIN (acceso total sin pagar).
+// El rol SUBSCRIBER se gestiona automáticamente desde los webhooks de Stripe;
+// ADMIN se asigna manualmente por script.
+enum UserRole {
+  USER
+  SUBSCRIBER
+  ADMIN
+}
+
 model User {
   id              Int           @id @default(autoincrement())
   username        String        @unique
   passwordHash    String
   displayName     String?
   createdAt       DateTime      @default(now())
-  // Quota mensual de tokens IA (Gemini). aiTokensMonth = "YYYY-MM".
-  // Al cambiar de mes, se resetea a 0.
+  role            UserRole      @default(USER)
+  // ── Quota mensual de tokens IA (Gemini). aiTokensMonth = "YYYY-MM".
+  //    Al cambiar de mes, se resetea a 0.
   aiTokensUsed    Int           @default(0)
   aiTokensMonth   String        @default("")
+  // ── Stripe (gestionado por el webhook, no tocar a mano) ─────────────
+  stripeCustomerId             String?   @unique
+  stripeSubscriptionId         String?   @unique
+  subscriptionStatus           String?   // "active" | "past_due" | "canceled" | "trialing" | "incomplete" | null
+  subscriptionPriceId          String?
+  subscriptionCurrentPeriodEnd DateTime?
+  // ── UX ────────────────────────────────────────────────────────────
+  hasSeenWelcome  Boolean       @default(false)
   attempts        ExamAttempt[]
   hostedParties   Party[]       @relation("HostedParties")
   partyPlays      PartyPlayer[] @relation("PartyParticipations")

@@ -3,15 +3,18 @@
 import { useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { LogOut, Settings, Sparkles } from "lucide-react"
+import { LogOut, Settings, Sparkles, Crown, Shield } from "lucide-react"
+
+type Plan = "FREE" | "PRO" | "ADMIN"
 
 interface HeaderUserProps {
   username:           string
   aiTokensRemaining?: number
   aiTokensMax?:       number
+  plan?:              Plan
 }
 
-export function HeaderUser({ username, aiTokensRemaining, aiTokensMax }: HeaderUserProps) {
+export function HeaderUser({ username, aiTokensRemaining, aiTokensMax, plan }: HeaderUserProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -36,6 +39,7 @@ export function HeaderUser({ username, aiTokensRemaining, aiTokensMax }: HeaderU
       >
         <span className="pic" aria-hidden="true">{initial}</span>
         <span className="name">{username}</span>
+        {plan && <PlanBadge plan={plan} />}
         {hasQuota && (
           <span
             title={`Te quedan ${aiTokensRemaining} de ${aiTokensMax} tokens IA este mes`}
@@ -74,5 +78,58 @@ export function HeaderUser({ username, aiTokensRemaining, aiTokensMax }: HeaderU
         <LogOut className="h-4 w-4" />
       </button>
     </div>
+  )
+}
+
+function PlanBadge({ plan }: { plan: Plan }) {
+  const style: Record<Plan, { bg: string; color: string; border: string; icon: React.ReactNode; label: string; tip: string }> = {
+    ADMIN: {
+      bg: "linear-gradient(135deg, #facc15, #ea580c)",
+      color: "#fff",
+      border: "0",
+      icon: <Shield className="h-3 w-3" />,
+      label: "ADMIN",
+      tip: "Acceso total · sin facturación",
+    },
+    PRO: {
+      bg: "linear-gradient(135deg, rgb(168, 85, 247), rgb(236, 72, 153))",
+      color: "#fff",
+      border: "0",
+      icon: <Crown className="h-3 w-3" />,
+      label: "PRO",
+      tip: "Suscripción PRO activa",
+    },
+    FREE: {
+      bg: "var(--slate-100)",
+      color: "var(--slate-500)",
+      border: "1px solid var(--slate-200)",
+      icon: null,
+      label: "FREE",
+      tip: "Plan gratuito — pulsa para mejorar",
+    },
+  }
+  const s = style[plan]
+  return (
+    <span
+      title={s.tip}
+      className="font-mono-tabular"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        padding: "2px 7px",
+        borderRadius: 999,
+        background: s.bg,
+        color: s.color,
+        border: s.border,
+        fontSize: 10,
+        fontWeight: 900,
+        letterSpacing: "0.04em",
+        boxShadow: plan === "PRO" || plan === "ADMIN" ? "0 4px 10px -4px rgba(0,0,0,0.25)" : "none",
+      }}
+    >
+      {s.icon}
+      {s.label}
+    </span>
   )
 }

@@ -1,14 +1,26 @@
 import Link from "next/link"
 import { requireUser } from "@/lib/auth"
-import { ChevronLeft, Settings, Sparkles } from "lucide-react"
+import { ChevronLeft, Settings, Sparkles, Crown, Shield, ArrowRight } from "lucide-react"
 import { SettingsForm } from "@/components/SettingsForm"
+import { BillingPortalButton } from "@/components/BillingPortalButton"
 import { getQuotaStatus } from "@/lib/aiQuota"
+import { hasFullAccess, isAdmin, planLabel } from "@/lib/permissions"
 
 export const dynamic = "force-dynamic"
 
 export default async function SettingsPage() {
   const user = await requireUser()
   const quota = await getQuotaStatus(user.id)
+  const plan = planLabel(user)
+  const admin = isAdmin(user)
+  const full  = hasFullAccess(user)
+  const periodEnd = user.subscriptionCurrentPeriodEnd
+    ? new Date(user.subscriptionCurrentPeriodEnd).toLocaleDateString("es-ES", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
+    : null
 
   const percent = Math.round((quota.used / quota.max) * 100)
   const resetDate = new Date(quota.resetsAt).toLocaleDateString("es-ES", {
@@ -39,6 +51,135 @@ export default async function SettingsPage() {
         initialUsername={user.username}
         initialDisplayName={user.displayName ?? user.username}
       />
+
+      {/* Suscripción / plan */}
+      <div
+        className="card-soft"
+        style={{
+          padding: 24,
+          maxWidth: 520,
+          marginTop: 22,
+          ...(admin
+            ? {
+                background:
+                  "linear-gradient(120deg, rgba(250, 204, 21, 0.10), rgba(234, 88, 12, 0.06))",
+                borderColor: "rgba(234, 88, 12, 0.30)",
+              }
+            : full
+            ? {
+                background:
+                  "linear-gradient(120deg, rgba(168, 85, 247, 0.08), rgba(236, 72, 153, 0.05))",
+                borderColor: "rgba(168, 85, 247, 0.30)",
+              }
+            : {}),
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+          <div
+            className="flex items-center justify-center rounded-xl"
+            style={{
+              width: 42,
+              height: 42,
+              background: admin
+                ? "linear-gradient(135deg, #facc15, #ea580c)"
+                : full
+                ? "linear-gradient(135deg, rgb(168, 85, 247), rgb(236, 72, 153))"
+                : "var(--slate-200)",
+              color: full || admin ? "#fff" : "var(--slate-500)",
+              boxShadow: full || admin
+                ? "0 8px 16px -10px rgba(0,0,0,0.35)"
+                : "none",
+            }}
+          >
+            {admin ? <Shield className="h-5 w-5" /> : <Crown className="h-5 w-5" />}
+          </div>
+          <div style={{ flex: 1 }}>
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>
+              Plan{" "}
+              <span
+                className="font-mono-tabular"
+                style={{
+                  marginLeft: 4,
+                  padding: "2px 8px",
+                  borderRadius: 999,
+                  fontSize: 11,
+                  background: admin
+                    ? "rgba(234, 88, 12, 0.15)"
+                    : full
+                    ? "rgba(168, 85, 247, 0.15)"
+                    : "var(--slate-100)",
+                  color: admin
+                    ? "var(--orange-600)"
+                    : full
+                    ? "rgb(126, 34, 206)"
+                    : "var(--slate-500)",
+                  letterSpacing: "0.05em",
+                }}
+              >
+                {plan}
+              </span>
+            </h2>
+            <p style={{ margin: 0, fontSize: 12.5, color: "var(--slate-500)" }}>
+              {admin
+                ? "Acceso total sin facturación"
+                : full
+                ? "Suscripción activa · acceso total a la plataforma"
+                : "Plan gratuito · acceso limitado"}
+            </p>
+          </div>
+        </div>
+
+        {/* Detalles */}
+        {full && !admin && (
+          <div
+            style={{
+              padding: "10px 12px",
+              borderRadius: 10,
+              background: "rgba(168, 85, 247, 0.06)",
+              border: "1px solid rgba(168, 85, 247, 0.15)",
+              fontSize: 12.5,
+              color: "var(--slate-600)",
+              marginBottom: 14,
+            }}
+          >
+            <div>
+              Estado:{" "}
+              <b style={{ color: user.subscriptionStatus === "active" ? "var(--green-d)" : "var(--amber-d)" }}>
+                {user.subscriptionStatus ?? "—"}
+              </b>
+            </div>
+            {periodEnd && (
+              <div style={{ marginTop: 4 }}>
+                Próxima renovación: <b>{periodEnd}</b>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* CTAs */}
+        {admin ? (
+          <p style={{ margin: 0, fontSize: 12.5, color: "var(--slate-500)", fontStyle: "italic" }}>
+            Tu rol de administrador te da acceso completo. Las suscripciones no aplican a este tipo de cuenta.
+          </p>
+        ) : full ? (
+          <BillingPortalButton />
+        ) : (
+          <Link
+            href="/upgrade"
+            className="btn-primary"
+            style={{
+              width: "100%",
+              justifyContent: "center",
+              background: "linear-gradient(135deg, rgb(168, 85, 247), rgb(236, 72, 153))",
+              boxShadow: "0 10px 22px -10px rgba(168, 85, 247, 0.55)",
+            }}
+          >
+            <Crown className="h-4 w-4" />
+            Mejorar a PRO · 5€/mes
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        )}
+      </div>
 
       {/* Quota IA */}
       <div

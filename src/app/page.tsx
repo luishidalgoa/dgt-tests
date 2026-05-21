@@ -3,6 +3,8 @@ import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
 import { Play, Zap, AlertTriangle, LogIn, UserPlus, Sparkles } from "lucide-react"
 import { ContinueExamPill } from "@/components/ContinueExamPill"
+import { WelcomeModal } from "@/components/WelcomeModal"
+import { isAdmin } from "@/lib/permissions"
 
 export const dynamic = "force-dynamic"
 
@@ -146,6 +148,10 @@ export default async function HomePage() {
 
   return (
     <div className="dash-grid">
+      <WelcomeModal
+        shouldShow={!user.hasSeenWelcome && !isAdmin(user)}
+        username={user.displayName ?? user.username}
+      />
       {/* WELCOME */}
       <section className="dash-welcome">
         <div>

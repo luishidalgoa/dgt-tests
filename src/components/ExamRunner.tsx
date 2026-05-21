@@ -45,8 +45,10 @@ interface ExamRunnerProps {
   timeLimit?: number | null
   /** Si true, corregir en cliente y enviar a /preview-results en vez de POST /api/attempts. */
   isGuest?: boolean
-  /** Máximo de preguntas a la IA por examen. 0 = sin acceso (guests). */
+  /** Máximo mensual de tokens IA (10 free, 50 pro). 0 = sin acceso (guests). */
   aiQuota?: number
+  /** Tokens IA restantes este mes (estado real). Si no se pasa, se usa aiQuota. */
+  aiQuotaRemaining?: number
 }
 
 function formatTime(seconds: number): string {
@@ -55,7 +57,14 @@ function formatTime(seconds: number): string {
   return `${m}:${s}`
 }
 
-export function ExamRunner({ data, mode = "normal", timeLimit = null, isGuest = false, aiQuota = 0 }: ExamRunnerProps) {
+export function ExamRunner({
+  data,
+  mode = "normal",
+  timeLimit = null,
+  isGuest = false,
+  aiQuota = 0,
+  aiQuotaRemaining,
+}: ExamRunnerProps) {
   const router = useRouter()
   const [current, setCurrent] = useState(0)
   const [answers, setAnswers] = useState<Record<number, number | null>>({})
@@ -63,7 +72,7 @@ export function ExamRunner({ data, mode = "normal", timeLimit = null, isGuest = 
   const [error, setError] = useState<string | null>(null)
   const [secondsLeft, setSecondsLeft] = useState<number | null>(timeLimit)
   const [mapOpen, setMapOpen] = useState(false)
-  const [aiRemaining, setAiRemaining] = useState(aiQuota)
+  const [aiRemaining, setAiRemaining] = useState(aiQuotaRemaining ?? aiQuota)
   // Resultados de la IA cacheados por questionId (para no perderlos al navegar)
   const [aiResults, setAiResults] = useState<Record<number, AIResult>>({})
   const submittedRef = useRef(false)

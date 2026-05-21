@@ -8,6 +8,7 @@ interface NavbarProps {
   user: { username: string; displayName: string | null } | null
   aiTokensRemaining?: number
   aiTokensMax?:       number
+  plan?:              "FREE" | "PRO" | "ADMIN"
 }
 
 const LINKS = [
@@ -20,7 +21,7 @@ const LINKS = [
 
 const HIDDEN_ROUTES = ["/login", "/register"]
 
-export function Navbar({ user, aiTokensRemaining, aiTokensMax }: NavbarProps) {
+export function Navbar({ user, aiTokensRemaining, aiTokensMax, plan }: NavbarProps) {
   const pathname = usePathname()
 
   // En pantallas de auth no se muestra el navbar (la pantalla es full-bleed)
@@ -71,6 +72,7 @@ export function Navbar({ user, aiTokensRemaining, aiTokensMax }: NavbarProps) {
               username={user.displayName ?? user.username}
               aiTokensRemaining={aiTokensRemaining}
               aiTokensMax={aiTokensMax}
+              plan={plan}
             />
           ) : (
             <Link href="/login" className="pill-ghost">

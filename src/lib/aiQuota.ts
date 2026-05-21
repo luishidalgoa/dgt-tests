@@ -4,13 +4,13 @@
  * Cada usuario tiene `aiTokensUsed` (cuántos ha gastado) y `aiTokensMonth`
  * (mes correspondiente a ese contador, formato "YYYY-MM"). Al cambiar de
  * mes natural el contador se resetea automáticamente.
+ *
+ * El máximo depende del plan: 10 para usuarios FREE, 50 para SUBSCRIBER
+ * y ADMIN. Ver src/lib/permissions.ts.
  */
 
 import { db } from "@/lib/db"
-
-export const MAX_AI_TOKENS_PER_MONTH = Number(
-  process.env.AI_TOKENS_PER_MONTH ?? 50
-)
+import { getEffectiveTokenQuota } from "@/lib/permissions"
 
 export interface AIQuotaStatus {
   used:        number
@@ -41,16 +41,16 @@ export async function getQuotaStatus(userId: number): Promise<AIQuotaStatus> {
   const monthKey = currentMonthKey()
   const user = await db.user.findUnique({
     where: { id: userId },
-    select: { aiTokensUsed: true, aiTokensMonth: true },
+    select: {
+      aiTokensUsed: true,
+      aiTokensMonth: true,
+      role: true,
+      subscriptionStatus: true,
+    },
   })
+  const max = getEffectiveTokenQuota(user)
   if (!user) {
-    return {
-      used: 0,
-      max: MAX_AI_TOKENS_PER_MONTH,
-      remaining: MAX_AI_TOKENS_PER_MONTH,
-      month: monthKey,
-      resetsAt: nextMonthResetIso(),
-    }
+    return { used: 0, max, remaining: max, month: monthKey, resetsAt: nextMonthResetIso() }
   }
   // Si el mes guardado no coincide, lo reseteamos en disco
   if (user.aiTokensMonth !== monthKey) {
@@ -58,18 +58,12 @@ export async function getQuotaStatus(userId: number): Promise<AIQuotaStatus> {
       where: { id: userId },
       data: { aiTokensUsed: 0, aiTokensMonth: monthKey },
     })
-    return {
-      used: 0,
-      max: MAX_AI_TOKENS_PER_MONTH,
-      remaining: MAX_AI_TOKENS_PER_MONTH,
-      month: monthKey,
-      resetsAt: nextMonthResetIso(),
-    }
+    return { used: 0, max, remaining: max, month: monthKey, resetsAt: nextMonthResetIso() }
   }
   return {
     used:      user.aiTokensUsed,
-    max:       MAX_AI_TOKENS_PER_MONTH,
-    remaining: Math.max(0, MAX_AI_TOKENS_PER_MONTH - user.aiTokensUsed),
+    max,
+    remaining: Math.max(0, max - user.aiTokensUsed),
     month:     monthKey,
     resetsAt:  nextMonthResetIso(),
   }
@@ -86,12 +80,18 @@ export async function consumeToken(userId: number): Promise<AIQuotaStatus | null
   const updated = await db.user.update({
     where: { id: userId },
     data:  { aiTokensUsed: { increment: 1 } },
-    select: { aiTokensUsed: true, aiTokensMonth: true },
+    select: {
+      aiTokensUsed: true,
+      aiTokensMonth: true,
+      role: true,
+      subscriptionStatus: true,
+    },
   })
+  const max = getEffectiveTokenQuota(updated)
   return {
     used:      updated.aiTokensUsed,
-    max:       MAX_AI_TOKENS_PER_MONTH,
-    remaining: Math.max(0, MAX_AI_TOKENS_PER_MONTH - updated.aiTokensUsed),
+    max,
+    remaining: Math.max(0, max - updated.aiTokensUsed),
     month:     updated.aiTokensMonth,
     resetsAt:  nextMonthResetIso(),
   }

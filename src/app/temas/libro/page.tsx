@@ -2,6 +2,7 @@ import Link from "next/link"
 import { redirect } from "next/navigation"
 import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
+import { hasFullAccess } from "@/lib/permissions"
 import { ChevronLeft, BookOpen } from "lucide-react"
 import { ManualSectionLauncher } from "@/components/ManualSectionLauncher"
 import type { ManualSectionData, ManualPage } from "@/lib/manual"
@@ -11,6 +12,7 @@ export const dynamic = "force-dynamic"
 export default async function LibroPage() {
   const user = await getCurrentUser()
   if (!user) redirect("/")
+  if (!hasFullAccess(user)) redirect("/upgrade")
 
   const rows = await db.manualSection.findMany({
     orderBy: [{ temaCode: "asc" }, { subtemaCode: "asc" }],

@@ -4,6 +4,11 @@ import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
 import { ExamRunner } from "@/components/ExamRunner"
 import {
+  canAccessTest,
+  getEffectiveTokenQuota,
+} from "@/lib/permissions"
+import { getQuotaStatus } from "@/lib/aiQuota"
+import {
   ChevronLeft,
   BookOpen,
   Timer,
@@ -20,9 +25,6 @@ const PASS_THRESHOLD = 0.9
 
 const EXAM_DURATION_SECONDS = 30 * 60   // 30 minutos como en la DGT real
 
-const GUEST_CATEGORY_SLUG = "permiso-b"
-const GUEST_TEST_LIMIT = 7
-
 interface PageProps {
   params:       Promise<{ categoria: string; testNum: string }>
   searchParams: Promise<{ mode?: string }>
@@ -36,14 +38,15 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
   const testNumber = parseInt(testNum, 10)
   if (Number.isNaN(testNumber)) notFound()
 
-  // Bloquear modo examen para invitados
+  // Bloquear modo examen para invitados (necesitan al menos cuenta)
   if (examMode && !user) {
     redirect(`/login?redirect=/${categoria}/${testNumber}?mode=examen`)
   }
 
-  // Guests: solo permiso-b y testNumber <= 7
-  if (!user && (categoria !== GUEST_CATEGORY_SLUG || testNumber > GUEST_TEST_LIMIT)) {
-    redirect("/")
+  // Comprobación de acceso por plan
+  if (!canAccessTest(user, categoria, testNumber)) {
+    // Guests → registrar, free users → upgrade
+    redirect(user ? "/upgrade" : "/")
   }
 
   const test = await db.test.findFirst({
@@ -339,7 +342,10 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
         data={data}
         timeLimit={examMode ? EXAM_DURATION_SECONDS : null}
         isGuest={isGuest}
-        aiQuota={!isGuest && !examMode ? Number(process.env.AI_QUESTIONS_PER_EXAM ?? 5) : 0}
+        aiQuota={!isGuest && !examMode ? getEffectiveTokenQuota(user) : 0}
+        aiQuotaRemaining={
+          !isGuest && !examMode && user ? (await getQuotaStatus(user.id)).remaining : 0
+        }
       />
     </div>
   )

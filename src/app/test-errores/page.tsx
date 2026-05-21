@@ -1,8 +1,11 @@
 import Link from "next/link"
+import { redirect } from "next/navigation"
 import { db } from "@/lib/db"
 import { requireUser } from "@/lib/auth"
 import { getPendingErrorQuestionIds } from "@/lib/errors"
 import { ExamRunner } from "@/components/ExamRunner"
+import { hasFullAccess, getEffectiveTokenQuota } from "@/lib/permissions"
+import { getQuotaStatus } from "@/lib/aiQuota"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -20,6 +23,7 @@ interface PageProps {
 
 export default async function TestErroresPage({ searchParams }: PageProps) {
   const user = await requireUser()
+  if (!hasFullAccess(user)) redirect("/upgrade")
   const sp = await searchParams
   const requested = sp.n ? Math.max(1, Math.min(parseInt(sp.n, 10), 100)) : null
 
@@ -166,7 +170,8 @@ export default async function TestErroresPage({ searchParams }: PageProps) {
       <ExamRunner
         data={data}
         mode="errores"
-        aiQuota={Number(process.env.AI_QUESTIONS_PER_EXAM ?? 5)}
+        aiQuota={getEffectiveTokenQuota(user)}
+        aiQuotaRemaining={(await getQuotaStatus(user.id)).remaining}
       />
     </div>
   )
