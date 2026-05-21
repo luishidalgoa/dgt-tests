@@ -3,6 +3,7 @@ import { cookies } from "next/headers"
 import { z } from "zod"
 import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
+import { canJoinPartyWithCategory } from "@/lib/permissions"
 import { MAX_PLAYERS_PER_PARTY, PARTY_COOKIE_PREFIX, newGuestToken } from "@/lib/party"
 
 const schema = z.object({
@@ -17,7 +18,10 @@ export async function POST(
 
   const party = await db.party.findUnique({
     where: { code },
-    include: { players: true },
+    include: {
+      players:  true,
+      category: { select: { slug: true } },
+    },
   })
   if (!party) {
     return NextResponse.json({ error: "Party no encontrada" }, { status: 404 })
@@ -30,6 +34,19 @@ export async function POST(
   }
 
   const user = await getCurrentUser()
+
+  // ── Gating por plan: solo PRO/admin puede unirse a partys con contenido
+  //    no-free (todas excepto permiso-b). Free/guest solo permiso-b. ────
+  if (!canJoinPartyWithCategory(user, party.category?.slug ?? null)) {
+    return NextResponse.json(
+      {
+        error: user
+          ? "Esta party usa contenido PRO. Suscríbete para unirte."
+          : "Esta party usa contenido PRO. Crea cuenta y suscríbete.",
+      },
+      { status: 403 }
+    )
+  }
 
   // ── Caso 1: usuario logueado ──────────────────────────────────────────
   if (user) {

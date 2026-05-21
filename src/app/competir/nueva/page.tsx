@@ -1,13 +1,16 @@
 import Link from "next/link"
+import { redirect } from "next/navigation"
 import { db } from "@/lib/db"
 import { requireUser } from "@/lib/auth"
+import { hasFullAccess } from "@/lib/permissions"
 import { ChevronLeft, Swords } from "lucide-react"
 import { NewPartyForm } from "@/components/NewPartyForm"
 
 export const dynamic = "force-dynamic"
 
 export default async function NuevaPartyPage() {
-  await requireUser()
+  const user = await requireUser()
+  if (!hasFullAccess(user)) redirect("/upgrade")
   const categories = await db.category.findMany({ orderBy: { id: "asc" } })
 
   return (

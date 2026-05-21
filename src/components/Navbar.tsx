@@ -11,12 +11,17 @@ interface NavbarProps {
   plan?:              "FREE" | "PRO" | "ADMIN"
 }
 
-const LINKS = [
+// Links visibles para todos los usuarios logueados
+const LINKS_ALL = [
   { href: "/",             label: "Inicio"     },
-  { href: "/temas",        label: "Por temas"  },
-  { href: "/competir",     label: "Competir"   },
   { href: "/stats",        label: "Stats"      },
   { href: "/historial",    label: "Historial"  },
+] as const
+
+// Links solo para PRO/ADMIN — features de pago
+const LINKS_PRO = [
+  { href: "/temas",        label: "Por temas"  },
+  { href: "/competir",     label: "Competir"   },
 ] as const
 
 const HIDDEN_ROUTES = ["/login", "/register"]
@@ -48,7 +53,7 @@ export function Navbar({ user, aiTokensRemaining, aiTokensMax, plan }: NavbarPro
 
         {user && (
           <div className="links">
-            {LINKS.map((l) => (
+            {LINKS_ALL.map((l) => (
               <Link
                 key={l.href}
                 href={l.href}
@@ -57,12 +62,24 @@ export function Navbar({ user, aiTokensRemaining, aiTokensMax, plan }: NavbarPro
                 {l.label}
               </Link>
             ))}
-            <Link
-              href="/test-errores"
-              className={`danger ${isActive("/test-errores") ? "active" : ""}`}
-            >
-              Test de errores
-            </Link>
+            {/* Links PRO: solo se muestran si tiene acceso completo */}
+            {(plan === "PRO" || plan === "ADMIN") && LINKS_PRO.map((l) => (
+              <Link
+                key={l.href}
+                href={l.href}
+                className={isActive(l.href) ? "active" : ""}
+              >
+                {l.label}
+              </Link>
+            ))}
+            {(plan === "PRO" || plan === "ADMIN") && (
+              <Link
+                href="/test-errores"
+                className={`danger ${isActive("/test-errores") ? "active" : ""}`}
+              >
+                Test de errores
+              </Link>
+            )}
           </div>
         )}
 

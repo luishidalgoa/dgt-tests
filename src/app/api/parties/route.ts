@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { db } from "@/lib/db"
 import { requireUser } from "@/lib/auth"
+import { hasFullAccess } from "@/lib/permissions"
 import {
   generateUniquePartyCode,
   pickRandomQuestionIds,
@@ -13,8 +14,15 @@ const schema = z.object({
 })
 
 export async function POST(req: Request) {
-  // Solo usuarios logueados pueden CREAR una party (los guests solo pueden unirse)
+  // Solo usuarios logueados pueden CREAR una party
   const user = await requireUser()
+  // Crear partys es feature PRO (gating servidor-side, no se confía solo en UI)
+  if (!hasFullAccess(user)) {
+    return NextResponse.json(
+      { error: "Crear partys requiere suscripción PRO" },
+      { status: 403 }
+    )
+  }
 
   const body = await req.json().catch(() => null)
   const parsed = schema.safeParse(body)

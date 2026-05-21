@@ -1,12 +1,16 @@
 import Link from "next/link"
+import { redirect } from "next/navigation"
 import { db } from "@/lib/db"
 import { requireUser } from "@/lib/auth"
+import { hasFullAccess } from "@/lib/permissions"
 import { Swords, ChevronLeft, Plus, Users, Trophy, ArrowRight } from "lucide-react"
 
 export const dynamic = "force-dynamic"
 
 export default async function CompetirPage() {
   const user = await requireUser()
+  // Modo competición es feature PRO. Free → /upgrade
+  if (!hasFullAccess(user)) redirect("/upgrade")
 
   const myRecent = await db.party.findMany({
     where: {
