@@ -12,12 +12,14 @@ interface QuestionDTO {
   enunciado:  string
   imagen:     string | null
   codigoTema: string | null
+  tier?:      "FREE" | "PRO"
   options:    { id: number; letra: string; texto: string }[]
 }
 
 export function PartyRunner({ code }: { code: string }) {
   const router = useRouter()
   const [questions, setQuestions] = useState<QuestionDTO[] | null>(null)
+  const [hostIsFree, setHostIsFree] = useState(false)
   const [current, setCurrent]     = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const [finished, setFinished]   = useState(false)
@@ -33,6 +35,7 @@ export function PartyRunner({ code }: { code: string }) {
       .then((data) => {
         if (alive) {
           setQuestions(data.questions)
+          setHostIsFree(Boolean(data.hostIsFree))
           questionStartRef.current = Date.now()
         }
       })
@@ -174,6 +177,29 @@ export function PartyRunner({ code }: { code: string }) {
             </div>
 
             <div>
+              {hostIsFree && (
+                <div style={{ marginBottom: 10 }}>
+                  <span
+                    title="Esta party la creó un usuario del plan gratuito, por eso solo contiene preguntas del plan free."
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      padding: "3px 9px",
+                      borderRadius: 999,
+                      fontSize: 10.5,
+                      fontWeight: 800,
+                      letterSpacing: "0.06em",
+                      textTransform: "uppercase",
+                      background: "rgba(34, 197, 94, 0.12)",
+                      color: "var(--green-d)",
+                      border: "1px solid rgba(34, 197, 94, 0.30)",
+                    }}
+                  >
+                    Plan gratuito
+                  </span>
+                </div>
+              )}
               <h2 className="text-lg font-semibold leading-snug m-0 mb-4">{q.enunciado}</h2>
               <div className="space-y-2">
                 {q.options.map((opt) => (

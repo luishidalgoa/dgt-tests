@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { getPartyMembership } from "@/lib/party-me"
+import { hasFullAccess } from "@/lib/permissions"
 
 /**
  * Devuelve las preguntas de la party (sin marcar la correcta).
@@ -11,7 +12,12 @@ export async function GET(
   { params }: { params: Promise<{ code: string }> }
 ) {
   const { code } = await params
-  const party = await db.party.findUnique({ where: { code } })
+  const party = await db.party.findUnique({
+    where: { code },
+    include: {
+      host: { select: { role: true, subscriptionStatus: true } },
+    },
+  })
   if (!party) return NextResponse.json({ error: "Party no encontrada" }, { status: 404 })
 
   const me = await getPartyMembership(party.id)
@@ -38,14 +44,19 @@ export async function GET(
     data:  { startedAt: new Date() },
   })
 
+  // ¿El host es FREE? Lo usamos para mostrar un badge informativo en la UI.
+  const hostIsFree = !hasFullAccess(party.host)
+
   return NextResponse.json({
     totalQuestions: party.totalQuestions,
+    hostIsFree,
     questions: questions.map((q) => ({
       id:         q.id,
       externalId: q.externalId,
       enunciado:  q.enunciado,
       imagen:     q.imagen,
       codigoTema: q.codigoTema,
+      tier:       q.tier,
       options:    q.options.map((o) => ({ id: o.id, letra: o.letra, texto: o.texto })),
     })),
   })
