@@ -14,6 +14,7 @@
     "db:push": "prisma db push",
     "turso:init": "tsx --env-file=.env scripts/turso-init.ts",
     "turso:sync": "tsx --env-file=.env scripts/turso-sync.ts",
+    "turso:apply-migration": "tsx --env-file=.env scripts/turso-apply-migration.ts",
     "user:seed": "tsx --env-file=.env scripts/seed-user.ts",
     "user:role": "tsx --env-file=.env scripts/set-role.ts",
     "user:fake-subscribe": "tsx --env-file=.env scripts/fake-subscribe.ts",
