@@ -2,6 +2,7 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { db } from "@/lib/db"
 import { scoreForAnswer } from "@/lib/party"
+import { getPartyMembership } from "@/lib/party-me"
 import {
   Trophy,
   ChevronLeft,
@@ -9,6 +10,8 @@ import {
   Zap,
   Target,
   Swords,
+  BookOpen,
+  ArrowRight,
 } from "lucide-react"
 
 export const dynamic = "force-dynamic"
@@ -40,6 +43,9 @@ export default async function PartyResultsPage({ params }: PageProps) {
   })
   if (!party) notFound()
 
+  // Membresía actual (para destacar al usuario y el botón "revisar mis respuestas")
+  const me = await getPartyMembership(party.id)
+
   const players = party.players.map((p) => {
     const name = p.user ? (p.user.displayName ?? p.user.username) : (p.guestName ?? "Anónimo")
     const score = p.answers.reduce((acc, a) => acc + scoreForAnswer(a.isCorrect, a.timeMs), 0)
@@ -48,7 +54,16 @@ export default async function PartyResultsPage({ params }: PageProps) {
     const avgTime = total > 0
       ? Math.round(p.answers.reduce((acc, a) => acc + a.timeMs, 0) / total / 1000)
       : 0
-    return { id: p.id, name, score, correct, total, avgTime, isHost: p.userId === party.hostUserId }
+    return {
+      id: p.id,
+      name,
+      score,
+      correct,
+      total,
+      avgTime,
+      isHost: p.userId === party.hostUserId,
+      isMe:   me?.id === p.id,
+    }
   }).sort((a, b) => b.score - a.score)
 
   const winner = players[0]
@@ -93,10 +108,33 @@ export default async function PartyResultsPage({ params }: PageProps) {
         </div>
       )}
 
-      {/* Tabla */}
+      {/* Revisar mis respuestas (CTA) */}
+      {me && (
+        <Link
+          href={`/party/${code}/review/${me.id}`}
+          className="btn-amber"
+          style={{ width: "100%", padding: "14px 18px", marginBottom: 16, fontSize: 15 }}
+        >
+          <BookOpen className="h-4 w-4" />
+          Revisar mis respuestas
+        </Link>
+      )}
+
+      {/* Tabla — cada fila es un link a la revisión de ese jugador */}
+      <div className="dash-section-title" style={{ margin: "8px 4px 14px" }}>
+        <h3>Clasificación</h3>
+        <span style={{ fontSize: 12, color: "var(--slate-500)", fontWeight: 600 }}>
+          Pulsa en un jugador para ver sus respuestas
+        </span>
+      </div>
       <div className="card-soft" style={{ padding: 8, marginBottom: 16 }}>
         {players.map((p, i) => (
-          <div key={p.id} className="dash-row-item" style={{ gridTemplateColumns: "32px 1fr auto auto auto" }}>
+          <Link
+            key={p.id}
+            href={`/party/${code}/review/${p.id}`}
+            className="dash-row-item"
+            style={{ gridTemplateColumns: "32px 1fr auto auto auto" }}
+          >
             <span style={{
               width: 28, height: 28, borderRadius: "50%",
               background: PODIUM_COLORS[Math.min(i, 3)],
@@ -106,7 +144,13 @@ export default async function PartyResultsPage({ params }: PageProps) {
               {i + 1}
             </span>
             <div className="dash-row-title">
-              {p.name}{p.isHost && <span style={{ marginLeft: 8, fontSize: 11, color: "var(--orange-600)", fontWeight: 700 }}>HOST</span>}
+              {p.name}
+              {p.isMe && (
+                <span style={{ marginLeft: 8, fontSize: 11, color: "var(--orange-600)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  tú
+                </span>
+              )}
+              {p.isHost && <span style={{ marginLeft: 8, fontSize: 11, color: "var(--amber)", fontWeight: 700 }}>HOST</span>}
               <small>
                 <Target className="h-3 w-3 inline mr-1" />
                 {p.correct}/{p.total}
@@ -115,14 +159,14 @@ export default async function PartyResultsPage({ params }: PageProps) {
               </small>
             </div>
             <div className="hidden md:block" style={{ fontSize: 13, color: "var(--slate-500)" }}>
-              {Math.round((p.correct / p.total) * 100)}%
+              {p.total > 0 ? `${Math.round((p.correct / p.total) * 100)}%` : "—"}
             </div>
             <div className="font-mono-tabular flex items-center gap-1" style={{ fontSize: 18, fontWeight: 800, color: "var(--orange-600)" }}>
               <Zap className="h-4 w-4" />
               {p.score}
             </div>
-            <span />
-          </div>
+            <ArrowRight className="h-4 w-4" style={{ color: "var(--slate-400)" }} />
+          </Link>
         ))}
       </div>
 
