@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { createUser } from "@/lib/auth"
-import { getSession } from "@/lib/session"
+import { getSessionForWrite } from "@/lib/session"
 
 const schema = z.object({
   username:    z.string().min(3).max(40),
@@ -19,8 +19,8 @@ export async function POST(req: Request) {
   try {
     const user = await createUser(parsed.data.username, parsed.data.password, parsed.data.displayName)
 
-    // Auto-login tras registro
-    const session = await getSession()
+    // Auto-login tras registro, con sesión persistente por defecto
+    const session = await getSessionForWrite(true)
     session.userId   = user.id
     session.username = user.username
     await session.save()

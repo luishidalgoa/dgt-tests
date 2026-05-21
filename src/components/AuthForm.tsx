@@ -17,6 +17,7 @@ export function AuthForm({ mode }: AuthFormProps) {
 
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
+  const [remember, setRemember] = useState(true)
   const [error, setError]       = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
@@ -28,10 +29,13 @@ export function AuthForm({ mode }: AuthFormProps) {
 
     startTransition(async () => {
       try {
+        const payload = isLogin
+          ? { username, password, remember }
+          : { username, password }
         const res = await fetch(`/api/auth/${mode}`, {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ username, password }),
+          body:    JSON.stringify(payload),
         })
         if (!res.ok) {
           const body = await res.json().catch(() => ({}))
@@ -94,6 +98,18 @@ export function AuthForm({ mode }: AuthFormProps) {
                 placeholder={isLogin ? "Tu contraseña" : "Mínimo 6 caracteres"}
               />
             </div>
+
+            {isLogin && (
+              <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={remember}
+                  onChange={(e) => setRemember(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                />
+                Recordarme en este dispositivo
+              </label>
+            )}
 
             {error && (
               <div className="rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-700">

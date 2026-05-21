@@ -16,20 +16,35 @@ if (SESSION_SECRET.length < 32) {
   throw new Error("SESSION_SECRET debe tener al menos 32 caracteres")
 }
 
-export const sessionOptions: SessionOptions = {
-  password:   SESSION_SECRET,
-  cookieName: "dgt_tests_session",
-  cookieOptions: {
-    secure:   process.env.NODE_ENV === "production",
-    httpOnly: true,
-    sameSite: "lax",
-    maxAge:   60 * 60 * 24 * 30,    // 30 días
-    path:     "/",
-  },
+/** Opciones de cookie según el flag "recordarme". */
+export function sessionOptionsFor(remember: boolean): SessionOptions {
+  return {
+    password:   SESSION_SECRET,
+    cookieName: "dgt_tests_session",
+    cookieOptions: {
+      secure:   process.env.NODE_ENV === "production",
+      httpOnly: true,
+      sameSite: "lax",
+      path:     "/",
+      // Si remember=false → no maxAge → cookie de sesión (se borra al cerrar el navegador)
+      // Si remember=true  → 60 días persistentes
+      ...(remember ? { maxAge: 60 * 60 * 24 * 60 } : {}),
+    },
+  }
 }
+
+/** Opciones por defecto (para LEER la sesión). Las opciones de cookie no se
+ *  aplican al leer, solo al escribir. Por defecto usamos la versión persistente. */
+export const sessionOptions = sessionOptionsFor(true)
 
 /** Devuelve la sesión actual del usuario para usar en Server Components y API routes */
 export async function getSession() {
   const cookieStore = await cookies()
   return getIronSession<SessionData>(cookieStore, sessionOptions)
+}
+
+/** Para usar al hacer login con un flag "remember" específico. */
+export async function getSessionForWrite(remember: boolean) {
+  const cookieStore = await cookies()
+  return getIronSession<SessionData>(cookieStore, sessionOptionsFor(remember))
 }

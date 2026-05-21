@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { authenticate } from "@/lib/auth"
-import { getSession } from "@/lib/session"
+import { getSessionForWrite } from "@/lib/session"
 
 const schema = z.object({
   username: z.string().min(1),
   password: z.string().min(1),
+  remember: z.boolean().optional(),
 })
 
 export async function POST(req: Request) {
@@ -20,14 +21,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Usuario o contraseña incorrectos" }, { status: 401 })
   }
 
-  const session = await getSession()
+  const remember = parsed.data.remember ?? false
+  const session = await getSessionForWrite(remember)
   session.userId = user.id
   session.username = user.username
   await session.save()
 
   return NextResponse.json({
-    id:       user.id,
-    username: user.username,
+    id:          user.id,
+    username:    user.username,
     displayName: user.displayName,
   })
 }
