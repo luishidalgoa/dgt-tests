@@ -1,10 +1,13 @@
 import Link from "next/link"
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
-import { ChevronLeft, CheckCircle2 } from "lucide-react"
+import { ChevronLeft, CheckCircle2, Lock } from "lucide-react"
 
 export const dynamic = "force-dynamic"
+
+const GUEST_CATEGORY_SLUG = "permiso-b"
+const GUEST_TEST_LIMIT = 7
 
 interface PageProps {
   params: Promise<{ categoria: string }>
@@ -13,6 +16,11 @@ interface PageProps {
 export default async function CategoryPage({ params }: PageProps) {
   const user = await getCurrentUser()
   const { categoria } = await params
+
+  // Invitados: solo permiso-b. Otras categorías → al dashboard guest.
+  if (!user && categoria !== GUEST_CATEGORY_SLUG) {
+    redirect("/")
+  }
 
   const category = await db.category.findUnique({
     where: { slug: categoria },
@@ -73,7 +81,7 @@ export default async function CategoryPage({ params }: PageProps) {
           }}
         >
           <span>
-            Estás en <b>modo invitado</b>. Puedes practicar todos los tests, pero tu progreso no se guarda.
+            Como <b>invitado</b> tienes acceso a los <b>{GUEST_TEST_LIMIT} primeros tests</b>. Tu progreso no se guarda.
           </span>
           <Link href="/register" className="btn-secondary" style={{ fontSize: 13 }}>
             Crear cuenta
@@ -88,6 +96,30 @@ export default async function CategoryPage({ params }: PageProps) {
           const total  = lastAttempt?.total ?? t._count.testQuestions
           const passed = score !== null && score >= Math.ceil(total * passThreshold)
           const failed = score !== null && !passed
+          const lockedForGuest = !user && t.testNumber > GUEST_TEST_LIMIT
+
+          if (lockedForGuest) {
+            return (
+              <Link
+                key={t.id}
+                href="/register"
+                className="tile"
+                style={{
+                  opacity: 0.55,
+                  borderStyle: "dashed",
+                  background: "rgba(148, 163, 184, 0.06)",
+                }}
+                title="Crea una cuenta para desbloquear"
+              >
+                <div className="tile-label" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <Lock className="h-3 w-3" />
+                  Test
+                </div>
+                <div className="tile-num">{t.testNumber}</div>
+                <div className="tile-pending">Crea cuenta</div>
+              </Link>
+            )
+          }
 
           return (
             <Link

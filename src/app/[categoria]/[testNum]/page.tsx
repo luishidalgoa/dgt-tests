@@ -20,6 +20,9 @@ const PASS_THRESHOLD = 0.9
 
 const EXAM_DURATION_SECONDS = 30 * 60   // 30 minutos como en la DGT real
 
+const GUEST_CATEGORY_SLUG = "permiso-b"
+const GUEST_TEST_LIMIT = 7
+
 interface PageProps {
   params:       Promise<{ categoria: string; testNum: string }>
   searchParams: Promise<{ mode?: string }>
@@ -36,6 +39,11 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
   // Bloquear modo examen para invitados
   if (examMode && !user) {
     redirect(`/login?redirect=/${categoria}/${testNumber}?mode=examen`)
+  }
+
+  // Guests: solo permiso-b y testNumber <= 7
+  if (!user && (categoria !== GUEST_CATEGORY_SLUG || testNumber > GUEST_TEST_LIMIT)) {
+    redirect("/")
   }
 
   const test = await db.test.findFirst({
@@ -331,6 +339,7 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
         data={data}
         timeLimit={examMode ? EXAM_DURATION_SECONDS : null}
         isGuest={isGuest}
+        aiQuota={!isGuest && !examMode ? Number(process.env.AI_QUESTIONS_PER_EXAM ?? 5) : 0}
       />
     </div>
   )

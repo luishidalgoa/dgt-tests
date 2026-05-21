@@ -12,8 +12,10 @@ const PROTECTED_PREFIXES = [
   "/test-errores",
   "/settings",
   "/competir",                       // listado + creación de partys requieren login
+  "/temas",                          // /temas y /temas/libro solo logueados
   "/api/attempts",
   "/api/users/",
+  "/api/ai/",                        // chatbot IA solo para logueados
   // Nota: /api/parties/* es público (guests pueden unirse a partys),
   //       el endpoint POST de crear party valida internamente con requireUser
 ]

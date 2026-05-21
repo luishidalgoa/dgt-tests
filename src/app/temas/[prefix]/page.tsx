@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
 import { getTemaName } from "@/lib/temas"
@@ -17,6 +17,7 @@ interface PageProps {
 
 export default async function TemaPage({ params, searchParams }: PageProps) {
   const user = await getCurrentUser()
+  if (!user) redirect("/")
   const { prefix: rawPrefix } = await params
   const sp = await searchParams
   const prefix = decodeURIComponent(rawPrefix)
@@ -129,15 +130,6 @@ export default async function TemaPage({ params, searchParams }: PageProps) {
           <p style={{ fontSize: 12, color: "var(--slate-500)", marginTop: 18, marginBottom: 0 }}>
             Las preguntas se seleccionan en orden aleatorio entre las {totalAvailable} disponibles.
           </p>
-
-          {!user && (
-            <p style={{ fontSize: 12, color: "var(--slate-500)", marginTop: 8, marginBottom: 0, fontStyle: "italic" }}>
-              Modo invitado: tu progreso no se guardará.{" "}
-              <Link href="/register" style={{ color: "var(--orange-600)", fontWeight: 700 }}>
-                Crear cuenta
-              </Link>
-            </p>
-          )}
         </div>
       </div>
     )
@@ -146,8 +138,6 @@ export default async function TemaPage({ params, searchParams }: PageProps) {
   // Generar test aleatorio del tema
   const shuffled = [...allQuestionIds].sort(() => Math.random() - 0.5)
   const selectedIds = shuffled.slice(0, requested).map((q) => q.id)
-
-  const isGuest = !user
 
   const questions = await db.question.findMany({
     where: { id: { in: selectedIds } },
@@ -193,7 +183,11 @@ export default async function TemaPage({ params, searchParams }: PageProps) {
         <Badge variant="secondary" className="font-mono">{prefix}</Badge>
         <span className="text-slate-500">— {getTemaName(prefix)}</span>
       </div>
-      <ExamRunner data={data} mode="errores" isGuest={isGuest} />
+      <ExamRunner
+        data={data}
+        mode="errores"
+        aiQuota={Number(process.env.AI_QUESTIONS_PER_EXAM ?? 5)}
+      />
     </div>
   )
 }

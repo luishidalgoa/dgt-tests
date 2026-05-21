@@ -204,3 +204,19 @@ model PartyAnswer {
   @@index([partyPlayerId])
   @@map("party_answers")
 }
+
+// ── Cache de explicaciones generadas por IA ──────────────────────────────
+// Una entrada por (questionId, withImage). El payload es JSON con la
+// respuesta de Gemini: explicación principal, análisis de las otras
+// opciones y frases clave a subrayar.
+model AICacheEntry {
+  id          Int      @id @default(autoincrement())
+  questionId  Int
+  withImage   Boolean  @default(false)
+  payloadJson String                  // JSON serializado: { main, others, keyPhrases }
+  model       String   @default("gemini-flash-latest")
+  createdAt   DateTime @default(now())
+
+  @@unique([questionId, withImage])
+  @@map("ai_cache_entries")
+}

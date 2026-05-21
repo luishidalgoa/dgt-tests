@@ -163,7 +163,11 @@ export default async function TestErroresPage({ searchParams }: PageProps) {
           modo errores
         </Badge>
       </div>
-      <ExamRunner data={data} mode="errores" />
+      <ExamRunner
+        data={data}
+        mode="errores"
+        aiQuota={Number(process.env.AI_QUESTIONS_PER_EXAM ?? 5)}
+      />
     </div>
   )
 }

@@ -1,13 +1,11 @@
 import { notFound } from "next/navigation"
 import Link from "next/link"
-import Image from "next/image"
 import { db } from "@/lib/db"
 import { requireUser } from "@/lib/auth"
 import { findManualSectionsForCodes } from "@/lib/manual"
-import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { ManualButton } from "@/components/ManualButton"
+import { QuestionImage } from "@/components/QuestionImage"
 import {
   ChevronLeft,
   CheckCircle2,
@@ -16,6 +14,8 @@ import {
   RotateCw,
   BookOpen,
   Lightbulb,
+  Sparkles,
+  MinusCircle,
 } from "lucide-react"
 
 interface PageProps {
@@ -173,130 +173,202 @@ export default async function ResultPage({ params }: PageProps) {
         </h2>
 
         {orderedAnswers.map((a, idx) => {
-          const correctOption = a.question.options.find((o) => o.isCorrect)
           const isCorrect = a.isCorrect
           const isBlank = a.selectedOptionId === null
+          const manualSection = a.question.codigoTema
+            ? manualByCodigo.get(a.question.codigoTema)
+            : undefined
 
           return (
-            <Card
-              key={a.id}
-              className={
-                isCorrect
-                  ? "border-emerald-200"
-                  : isBlank
-                  ? "border-slate-300"
-                  : "border-red-200"
-              }
-            >
-              <CardContent className="p-5">
-                <div className="grid gap-4 md:grid-cols-[200px_1fr]">
-                  {/* Imagen */}
-                  <div>
-                    {a.question.imagen ? (
-                      <div className="relative aspect-square bg-slate-100 rounded overflow-hidden">
-                        <Image
-                          src={`/images/${a.question.imagen}`}
-                          alt={`Pregunta ${idx + 1}`}
-                          fill
-                          className="object-contain"
-                          sizes="200px"
-                        />
-                      </div>
-                    ) : (
-                      <div className="aspect-square bg-slate-50 rounded flex items-center justify-center text-slate-300 text-xs">
-                        sin imagen
-                      </div>
-                    )}
-                    {a.question.codigoTema && (
-                      <div className="text-xs text-slate-500 font-mono mt-2 text-center">
-                        {a.question.codigoTema}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Texto + opciones */}
-                  <div className="space-y-3">
-                    <div className="flex items-start gap-3">
-                      <Badge
-                        variant={isCorrect ? "default" : "destructive"}
-                        className="text-base font-bold"
-                      >
-                        {idx + 1}
-                      </Badge>
-                      {isCorrect ? (
-                        <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-1" />
-                      ) : isBlank ? (
-                        <XCircle className="h-5 w-5 text-slate-400 flex-shrink-0 mt-1" />
-                      ) : (
-                        <XCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-1" />
-                      )}
-                      <h3 className="text-base font-medium leading-snug">
-                        {a.question.enunciado}
-                      </h3>
+            <div key={a.id} className="card-soft" style={{ padding: 20 }}>
+              <div className="grid gap-4 md:grid-cols-[200px_1fr]">
+                {/* Imagen (modal) */}
+                <div>
+                  <QuestionImage
+                    src={a.question.imagen}
+                    alt={`Pregunta ${idx + 1}`}
+                    title={`Pregunta ${idx + 1}${a.question.codigoTema ? ` · ${a.question.codigoTema}` : ""}`}
+                    size={200}
+                  />
+                  {a.question.codigoTema && (
+                    <div
+                      className="text-xs text-center font-mono-tabular"
+                      style={{ color: "var(--slate-500)", marginTop: 8 }}
+                    >
+                      {a.question.codigoTema}
                     </div>
-
-                    {/* Opciones */}
-                    <div className="space-y-1.5">
-                      {a.question.options.map((opt) => {
-                        const isSelectedByUser = a.selectedOptionId === opt.id
-                        const isTheCorrect = opt.isCorrect
-                        let cls = "border-slate-200 bg-white"
-                        if (isTheCorrect) cls = "border-emerald-300 bg-emerald-50"
-                        else if (isSelectedByUser) cls = "border-red-300 bg-red-50"
-                        return (
-                          <div
-                            key={opt.id}
-                            className={`p-2.5 rounded border flex items-center gap-2 text-sm ${cls}`}
-                          >
-                            <span
-                              className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center font-bold text-xs ${
-                                isTheCorrect
-                                  ? "border-emerald-500 bg-emerald-500 text-white"
-                                  : isSelectedByUser
-                                  ? "border-red-500 bg-red-500 text-white"
-                                  : "border-slate-300 text-slate-500"
-                              }`}
-                            >
-                              {opt.letra}
-                            </span>
-                            <span className="flex-1">{opt.texto}</span>
-                            {isTheCorrect && (
-                              <Badge variant="outline" className="text-emerald-700 border-emerald-300 text-xs">
-                                correcta
-                              </Badge>
-                            )}
-                            {isSelectedByUser && !isTheCorrect && (
-                              <Badge variant="outline" className="text-red-700 border-red-300 text-xs">
-                                tu respuesta
-                              </Badge>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-
-                    {/* Acciones: explicación + manual */}
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      {a.question.codigoTema && manualByCodigo.get(a.question.codigoTema) && (
-                        <ManualButton section={manualByCodigo.get(a.question.codigoTema)!} />
-                      )}
-                    </div>
-
-                    {/* Explicación */}
-                    {a.question.explicacion && (
-                      <details className="mt-3">
-                        <summary className="cursor-pointer text-sm font-medium text-slate-700 hover:text-slate-900 select-none">
-                          Ver explicación
-                        </summary>
-                        <div className="mt-2 p-3 rounded bg-slate-50 text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
-                          {a.question.explicacion}
-                        </div>
-                      </details>
-                    )}
-                  </div>
+                  )}
                 </div>
-              </CardContent>
-            </Card>
+
+                {/* Texto + opciones */}
+                <div>
+                  <div className="flex items-start gap-3 mb-3">
+                    <span
+                      className="font-mono-tabular"
+                      style={{
+                        background: isCorrect
+                          ? "linear-gradient(180deg, #22c55e, #16a34a)"
+                          : isBlank
+                          ? "linear-gradient(180deg, var(--slate-400), var(--slate-500))"
+                          : "linear-gradient(180deg, var(--red-500), var(--red-600))",
+                        color: "#fff",
+                        fontWeight: 800,
+                        fontSize: 14,
+                        padding: "4px 10px",
+                        borderRadius: 8,
+                        marginTop: 2,
+                      }}
+                    >
+                      {idx + 1}
+                    </span>
+                    <h3 className="text-base font-semibold leading-snug m-0">
+                      {a.question.enunciado}
+                    </h3>
+                  </div>
+
+                  {/* Opciones */}
+                  <div className="space-y-2">
+                    {a.question.options.map((opt) => {
+                      const isSelectedByUser = a.selectedOptionId === opt.id
+                      const isTheCorrect = opt.isCorrect
+                      const bg = isTheCorrect
+                        ? "rgba(34, 197, 94, 0.10)"
+                        : isSelectedByUser && !isTheCorrect
+                        ? "rgba(239, 68, 68, 0.10)"
+                        : "#fff"
+                      const border = isTheCorrect
+                        ? "2px solid var(--green)"
+                        : isSelectedByUser && !isTheCorrect
+                        ? "2px solid var(--red-500)"
+                        : "2px solid var(--slate-200)"
+                      return (
+                        <div
+                          key={opt.id}
+                          className="flex items-start gap-3"
+                          style={{ padding: 12, borderRadius: 12, border, background: bg }}
+                        >
+                          <span
+                            className="flex-shrink-0 flex items-center justify-center font-bold"
+                            style={{
+                              width: 30,
+                              height: 30,
+                              borderRadius: "50%",
+                              fontSize: 13,
+                              background: isTheCorrect
+                                ? "var(--green)"
+                                : isSelectedByUser && !isTheCorrect
+                                ? "var(--red-500)"
+                                : "var(--slate-100)",
+                              color:
+                                isTheCorrect || (isSelectedByUser && !isTheCorrect)
+                                  ? "#fff"
+                                  : "var(--slate-600)",
+                            }}
+                          >
+                            {opt.letra}
+                          </span>
+                          <span className="leading-snug flex-1 pt-1" style={{ fontSize: 14 }}>
+                            {opt.texto}
+                          </span>
+                          {isTheCorrect && (
+                            <CheckCircle2 className="h-4 w-4 mt-1.5 flex-shrink-0" style={{ color: "var(--green)" }} />
+                          )}
+                          {isSelectedByUser && !isTheCorrect && (
+                            <XCircle className="h-4 w-4 mt-1.5 flex-shrink-0" style={{ color: "var(--red-500)" }} />
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Banner correcto / incorrecto / sin responder (estilo práctica) */}
+                  <div
+                    style={{
+                      marginTop: 14,
+                      borderRadius: 12,
+                      padding: "12px 14px",
+                      background: isCorrect
+                        ? "rgba(34, 197, 94, 0.10)"
+                        : isBlank
+                        ? "rgba(148, 163, 184, 0.12)"
+                        : "rgba(239, 68, 68, 0.10)",
+                      border: `1px solid ${
+                        isCorrect
+                          ? "rgba(34, 197, 94, 0.35)"
+                          : isBlank
+                          ? "rgba(148, 163, 184, 0.35)"
+                          : "rgba(239, 68, 68, 0.35)"
+                      }`,
+                      color: isCorrect
+                        ? "var(--green-d)"
+                        : isBlank
+                        ? "var(--slate-600)"
+                        : "var(--red-600)",
+                      fontWeight: 700,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      fontSize: 14,
+                    }}
+                  >
+                    {isCorrect ? (
+                      <>
+                        <CheckCircle2 className="h-4 w-4" />
+                        ¡Correcto!
+                      </>
+                    ) : isBlank ? (
+                      <>
+                        <MinusCircle className="h-4 w-4" />
+                        No respondiste — la correcta está marcada en verde.
+                      </>
+                    ) : (
+                      <>
+                        <XCircle className="h-4 w-4" />
+                        Incorrecto — la respuesta correcta está marcada en verde.
+                      </>
+                    )}
+                  </div>
+
+                  {/* Manual */}
+                  {manualSection && (
+                    <div style={{ marginTop: 10 }}>
+                      <ManualButton section={manualSection} />
+                    </div>
+                  )}
+
+                  {/* Explicación expandible (estilo práctica) */}
+                  {a.question.explicacion && (
+                    <details
+                      style={{
+                        marginTop: 10,
+                        padding: "10px 14px",
+                        background: "rgba(245, 158, 11, 0.08)",
+                        borderRadius: 10,
+                        border: "1px solid rgba(245, 158, 11, 0.25)",
+                      }}
+                    >
+                      <summary
+                        style={{
+                          cursor: "pointer",
+                          fontWeight: 700,
+                          fontSize: 13,
+                          color: "var(--amber-d)",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                        }}
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                        Ver explicación
+                      </summary>
+                      <p style={{ marginTop: 8, marginBottom: 0, fontSize: 13.5, lineHeight: 1.55 }}>
+                        {a.question.explicacion}
+                      </p>
+                    </details>
+                  )}
+                </div>
+              </div>
+            </div>
           )
         })}
       </div>

@@ -2,7 +2,6 @@
 
 import { useState, useTransition, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import {
@@ -12,6 +11,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { QuestionImage } from "@/components/QuestionImage"
+import { AIExplainPanel, type AIResult } from "@/components/AIExplainPanel"
+import { ExplanationWithHighlights } from "@/components/ExplanationWithHighlights"
 import {
   ArrowLeft,
   ArrowRight,
@@ -21,7 +23,6 @@ import {
   Loader2,
   Timer,
   AlertTriangle,
-  ZoomIn,
   Sparkles,
 } from "lucide-react"
 import type {
@@ -37,6 +38,8 @@ interface ExamRunnerProps {
   timeLimit?: number | null
   /** Si true, corregir en cliente y enviar a /preview-results en vez de POST /api/attempts. */
   isGuest?: boolean
+  /** Máximo de preguntas a la IA por examen. 0 = sin acceso (guests). */
+  aiQuota?: number
 }
 
 function formatTime(seconds: number): string {
@@ -45,7 +48,7 @@ function formatTime(seconds: number): string {
   return `${m}:${s}`
 }
 
-export function ExamRunner({ data, mode = "normal", timeLimit = null, isGuest = false }: ExamRunnerProps) {
+export function ExamRunner({ data, mode = "normal", timeLimit = null, isGuest = false, aiQuota = 0 }: ExamRunnerProps) {
   const router = useRouter()
   const [current, setCurrent] = useState(0)
   const [answers, setAnswers] = useState<Record<number, number | null>>({})
@@ -53,7 +56,9 @@ export function ExamRunner({ data, mode = "normal", timeLimit = null, isGuest = 
   const [error, setError] = useState<string | null>(null)
   const [secondsLeft, setSecondsLeft] = useState<number | null>(timeLimit)
   const [mapOpen, setMapOpen] = useState(false)
-  const [imageOpen, setImageOpen] = useState(false)
+  const [aiRemaining, setAiRemaining] = useState(aiQuota)
+  // Resultados de la IA cacheados por questionId (para no perderlos al navegar)
+  const [aiResults, setAiResults] = useState<Record<number, AIResult>>({})
   const submittedRef = useRef(false)
 
   const { questions, test } = data
@@ -269,74 +274,12 @@ export function ExamRunner({ data, mode = "normal", timeLimit = null, isGuest = 
         <div className="grid gap-6 md:grid-cols-[300px_1fr]">
             {/* Imagen */}
             <div className="space-y-3">
-              {q.imagen ? (
-                <Dialog open={imageOpen} onOpenChange={setImageOpen}>
-                  <DialogTrigger asChild>
-                    <button
-                      type="button"
-                      className="group relative aspect-square rounded-xl overflow-hidden w-full cursor-zoom-in"
-                      style={{ background: "var(--slate-100)", border: 0, padding: 0 }}
-                      aria-label="Ampliar imagen"
-                    >
-                      <Image
-                        src={`/images/${q.imagen}`}
-                        alt={`Pregunta ${current + 1}`}
-                        fill
-                        className="object-contain transition-transform group-hover:scale-[1.02]"
-                        sizes="300px"
-                        priority
-                      />
-                      <span
-                        className="absolute right-2 bottom-2 inline-flex items-center justify-center rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
-                        style={{
-                          width: 32,
-                          height: 32,
-                          background: "rgba(15, 23, 42, 0.78)",
-                          color: "#fff",
-                        }}
-                      >
-                        <ZoomIn className="h-4 w-4" />
-                      </span>
-                    </button>
-                  </DialogTrigger>
-                  <DialogContent
-                    className="!max-w-[min(94vw,1100px)] !w-[min(94vw,1100px)] !p-3 sm:!p-4"
-                    showCloseButton
-                  >
-                    <DialogHeader>
-                      <DialogTitle className="text-sm">
-                        Pregunta {current + 1}{q.codigoTema ? ` · ${q.codigoTema}` : ""}
-                      </DialogTitle>
-                    </DialogHeader>
-                    <div
-                      className="relative w-full"
-                      style={{
-                        // Mantener proporción y limitar a viewport
-                        maxHeight: "calc(90vh - 80px)",
-                        aspectRatio: "1 / 1",
-                        background: "var(--slate-100)",
-                        borderRadius: 12,
-                        overflow: "hidden",
-                      }}
-                    >
-                      <Image
-                        src={`/images/${q.imagen}`}
-                        alt={`Pregunta ${current + 1} (ampliada)`}
-                        fill
-                        className="object-contain"
-                        sizes="(max-width: 1100px) 94vw, 1100px"
-                      />
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              ) : (
-                <div
-                  className="aspect-square rounded-xl flex items-center justify-center text-sm"
-                  style={{ background: "var(--slate-100)", color: "var(--slate-300)" }}
-                >
-                  sin imagen
-                </div>
-              )}
+              <QuestionImage
+                src={q.imagen}
+                alt={`Pregunta ${current + 1}`}
+                title={`Pregunta ${current + 1}${q.codigoTema ? ` · ${q.codigoTema}` : ""}`}
+                size={300}
+              />
               {q.codigoTema && (
                 <div
                   className="text-xs text-center font-mono-tabular"
@@ -507,6 +450,26 @@ export function ExamRunner({ data, mode = "normal", timeLimit = null, isGuest = 
                 </div>
               )}
 
+              {/* IA: solo en práctica, solo logueados y con quota */}
+              {showFeedback && aiQuota > 0 && q.explicacion && (
+                <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  <AIExplainPanel
+                    questionId={q.id}
+                    explicacion={q.explicacion ?? ""}
+                    hasImage={Boolean(q.imagen)}
+                    remaining={aiRemaining}
+                    maxAllowed={aiQuota}
+                    onConsume={(cached) => {
+                      // Las respuestas cacheadas no descuentan quota
+                      if (!cached) setAiRemaining((r) => Math.max(0, r - 1))
+                    }}
+                    onResult={(res) => {
+                      setAiResults((prev) => ({ ...prev, [q.id]: res }))
+                    }}
+                  />
+                </div>
+              )}
+
               {/* Explicación expandible */}
               {showFeedback && q.explicacion && (
                 <details
@@ -517,6 +480,7 @@ export function ExamRunner({ data, mode = "normal", timeLimit = null, isGuest = 
                     borderRadius: 10,
                     border: "1px solid rgba(245, 158, 11, 0.25)",
                   }}
+                  open={Boolean(aiResults[q.id])}
                 >
                   <summary
                     style={{
@@ -532,9 +496,18 @@ export function ExamRunner({ data, mode = "normal", timeLimit = null, isGuest = 
                     <Sparkles className="h-3.5 w-3.5" />
                     Ver explicación
                   </summary>
-                  <p style={{ marginTop: 8, marginBottom: 0, fontSize: 13.5, lineHeight: 1.55 }}>
-                    {q.explicacion}
-                  </p>
+                  {aiResults[q.id] ? (
+                    <div style={{ marginTop: 8 }}>
+                      <ExplanationWithHighlights
+                        text={q.explicacion ?? ""}
+                        highlights={aiResults[q.id].keyPhrases}
+                      />
+                    </div>
+                  ) : (
+                    <p style={{ marginTop: 8, marginBottom: 0, fontSize: 13.5, lineHeight: 1.55 }}>
+                      {q.explicacion}
+                    </p>
+                  )}
                 </details>
               )}
             </div>

@@ -1,13 +1,17 @@
 import Link from "next/link"
+import { redirect } from "next/navigation"
 import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
 import { getTemaName } from "@/lib/temas"
-import { ChevronLeft, BookMarked, ArrowRight } from "lucide-react"
+import { ChevronLeft, BookMarked, ArrowRight, BookOpen } from "lucide-react"
 
 export const dynamic = "force-dynamic"
 
 export default async function TemasPage() {
   const user = await getCurrentUser()
+
+  // /temas no está disponible en modo invitado
+  if (!user) redirect("/")
 
   // Para invitados: solo conteo de preguntas por tema (sin stats personales).
   // Para usuarios logueados: además, contar respuestas y aciertos.
@@ -81,29 +85,45 @@ export default async function TemasPage() {
         </div>
       </header>
 
-      {!user && (
+      {/* CTA: ver libro completo */}
+      <Link
+        href="/temas/libro"
+        className="card-soft warm"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          padding: 22,
+          marginBottom: 20,
+          textDecoration: "none",
+          color: "inherit",
+          background:
+            "linear-gradient(120deg, rgba(249, 115, 22, 0.10) 0%, #fff 65%)",
+          borderColor: "rgba(249, 115, 22, 0.35)",
+        }}
+      >
         <div
-          className="card-soft"
+          className="flex-shrink-0 flex items-center justify-center rounded-2xl"
           style={{
-            padding: "12px 16px",
-            marginBottom: 16,
-            fontSize: 13.5,
-            color: "var(--slate-600)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            flexWrap: "wrap",
+            width: 56,
+            height: 56,
+            background: "linear-gradient(135deg, var(--orange-500), var(--red-600))",
+            color: "#fff",
+            boxShadow: "0 10px 22px -10px rgba(220, 38, 38, 0.55)",
           }}
         >
-          <span>
-            Estás en <b>modo invitado</b>. Puedes practicar por tema, pero los aciertos no se guardarán.
-          </span>
-          <Link href="/register" className="btn-secondary" style={{ fontSize: 13 }}>
-            Crear cuenta
-          </Link>
+          <BookOpen className="h-7 w-7" />
         </div>
-      )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <h2 style={{ margin: 0, fontSize: 19, fontWeight: 800 }}>
+            Ver libro completo
+          </h2>
+          <p style={{ margin: "4px 0 0", fontSize: 13.5, color: "var(--slate-600)" }}>
+            Lee todas las secciones del manual del temario en flipbook, ordenadas por tema.
+          </p>
+        </div>
+        <ArrowRight className="h-5 w-5" style={{ color: "var(--orange-600)", flexShrink: 0 }} />
+      </Link>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {temas.map((t) => {
