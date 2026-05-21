@@ -79,7 +79,7 @@ export default async function HomePage() {
     doneByCategory.set(c.id, c._count.tests > 0 ? Math.round((done / c._count.tests) * 100) : 0)
   }
 
-  // Racha: días con al menos 1 attempt finalizado en los últimos 7 días
+  // Actividad: nº exámenes por día (últimos 7) + media diaria
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
   const weekAttempts = await db.examAttempt.findMany({
     where: { userId: user.id, finishedAt: { not: null }, startedAt: { gte: sevenDaysAgo } },
@@ -87,20 +87,30 @@ export default async function HomePage() {
   })
   const todayMid = new Date()
   todayMid.setHours(0, 0, 0, 0)
-  const last5: { letter: string; active: boolean }[] = []
   const DAY_LETTERS = ["D", "L", "M", "X", "J", "V", "S"]
-  for (let i = 4; i >= 0; i--) {
+  // 7 días: índice 0 = hace 6 días, 6 = hoy
+  const last7: { letter: string; count: number; isToday: boolean }[] = []
+  for (let i = 6; i >= 0; i--) {
     const day = new Date(todayMid.getTime() - i * 86400000)
     const next = new Date(day.getTime() + 86400000)
-    const active = weekAttempts.some(
+    const count = weekAttempts.filter(
       (a) => a.startedAt >= day && a.startedAt < next
-    )
-    last5.push({ letter: DAY_LETTERS[day.getDay()], active })
+    ).length
+    last7.push({
+      letter: DAY_LETTERS[day.getDay()],
+      count,
+      isToday: i === 0,
+    })
   }
-  const streakDays = last5.reduce(
-    (acc, d) => (d.active ? acc + 1 : 0),
-    0
-  )
+  const weekTotal = last7.reduce((acc, d) => acc + d.count, 0)
+  const dailyAvg = weekTotal / 7
+  // Racha de días consecutivos hasta hoy con al menos 1 examen
+  let streakDays = 0
+  for (let i = last7.length - 1; i >= 0; i--) {
+    if (last7[i].count > 0) streakDays++
+    else break
+  }
+  const maxDay = Math.max(1, ...last7.map((d) => d.count))
 
   // Errores pendientes
   const pendingErrors = await db.$queryRaw<{ count: bigint }[]>`
@@ -173,32 +183,88 @@ export default async function HomePage() {
         </Link>
       </section>
 
-      {/* STREAK */}
+      {/* ACTIVIDAD SEMANAL */}
       <section className="dash-streak">
         <div className="dash-streak-head">
-          <h3>Racha actual</h3>
+          <h3>Actividad esta semana</h3>
           <span className="fire" aria-hidden="true">🔥</span>
         </div>
         <h2>
-          <b>{streakDays}</b> {streakDays === 1 ? "día" : "días"} seguidos
+          <b>{dailyAvg.toFixed(1)}</b> {dailyAvg === 1 ? "test/día" : "tests/día"}
         </h2>
         <p className="sub">
-          {streakDays === 0
-            ? "¡Empieza una nueva racha hoy!"
-            : streakDays >= 4
-            ? "Esta semana — ¡vas a por la quinta!"
-            : "Esta semana, sigue así"}
+          {weekTotal === 0
+            ? "Aún no has hecho ningún test esta semana"
+            : `${weekTotal} en los últimos 7 días${streakDays > 1 ? ` · racha de ${streakDays} días` : ""}`}
         </p>
-        <div className="dash-days" aria-label="Días de la semana">
-          {last5.map((d, i) => (
-            <div key={i} className={`dash-day ${d.active ? "" : "empty"}`}>
-              {d.letter}
-            </div>
-          ))}
+        <div
+          className="dash-days"
+          aria-label="Tests por día (últimos 7)"
+          style={{ alignItems: "flex-end", gap: 6 }}
+        >
+          {last7.map((d, i) => {
+            const isEmpty = d.count === 0
+            const heightPct = Math.max(14, (d.count / maxDay) * 100)
+            return (
+              <div
+                key={i}
+                className={`dash-day ${isEmpty ? "empty" : ""}`}
+                style={{
+                  flexDirection: "column",
+                  aspectRatio: "auto",
+                  height: "auto",
+                  alignSelf: "stretch",
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  paddingTop: 6,
+                  paddingBottom: 6,
+                  position: "relative",
+                  outline: d.isToday ? "2px solid var(--orange-600)" : "none",
+                  outlineOffset: 1,
+                }}
+                title={`${d.letter}: ${d.count} test${d.count === 1 ? "" : "s"}`}
+              >
+                <div
+                  style={{
+                    fontSize: 16,
+                    fontWeight: 900,
+                    lineHeight: 1,
+                    marginBottom: 4,
+                  }}
+                >
+                  {d.count}
+                </div>
+                <div
+                  style={{
+                    width: "60%",
+                    background: isEmpty ? "transparent" : "rgba(255,255,255,0.7)",
+                    height: `${heightPct}%`,
+                    maxHeight: 60,
+                    borderRadius: 4,
+                    marginInline: "auto",
+                  }}
+                />
+                <div
+                  style={{
+                    fontSize: 10.5,
+                    fontWeight: 800,
+                    marginTop: 4,
+                    opacity: 0.8,
+                  }}
+                >
+                  {d.letter}
+                </div>
+              </div>
+            )
+          })}
         </div>
         <div className="dash-motivate">
           <Zap className="h-4 w-4" />
-          {streakDays === 0 ? "Empieza hoy" : "¡No la rompas hoy!"}
+          {weekTotal === 0
+            ? "Empieza hoy"
+            : dailyAvg >= 3
+            ? "Buen ritmo — sigue así"
+            : "Sube la media: 3 tests/día"}
         </div>
       </section>
 

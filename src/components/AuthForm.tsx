@@ -135,6 +135,18 @@ export function AuthForm({ mode }: AuthFormProps) {
           <Link href={isLogin ? "/register" : "/login"} className="auth-signup">
             {isLogin ? "Crea tu cuenta gratis →" : "Inicia sesión →"}
           </Link>
+
+          {isLogin && (
+            <Link
+              href="/"
+              className="auth-guest"
+              aria-label="Continuar sin cuenta"
+            >
+              <span aria-hidden="true">👤</span>
+              Entrar como invitado
+              <small>Sin guardar progreso</small>
+            </Link>
+          )}
         </form>
       </section>
 

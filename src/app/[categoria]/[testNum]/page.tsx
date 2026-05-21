@@ -261,12 +261,14 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
   }
 
   // Construir payload para el ExamRunner
-  // Para invitados, pre-cargar las soluciones (correctOptionId) y explicaciones
-  // ya que no hay POST al servidor — todo se corrige en cliente.
+  // Para invitados, las soluciones son necesarias porque no hay POST al servidor.
+  // Para usuarios logueados en modo práctica (no examen), las enviamos también
+  // para poder mostrar feedback inline al responder.
   const isGuest = !user
+  const sendSolutions = isGuest || !examMode
 
-  // Cargar opciones con isCorrect cuando es invitado
-  const questionsWithSolutions = isGuest
+  // Cargar opciones con isCorrect y la explicación cuando hace falta
+  const questionsWithSolutions = sendSolutions
     ? await db.question.findMany({
         where: { id: { in: test.testQuestions.map((tq) => tq.question.id) } },
         select: {
@@ -311,9 +313,8 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
         letra: o.letra,
         texto: o.texto,
       })),
-      // Solo se envía al cliente cuando es invitado
-      correctOptionId: isGuest ? solutionsMap.get(tq.question.id)?.correctOptionId ?? null : undefined,
-      explicacion:     isGuest ? solutionsMap.get(tq.question.id)?.explicacion ?? null : undefined,
+      correctOptionId: sendSolutions ? solutionsMap.get(tq.question.id)?.correctOptionId ?? null : undefined,
+      explicacion:     sendSolutions ? solutionsMap.get(tq.question.id)?.explicacion ?? null : undefined,
     })),
   }
 

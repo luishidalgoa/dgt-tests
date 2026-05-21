@@ -175,9 +175,9 @@ export default async function TemaPage({ params, searchParams }: PageProps) {
       imagen:     q.imagen,
       codigoTema: q.codigoTema,
       options:    q.options.map((o) => ({ id: o.id, letra: o.letra, texto: o.texto })),
-      // Para invitados, incluir solución para corrección en cliente
-      correctOptionId: isGuest ? q.options.find((o) => o.isCorrect)?.id ?? null : undefined,
-      explicacion:     isGuest ? q.explicacion ?? null : undefined,
+      // Práctica por tema: siempre enviamos solución para feedback inline
+      correctOptionId: q.options.find((o) => o.isCorrect)?.id ?? null,
+      explicacion:     q.explicacion ?? null,
     })),
   }
 

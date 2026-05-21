@@ -144,6 +144,9 @@ export default async function TestErroresPage({ searchParams }: PageProps) {
       imagen:     q.imagen,
       codigoTema: q.codigoTema,
       options:    q.options.map((o) => ({ id: o.id, letra: o.letra, texto: o.texto })),
+      // Modo errores: feedback inline al responder
+      correctOptionId: q.options.find((o) => o.isCorrect)?.id ?? null,
+      explicacion:     q.explicacion ?? null,
     })),
   }
 

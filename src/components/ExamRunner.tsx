@@ -4,9 +4,7 @@ import { useState, useTransition, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { Badge } from "@/components/ui/badge"
 import {
   Dialog,
   DialogContent,
@@ -23,6 +21,8 @@ import {
   Loader2,
   Timer,
   AlertTriangle,
+  ZoomIn,
+  Sparkles,
 } from "lucide-react"
 import type {
   TestRunnerData,
@@ -53,6 +53,7 @@ export function ExamRunner({ data, mode = "normal", timeLimit = null, isGuest = 
   const [error, setError] = useState<string | null>(null)
   const [secondsLeft, setSecondsLeft] = useState<number | null>(timeLimit)
   const [mapOpen, setMapOpen] = useState(false)
+  const [imageOpen, setImageOpen] = useState(false)
   const submittedRef = useRef(false)
 
   const { questions, test } = data
@@ -60,6 +61,15 @@ export function ExamRunner({ data, mode = "normal", timeLimit = null, isGuest = 
   const q = questions[current]
   const selected = answers[q.id] ?? null
   const answered = Object.values(answers).filter((v) => v !== null).length
+
+  // Feedback en modo práctica: cuando llega correctOptionId del server y NO hay temporizador
+  const showFeedback =
+    timeLimit === null &&
+    q.correctOptionId !== undefined &&
+    selected !== null
+
+  const selectedIsCorrect =
+    showFeedback && selected !== null && selected === q.correctOptionId
 
   // ── Submit ──────────────────────────────────────────────────────────────
   const handleFinish = useCallback(() => {
@@ -260,16 +270,65 @@ export function ExamRunner({ data, mode = "normal", timeLimit = null, isGuest = 
             {/* Imagen */}
             <div className="space-y-3">
               {q.imagen ? (
-                <div className="relative aspect-square rounded-xl overflow-hidden" style={{ background: "var(--slate-100)" }}>
-                  <Image
-                    src={`/images/${q.imagen}`}
-                    alt={`Pregunta ${current + 1}`}
-                    fill
-                    className="object-contain"
-                    sizes="300px"
-                    priority
-                  />
-                </div>
+                <Dialog open={imageOpen} onOpenChange={setImageOpen}>
+                  <DialogTrigger asChild>
+                    <button
+                      type="button"
+                      className="group relative aspect-square rounded-xl overflow-hidden w-full cursor-zoom-in"
+                      style={{ background: "var(--slate-100)", border: 0, padding: 0 }}
+                      aria-label="Ampliar imagen"
+                    >
+                      <Image
+                        src={`/images/${q.imagen}`}
+                        alt={`Pregunta ${current + 1}`}
+                        fill
+                        className="object-contain transition-transform group-hover:scale-[1.02]"
+                        sizes="300px"
+                        priority
+                      />
+                      <span
+                        className="absolute right-2 bottom-2 inline-flex items-center justify-center rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
+                        style={{
+                          width: 32,
+                          height: 32,
+                          background: "rgba(15, 23, 42, 0.78)",
+                          color: "#fff",
+                        }}
+                      >
+                        <ZoomIn className="h-4 w-4" />
+                      </span>
+                    </button>
+                  </DialogTrigger>
+                  <DialogContent
+                    className="!max-w-[min(94vw,1100px)] !w-[min(94vw,1100px)] !p-3 sm:!p-4"
+                    showCloseButton
+                  >
+                    <DialogHeader>
+                      <DialogTitle className="text-sm">
+                        Pregunta {current + 1}{q.codigoTema ? ` · ${q.codigoTema}` : ""}
+                      </DialogTitle>
+                    </DialogHeader>
+                    <div
+                      className="relative w-full"
+                      style={{
+                        // Mantener proporción y limitar a viewport
+                        maxHeight: "calc(90vh - 80px)",
+                        aspectRatio: "1 / 1",
+                        background: "var(--slate-100)",
+                        borderRadius: 12,
+                        overflow: "hidden",
+                      }}
+                    >
+                      <Image
+                        src={`/images/${q.imagen}`}
+                        alt={`Pregunta ${current + 1} (ampliada)`}
+                        fill
+                        className="object-contain"
+                        sizes="(max-width: 1100px) 94vw, 1100px"
+                      />
+                    </div>
+                  </DialogContent>
+                </Dialog>
               ) : (
                 <div
                   className="aspect-square rounded-xl flex items-center justify-center text-sm"
@@ -312,6 +371,56 @@ export function ExamRunner({ data, mode = "normal", timeLimit = null, isGuest = 
                 {q.options.map((opt, i) => {
                   const isSelected = selected === opt.id
                   const hint = String.fromCharCode(65 + i) // A, B, C, D
+
+                  // ── Estilos en función de si hay feedback de práctica ──
+                  let borderColor: string = isSelected ? "var(--orange-500)" : "var(--slate-200)"
+                  let background: string = isSelected ? "rgba(249, 115, 22, 0.08)" : "#fff"
+                  let bubbleBg: string = isSelected
+                    ? "linear-gradient(180deg, var(--orange-500), var(--red-600))"
+                    : "transparent"
+                  let bubbleColor: string = isSelected ? "#fff" : "var(--slate-600)"
+                  let bubbleBorder: string = isSelected ? "0" : "2px solid var(--slate-300)"
+                  let bubbleShadow: string = isSelected
+                    ? "0 6px 12px -4px rgba(220, 38, 38, 0.45)"
+                    : "none"
+                  let boxShadow: string = isSelected
+                    ? "0 8px 18px -10px rgba(249, 115, 22, 0.4)"
+                    : "none"
+                  let trailingIcon: React.ReactNode = null
+
+                  if (showFeedback) {
+                    const isCorrect = opt.id === q.correctOptionId
+                    if (isCorrect) {
+                      borderColor = "var(--green)"
+                      background  = "rgba(34, 197, 94, 0.10)"
+                      bubbleBg    = "var(--green)"
+                      bubbleColor = "#fff"
+                      bubbleBorder = "0"
+                      bubbleShadow = "0 6px 12px -4px rgba(34, 197, 94, 0.45)"
+                      boxShadow   = "0 8px 18px -10px rgba(34, 197, 94, 0.4)"
+                      trailingIcon = <CheckCircle2 className="h-5 w-5 flex-shrink-0 mt-1" style={{ color: "var(--green)" }} />
+                    } else if (isSelected) {
+                      // seleccionada y NO correcta
+                      borderColor = "var(--red-500)"
+                      background  = "rgba(239, 68, 68, 0.10)"
+                      bubbleBg    = "var(--red-500)"
+                      bubbleColor = "#fff"
+                      bubbleBorder = "0"
+                      bubbleShadow = "0 6px 12px -4px rgba(239, 68, 68, 0.45)"
+                      boxShadow   = "0 8px 18px -10px rgba(239, 68, 68, 0.4)"
+                      trailingIcon = <XCircle className="h-5 w-5 flex-shrink-0 mt-1" style={{ color: "var(--red-500)" }} />
+                    } else {
+                      // Resto: atenuar
+                      borderColor = "var(--slate-200)"
+                      background  = "#fff"
+                      bubbleBg    = "transparent"
+                      bubbleColor = "var(--slate-400)"
+                      bubbleBorder = "2px solid var(--slate-200)"
+                      bubbleShadow = "none"
+                      boxShadow   = "none"
+                    }
+                  }
+
                   return (
                     <button
                       key={opt.id}
@@ -321,9 +430,9 @@ export function ExamRunner({ data, mode = "normal", timeLimit = null, isGuest = 
                       style={{
                         padding: 14,
                         borderRadius: 14,
-                        border: `2px solid ${isSelected ? "var(--orange-500)" : "var(--slate-200)"}`,
-                        background: isSelected ? "rgba(249, 115, 22, 0.08)" : "#fff",
-                        boxShadow: isSelected ? "0 8px 18px -10px rgba(249, 115, 22, 0.4)" : "none",
+                        border: `2px solid ${borderColor}`,
+                        background,
+                        boxShadow,
                       }}
                     >
                       <span
@@ -333,12 +442,10 @@ export function ExamRunner({ data, mode = "normal", timeLimit = null, isGuest = 
                           height: 36,
                           borderRadius: "50%",
                           fontSize: 14,
-                          background: isSelected
-                            ? "linear-gradient(180deg, var(--orange-500), var(--red-600))"
-                            : "transparent",
-                          color: isSelected ? "#fff" : "var(--slate-600)",
-                          border: isSelected ? "0" : "2px solid var(--slate-300)",
-                          boxShadow: isSelected ? "0 6px 12px -4px rgba(220, 38, 38, 0.45)" : "none",
+                          background: bubbleBg,
+                          color: bubbleColor,
+                          border: bubbleBorder,
+                          boxShadow: bubbleShadow,
                         }}
                       >
                         {opt.letra}
@@ -346,6 +453,7 @@ export function ExamRunner({ data, mode = "normal", timeLimit = null, isGuest = 
                       <span className="leading-snug pt-1.5 flex-1" style={{ fontSize: 15 }}>
                         {opt.texto}
                       </span>
+                      {trailingIcon}
                       <kbd
                         className="hidden md:inline-block flex-shrink-0 mt-1"
                         style={{
@@ -363,6 +471,72 @@ export function ExamRunner({ data, mode = "normal", timeLimit = null, isGuest = 
                   )
                 })}
               </div>
+
+              {/* Banner de feedback en modo práctica */}
+              {showFeedback && (
+                <div
+                  style={{
+                    marginTop: 14,
+                    borderRadius: 12,
+                    padding: "12px 14px",
+                    background: selectedIsCorrect
+                      ? "rgba(34, 197, 94, 0.10)"
+                      : "rgba(239, 68, 68, 0.10)",
+                    border: `1px solid ${
+                      selectedIsCorrect ? "rgba(34, 197, 94, 0.35)" : "rgba(239, 68, 68, 0.35)"
+                    }`,
+                    color: selectedIsCorrect ? "var(--green-d)" : "var(--red-600)",
+                    fontWeight: 700,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    fontSize: 14,
+                  }}
+                >
+                  {selectedIsCorrect ? (
+                    <>
+                      <CheckCircle2 className="h-4 w-4" />
+                      ¡Correcto!
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="h-4 w-4" />
+                      Incorrecto — la respuesta correcta está marcada en verde.
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Explicación expandible */}
+              {showFeedback && q.explicacion && (
+                <details
+                  style={{
+                    marginTop: 8,
+                    padding: "10px 14px",
+                    background: "rgba(245, 158, 11, 0.08)",
+                    borderRadius: 10,
+                    border: "1px solid rgba(245, 158, 11, 0.25)",
+                  }}
+                >
+                  <summary
+                    style={{
+                      cursor: "pointer",
+                      fontWeight: 700,
+                      fontSize: 13,
+                      color: "var(--amber-d)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Ver explicación
+                  </summary>
+                  <p style={{ marginTop: 8, marginBottom: 0, fontSize: 13.5, lineHeight: 1.55 }}>
+                    {q.explicacion}
+                  </p>
+                </details>
+              )}
             </div>
           </div>
       </div>
