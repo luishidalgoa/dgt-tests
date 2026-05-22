@@ -5,13 +5,20 @@
  * y Stripe en vez de hits reales. El route.ts es solo un wrapper que
  * pasa el cliente real.
  *
- * Política Fase 88:
- *   - Refund TOTAL (amount_refunded === amount): revocar acceso. Cancelamos
- *     la sub en Stripe (immediate) y bajamos role a USER. El user pierde
- *     PRO al instante.
- *   - Refund PARCIAL: solo log. No es una anulación, es un ajuste.
- *   - User no es SUBSCRIBER (USER o ADMIN): no se toca el role. ADMIN
- *     nunca pierde acceso por un refund.
+ * ⚠ POLÍTICA de negocio (ver return-policy en la app):
+ *   El servicio NO ofrece reembolso voluntario de suscripción. La única
+ *   razón legítima para que llegue un charge.refunded es un COBRO ERRÓNEO
+ *   tramitado por el administrador desde el Stripe Dashboard.
+ *   Por tanto:
+ *     - Refund TOTAL → el cobro no debería haber existido → revocamos
+ *       acceso al instante (cancel sub immediate + role=USER).
+ *     - Refund PARCIAL → ajuste / prorrateo. No anulación. Solo log.
+ *     - User es ADMIN → intocable (los admins no se ven afectados por
+ *       cambios de billing).
+ *
+ * Si en el futuro se ofrecen reembolsos sin perder acceso (caso raro),
+ * habría que añadir lógica adicional aquí — pero por defecto: refund
+ * total = revocación.
  */
 
 import type Stripe from "stripe"
