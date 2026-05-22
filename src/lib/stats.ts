@@ -3,9 +3,10 @@
  * estadísticas (% aciertos, racha, totales) y qué no.
  *
  * Reglas vigentes:
- *   - mode="normal":  test oficial del temario          → CUENTA
- *   - mode="tema":    práctica desde /temas/X[/Y]       → CUENTA
- *   - mode="errores": práctica desde /test-errores      → NO CUENTA
+ *   - mode="normal":            test oficial del temario      → CUENTA
+ *   - mode="tema":              práctica desde /temas/X[/Y]   → CUENTA
+ *   - mode="errores":           /test-errores modo práctica   → NO CUENTA
+ *   - mode="errores-refuerzo":  /test-errores modo refuerzo   → NO CUENTA
  *
  * Aplicado en:
  *   - src/app/page.tsx       (dashboard)
@@ -13,13 +14,11 @@
  *
  * NO aplicado en:
  *   - src/app/historial/page.tsx     (muestra TODO lo que has hecho)
- *   - cálculo de "errores pendientes" (sí mira la última respuesta de
- *     cualquier modo, incluyendo /test-errores)
- *
- * Si en el futuro hay un modo más que no debe contar (p.ej. "manual"
- * para preguntas leídas en el flipbook), solo hay que añadirlo aquí
- * y se aplica automáticamente en todos los puntos de stats.
+ *   - cálculo de "errores pendientes" (ver src/lib/errors.ts, que tiene
+ *     su propia lógica con exclusión específica del modo refuerzo)
  */
+
+const NON_STATS_MODES: string[] = ["errores", "errores-refuerzo"]
 
 /**
  * WHERE-fragment Prisma para queries directas sobre ExamAttempt que
@@ -28,12 +27,9 @@
  *   db.examAttempt.count({
  *     where: { userId, ...ATTEMPT_STATS_WHERE }
  *   })
- *
- * Hoy solo excluimos mode="errores" (/test-errores). Si en el futuro
- * se añaden más modos no-stats (p.ej. "manual"), cambiar a `notIn`.
  */
 export const ATTEMPT_STATS_WHERE = {
-  mode: { not: "errores" },
+  mode: { notIn: NON_STATS_MODES },
 }
 
 /**
@@ -42,4 +38,5 @@ export const ATTEMPT_STATS_WHERE = {
  *
  *   `... LEFT JOIN exam_attempts ea ON ea.id = a.attemptId ${SQL_ATTEMPT_STATS_AND}`
  */
-export const SQL_ATTEMPT_STATS_AND = `AND ea.mode != 'errores'`
+export const SQL_ATTEMPT_STATS_AND =
+  `AND ea.mode NOT IN ('errores', 'errores-refuerzo')`
