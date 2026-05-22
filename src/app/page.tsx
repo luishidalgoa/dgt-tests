@@ -2,8 +2,11 @@ import Link from "next/link"
 import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
 import { ATTEMPT_STATS_WHERE } from "@/lib/stats"
+import { getQuotaStatus } from "@/lib/aiQuota"
 import { Play, Zap, AlertTriangle, LogIn, UserPlus, Sparkles } from "lucide-react"
 import { ContinueExamPill } from "@/components/ContinueExamPill"
+import { DashStatsAnalysis, type StatsAnalysisResult, type AnalysisHistoryItem } from "@/components/DashStatsAnalysis"
+import { MAX_HISTORY_ITEMS } from "@/lib/aiStatsAnalysis"
 
 export const dynamic = "force-dynamic"
 
@@ -162,6 +165,34 @@ export default async function HomePage() {
     ? `/${lastTest.category.slug}/${lastTest.testNumber}`
     : `/${categories[0]?.slug ?? "permiso-b"}`
 
+  // Análisis IA de stats — cargamos el HISTORIAL (hasta MAX_HISTORY_ITEMS,
+  // más recientes primero) + la quota restante. El componente del cliente
+  // decide qué mostrar expandido y qué colapsar.
+  const [aiStatsRows, aiQuota] = await Promise.all([
+    db.userAiStatsAnalysis.findMany({
+      where:   { userId: user.id },
+      orderBy: { createdAt: "desc" },
+      take:    MAX_HISTORY_ITEMS,
+    }),
+    getQuotaStatus(user.id),
+  ])
+  const aiStatsHistory: AnalysisHistoryItem[] = []
+  for (const row of aiStatsRows) {
+    try {
+      aiStatsHistory.push({
+        id:              row.id,
+        result:          JSON.parse(row.payloadJson) as StatsAnalysisResult,
+        generatedAt:     row.updatedAt.toISOString(),
+        snapshotAnswers: row.totalAnswers,
+        snapshotAttempts: row.totalAttempts,
+        snapshotCorrect: row.correctAnswers,
+        model:           row.model,
+      })
+    } catch {
+      // payload corrupto, se omite del listado
+    }
+  }
+
   return (
     <div className="dash-grid">
       {/* WELCOME */}
@@ -210,6 +241,12 @@ export default async function HomePage() {
         <ContinueExamPill
           fallbackHref={continueHref}
           fallbackLabel={lastTest ? "Continuar donde lo dejaste" : "Empieza tu primer test"}
+        />
+
+        <DashStatsAnalysis
+          history={aiStatsHistory}
+          totalAnswers={totalAnswers}
+          aiQuotaRemaining={aiQuota.remaining}
         />
       </section>
 

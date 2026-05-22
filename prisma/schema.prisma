@@ -56,6 +56,7 @@ model User {
   partyPlays      PartyPlayer[] @relation("PartyParticipations")
   aiPaid          UserAiPaid[]
   configUpdates   AppConfig[]   @relation("AppConfigUpdates")
+  aiStatsAnalysis UserAiStatsAnalysis[]
 
   @@map("users")
 }
@@ -322,6 +323,39 @@ model AppConfig {
 // La unicidad se gestiona con partial unique indexes en SQL (uno para
 // attemptId IS NULL, otro para attemptId IS NOT NULL); Prisma no expone
 // partial indexes en el schema, por eso no hay @@unique aquí.
+// ── Historial de análisis IA de stats por usuario (Fase 110/111) ─────
+// Hasta 5 análisis por usuario. Cada vez que el usuario pulsa "Generar
+// análisis" se inserta una fila nueva; tras superar 5, el endpoint poda
+// los más antiguos. Permite ver progreso temporal de las debilidades.
+//
+// payloadJson contiene el JSON estructurado del modelo (texto del análisis).
+// contextJson contiene los topWeakBlocks que se enviaron al modelo — lo
+// usa /test-personalizado para regenerar tests a partir de un análisis
+// antiguo sin recalcular contra la BBDD actual del usuario.
+model UserAiStatsAnalysis {
+  id             Int      @id @default(autoincrement())
+  userId         Int
+  payloadJson    String
+  /// Snapshot de los top sub-bloques con más fallos al momento del
+  /// análisis. Schema: ver StatsContext en src/lib/aiStatsAnalysis.ts.
+  /// Nullable porque las filas anteriores a la introducción del campo
+  /// no lo tienen.
+  contextJson    String?
+  /// Snapshot de stats al momento de generar. Permite detectar
+  /// "no hay datos nuevos" comparando con el análisis más reciente.
+  totalAttempts  Int
+  totalAnswers   Int
+  correctAnswers Int
+  /// Modelo IA que generó el análisis (auditoría / debug).
+  model          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("user_ai_stats_analysis")
+}
+
 model UserAiPaid {
   id          Int          @id @default(autoincrement())
   userId      Int

@@ -75,12 +75,26 @@ export async function getQuotaStatus(userId: number): Promise<AIQuotaStatus> {
  * mensual, o el nuevo estado si pudo consumir.
  */
 export async function consumeToken(userId: number): Promise<AIQuotaStatus | null> {
+  return consumeTokens(userId, 1)
+}
+
+/**
+ * Intenta consumir N tokens de golpe (atómicamente, all-or-nothing).
+ * Devuelve `null` si al usuario no le quedan N disponibles. Si sí, los
+ * incrementa en una sola query y devuelve el estado actualizado.
+ *
+ * Usado por features que cobran > 1 token (p.ej. análisis IA del dashboard,
+ * 5 tokens). El refund manual (decrement) lo hace el endpoint si el
+ * provider falla.
+ */
+export async function consumeTokens(userId: number, n: number): Promise<AIQuotaStatus | null> {
+  if (n <= 0) throw new Error("consumeTokens: n debe ser > 0")
   const current = await getQuotaStatus(userId)
-  if (current.remaining <= 0) return null
+  if (current.remaining < n) return null
 
   const updated = await db.user.update({
     where: { id: userId },
-    data:  { aiTokensUsed: { increment: 1 } },
+    data:  { aiTokensUsed: { increment: n } },
     select: {
       aiTokensUsed: true,
       aiTokensMonth: true,
