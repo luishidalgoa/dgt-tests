@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import type Stripe from "stripe"
 import { db } from "@/lib/db"
-import { getStripe, STRIPE_WEBHOOK_SECRET, getSubscriptionPeriodEnd } from "@/lib/stripe"
+import { getStripe, STRIPE_WEBHOOK_SECRET, getSubscriptionPeriodEnd, willNotAutoRenew, getSubscriptionEndDate } from "@/lib/stripe"
 
 /**
  * Stripe webhook handler.
@@ -140,8 +140,12 @@ async function onSubscriptionUpdated(sub: Stripe.Subscription) {
   const status = sub.status                          // active, past_due, canceled, trialing, ...
   const isActive = status === "active" || status === "trialing"
   const priceId  = sub.items.data[0]?.price?.id ?? null
-  const periodEnd = getSubscriptionPeriodEnd(sub)
-  const cancelAtPeriodEnd = Boolean(sub.cancel_at_period_end)
+  // Bug Fase 85: el portal de Stripe expresa la cancelación de DOS formas
+  // (cancel_at_period_end bool O cancel_at timestamp). Antes solo mirábamos
+  // el boolean → la BBDD decía "active renewal" mientras Stripe decía
+  // "scheduled to cancel". Ahora usamos los helpers que cubren ambos casos.
+  const endDateTs = getSubscriptionEndDate(sub)
+  const cancelAtPeriodEnd = willNotAutoRenew(sub)
 
   // Solo cambiamos role si NO es admin (los admins son intocables)
   const current = await db.user.findUnique({
@@ -157,7 +161,7 @@ async function onSubscriptionUpdated(sub: Stripe.Subscription) {
       stripeSubscriptionId:          sub.id,
       subscriptionStatus:            status,
       subscriptionPriceId:           priceId,
-      subscriptionCurrentPeriodEnd:  periodEnd ? new Date(periodEnd * 1000) : null,
+      subscriptionCurrentPeriodEnd:  endDateTs ? new Date(endDateTs * 1000) : null,
       subscriptionCancelAtPeriodEnd: cancelAtPeriodEnd,
       // role: SUBSCRIBER si activa, USER si no — pero nunca tocamos ADMIN
       ...(isAdmin ? {} : { role: isActive ? "SUBSCRIBER" : "USER" }),

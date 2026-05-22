@@ -17,7 +17,7 @@
  */
 import Stripe from "stripe"
 import { db } from "@/lib/db"
-import { getSubscriptionPeriodEnd } from "@/lib/stripe"
+import { getSubscriptionPeriodEnd, willNotAutoRenew, getSubscriptionEndDate } from "@/lib/stripe"
 
 async function main() {
   const username = process.argv[2]
@@ -132,11 +132,13 @@ async function main() {
   const chosen = active ?? subs.data[0]
   const isActive = chosen.status === "active" || chosen.status === "trialing"
   const priceId  = chosen.items.data[0]?.price?.id ?? null
-  const periodEnd = getSubscriptionPeriodEnd(chosen)
-  const cancelAtPeriodEnd = Boolean(chosen.cancel_at_period_end)
+  // Fase 85: usamos los helpers que cubren cancel_at_period_end + cancel_at
+  const endDate = getSubscriptionEndDate(chosen)
+  const cancelAtPeriodEnd = willNotAutoRenew(chosen)
 
   console.log()
   console.log(`→ Usando ${chosen.id} (status=${chosen.status}, cancelAtPeriodEnd=${cancelAtPeriodEnd})`)
+  console.log(`   cancel_at_period_end raw: ${chosen.cancel_at_period_end}, cancel_at raw: ${chosen.cancel_at}`)
 
   const isAdmin = user.role === "ADMIN"
   await db.user.update({
@@ -146,7 +148,7 @@ async function main() {
       stripeSubscriptionId:          chosen.id,
       subscriptionStatus:            chosen.status,
       subscriptionPriceId:           priceId,
-      subscriptionCurrentPeriodEnd:  periodEnd ? new Date(periodEnd * 1000) : null,
+      subscriptionCurrentPeriodEnd:  endDate ? new Date(endDate * 1000) : null,
       subscriptionCancelAtPeriodEnd: cancelAtPeriodEnd,
       ...(isAdmin ? {} : { role: isActive ? "SUBSCRIBER" : "USER" }),
     },
@@ -156,7 +158,7 @@ async function main() {
   console.log(`   role:                ${isAdmin ? "ADMIN (no tocado)" : isActive ? "SUBSCRIBER" : "USER"}`)
   console.log(`   subscriptionStatus:  ${chosen.status}`)
   console.log(`   cancelAtPeriodEnd:   ${cancelAtPeriodEnd}`)
-  if (periodEnd) console.log(`   currentPeriodEnd:    ${new Date(periodEnd * 1000).toISOString()}`)
+  if (endDate) console.log(`   endDate:             ${new Date(endDate * 1000).toISOString()}`)
 }
 
 main()

@@ -62,3 +62,36 @@ export function getSubscriptionPeriodEnd(sub: Stripe.Subscription): number | nul
 
   return null
 }
+
+/**
+ * ¿Está la suscripción marcada para NO renovarse?
+ *
+ * Stripe expresa "no auto-renovación" de DOS formas:
+ *   - `cancel_at_period_end: true` → boolean. Cancela al final del current
+ *     period actual. Lo setea el flow del portal cuando eliges "Cancel at
+ *     the end of the billing period".
+ *   - `cancel_at: <timestamp>` → fecha específica. Lo setea el portal
+ *     cuando eliges "Cancel on a specific date" (a veces es el mismo flow
+ *     "end of period" porque Stripe convierte a fecha fija). El boolean
+ *     queda en false aunque haya un cancel_at en el futuro.
+ *
+ * Para la UI nos da igual cómo Stripe lo exprese: si CUALQUIERA de los
+ * dos indica cancelación pendiente, la renovación automática NO va a
+ * ocurrir.
+ */
+export function willNotAutoRenew(sub: Stripe.Subscription): boolean {
+  if (sub.cancel_at_period_end) return true
+  if (typeof sub.cancel_at === "number" && sub.cancel_at > 0) return true
+  return false
+}
+
+/**
+ * Fecha efectiva en la que la suscripción acabará.
+ *   - Si hay `cancel_at` → ese timestamp (tiene prioridad porque puede
+ *     ser distinto del fin del periodo actual).
+ *   - Si no → el fin del periodo actual (items[0].current_period_end).
+ */
+export function getSubscriptionEndDate(sub: Stripe.Subscription): number | null {
+  if (typeof sub.cancel_at === "number" && sub.cancel_at > 0) return sub.cancel_at
+  return getSubscriptionPeriodEnd(sub)
+}
