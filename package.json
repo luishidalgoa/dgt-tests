@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "help": "tsx scripts/help.ts",
+    "?":    "tsx scripts/help.ts",
     "dev": "next dev -p 4321",
     "dev:reset": "prisma generate && echo \"\nPrisma client regenerado. AHORA reinicia 'npm run dev'.\"",
     "build": "prisma generate && next build",
