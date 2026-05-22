@@ -99,6 +99,29 @@ interface QuestionLite {
   options:   { letra: string; texto: string; isCorrect: boolean }[]
 }
 
+// ── Manejo de Ctrl+C ────────────────────────────────────────────────────
+
+/**
+ * Flag global que el loop principal consulta entre iteraciones. Al
+ * recibir SIGINT (Ctrl+C) se activa, el loop sale limpiamente al final
+ * del item en curso y el bloque post-loop persiste TODO lo procesado.
+ *
+ * Segundo Ctrl+C en menos de 5s = salida dura sin guardar (escape
+ * hatch si la API está colgada y el item en curso no termina).
+ */
+let interrupted = false
+let lastSigintAt = 0
+process.on("SIGINT", () => {
+  const now = Date.now()
+  if (interrupted && now - lastSigintAt < 5000) {
+    console.log("\n⚠ Segundo Ctrl+C en <5s — salida dura (NO se guarda)")
+    process.exit(130)
+  }
+  interrupted = true
+  lastSigintAt = now
+  console.log("\n⚠ Ctrl+C recibido. Termino el item actual y guardo… (otro Ctrl+C en 5s = salida dura)")
+})
+
 // ── Main ────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -174,6 +197,10 @@ async function main() {
   let errCount = 0
   let i = 0
   for (const node of toProcess) {
+    if (interrupted) {
+      console.log(`\n⏹  Loop interrumpido en ${i}/${toProcess.length}. Guardando lo procesado…`)
+      break
+    }
     i++
     const questions = (byNode.get(node.codigo) ?? []).slice(0, MAX_QUESTIONS_PER_NODE)
     const prefix = `[${i.toString().padStart(3)}/${toProcess.length}] ${node.codigo.padEnd(10)} (${node.preguntas} preg)`
