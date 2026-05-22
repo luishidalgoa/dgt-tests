@@ -40,7 +40,7 @@ import type {
 
 interface ExamRunnerProps {
   data: TestRunnerData
-  mode?: "normal" | "errores" | "tema"
+  mode?: "normal" | "errores" | "errores-refuerzo" | "tema"
   /** Duración en segundos del temporizador. null = sin tiempo. */
   timeLimit?: number | null
   /** Si true, corregir en cliente y enviar a /preview-results en vez de POST /api/attempts. */
@@ -71,6 +71,11 @@ export function ExamRunner({
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [secondsLeft, setSecondsLeft] = useState<number | null>(timeLimit)
+  // En modo práctica (timeLimit===null) corre un cronómetro hacia ARRIBA
+  // contando tiempo transcurrido. Reemplaza el "no hay timer" que había
+  // antes: aunque no haya límite, ver cuánto llevas es útil de cara al
+  // examen real (que sí tiene 30 min para 30 preguntas).
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0)
   const [mapOpen, setMapOpen] = useState(false)
   const [aiRemaining, setAiRemaining] = useState(aiQuotaRemaining ?? aiQuota)
   // Resultados de la IA cacheados por questionId (para no perderlos al navegar)
@@ -131,6 +136,11 @@ export function ExamRunner({
         const elapsed = (Date.now() - new Date(saved.startedAt).getTime()) / 1000
         const remaining = Math.max(0, timeLimit - Math.floor(elapsed))
         setSecondsLeft(remaining)
+      } else {
+        // Modo práctica: el cronómetro hacia arriba parte del tiempo ya
+        // transcurrido desde que se inició la sesión original.
+        const elapsed = Math.floor((Date.now() - new Date(saved.startedAt).getTime()) / 1000)
+        setElapsedSeconds(Math.max(0, elapsed))
       }
     }
     setHydrated(true)
@@ -253,12 +263,24 @@ export function ExamRunner({
       return
     }
     const id = setTimeout(
-       
+
       () => setSecondsLeft((s) => (s === null ? null : s - 1)),
       1000
     )
     return () => clearTimeout(id)
   }, [secondsLeft, handleFinish])
+
+  // Cronómetro hacia ARRIBA — solo activo en modo práctica (sin límite)
+  // y tras hidratar para no doblar el conteo cuando se restaura un saved.
+  useEffect(() => {
+    if (timeLimit !== null || !hydrated) return
+    const id = setTimeout(
+
+      () => setElapsedSeconds((s) => s + 1),
+      1000,
+    )
+    return () => clearTimeout(id)
+  }, [elapsedSeconds, timeLimit, hydrated])
 
   // ── Selección y navegación ──────────────────────────────────────────────
   const selectOption = useCallback(
@@ -351,6 +373,15 @@ export function ExamRunner({
               >
                 <Timer className="h-4 w-4" />
                 {formatTime(secondsLeft)}
+              </span>
+            )}
+            {!isExamMode && hydrated && (
+              <span
+                className="flex items-center gap-1 font-mono font-semibold text-slate-700"
+                title="Tiempo transcurrido en esta práctica"
+              >
+                <Timer className="h-4 w-4" />
+                {formatTime(elapsedSeconds)}
               </span>
             )}
             <span>
@@ -706,7 +737,12 @@ export function ExamRunner({
             </DialogContent>
           </Dialog>
 
-          <Button onClick={handleFinish} disabled={isPending}>
+          <Button
+            onClick={handleFinish}
+            disabled={isPending}
+            size="lg"
+            className={`exam-finish-btn px-6 ${answered === total ? "exam-finish-btn--ready" : ""}`}
+          >
             {isPending ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -714,9 +750,9 @@ export function ExamRunner({
               </>
             ) : (
               <>
-                <CheckCircle2 className="h-4 w-4" />
+                <CheckCircle2 className="h-5 w-5" />
                 Finalizar
-                <kbd className="hidden md:inline-block text-[10px] text-emerald-100 ml-1">↵</kbd>
+                <kbd className="hidden md:inline-block text-[10px] text-emerald-50/90 ml-1">↵</kbd>
               </>
             )}
           </Button>
