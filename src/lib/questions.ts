@@ -56,3 +56,12 @@ export const QUESTION_PENDING_REVIEW_WHERE = {
   aiGenerated: true,
   aiApproved:  null,
 } satisfies Prisma.QuestionWhereInput
+
+/**
+ * Preguntas IA que YA fueron aprobadas y por tanto ya están en circulación.
+ * Usado por /admin/ai-questions para auditar lo que estamos sirviendo.
+ */
+export const QUESTION_APPROVED_AI_WHERE = {
+  aiGenerated: true,
+  aiApproved:  true,
+} satisfies Prisma.QuestionWhereInput

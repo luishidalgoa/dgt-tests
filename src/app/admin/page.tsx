@@ -2,7 +2,7 @@ import Link from "next/link"
 import { getConfig } from "@/lib/appConfig"
 import { CONFIG_CATALOG, type ConfigEntry, type ConfigCategory } from "@/lib/configCatalog"
 import { db } from "@/lib/db"
-import { QUESTION_PENDING_REVIEW_WHERE } from "@/lib/questions"
+import { QUESTION_APPROVED_AI_WHERE, QUESTION_PENDING_REVIEW_WHERE } from "@/lib/questions"
 import { ConfigForm } from "./ConfigForm"
 import { Sliders, ToggleLeft, MessageSquareText, Sparkles, KeyRound, ListChecks, ArrowRight } from "lucide-react"
 
@@ -29,6 +29,7 @@ export default async function AdminPage() {
 
   // Métricas de paneles secundarios (badge counts)
   const pendingReviewCount = await db.question.count({ where: QUESTION_PENDING_REVIEW_WHERE })
+  const approvedAiCount    = await db.question.count({ where: QUESTION_APPROVED_AI_WHERE })
 
   const groups: { category: ConfigCategory; title: string; icon: React.ReactNode; entries: ConfigEntry[] }[] = [
     {
@@ -78,6 +79,13 @@ export default async function AdminPage() {
             title="Revisar preguntas IA"
             description="Aprobar o descartar preguntas generadas por `npm run questions:generate`."
             badge={pendingReviewCount > 0 ? `${pendingReviewCount} pendientes` : undefined}
+          />
+          <AdminLinkCard
+            href="/admin/ai-questions"
+            icon={<Sparkles className="h-5 w-5" />}
+            title="Preguntas IA aprobadas"
+            description="Auditoría de las preguntas IA ya aprobadas, filtrable por tema/bloque/sub-bloque."
+            badge={approvedAiCount > 0 ? `${approvedAiCount} en circulación` : undefined}
           />
         </div>
       </section>
