@@ -1,7 +1,7 @@
 import { getConfig } from "@/lib/appConfig"
 import { CONFIG_CATALOG, type ConfigEntry, type ConfigCategory } from "@/lib/configCatalog"
 import { ConfigForm } from "./ConfigForm"
-import { Sliders, ToggleLeft, MessageSquareText } from "lucide-react"
+import { Sliders, ToggleLeft, MessageSquareText, Sparkles } from "lucide-react"
 
 export const dynamic = "force-dynamic"
 
@@ -42,6 +42,12 @@ export default async function AdminPage() {
       title:    "Mensajes y textos",
       icon:     <MessageSquareText className="h-5 w-5" />,
       entries:  CONFIG_CATALOG.filter((c) => c.category === "messages"),
+    },
+    {
+      category: "integrations",
+      title:    "Integraciones IA",
+      icon:     <Sparkles className="h-5 w-5" />,
+      entries:  CONFIG_CATALOG.filter((c) => c.category === "integrations"),
     },
   ]
 

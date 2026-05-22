@@ -62,7 +62,12 @@ async function getEnv() {
   const { getEffectiveSecret } = await import("@/lib/secretCatalog")
   const apiKey = await getEffectiveSecret("GEMINI_API_KEY")
   if (!apiKey) throw new Error("Falta GEMINI_API_KEY (ni .env ni /admin/secrets)")
-  const model = process.env.GEMINI_MODEL || "gemini-flash-latest"
+  // Modelo configurable desde /admin → Integraciones IA. Default
+  // 'gemini-flash-latest' (250 RPD free tier, mejor calidad). Si necesitas
+  // más throughput cambia a 'gemini-2.5-flash-lite' (1000 RPD) desde el
+  // panel sin tocar código.
+  const { getGeminiModel } = await import("@/lib/configCatalog")
+  const model = await getGeminiModel()
   return { apiKey, model }
 }
 

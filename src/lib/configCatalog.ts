@@ -17,7 +17,7 @@
  */
 import { getConfig } from "@/lib/appConfig"
 
-export type ConfigCategory = "quotas" | "features" | "messages"
+export type ConfigCategory = "quotas" | "features" | "messages" | "integrations"
 
 export interface ConfigEntry {
   key:          string
@@ -98,6 +98,20 @@ export const CONFIG_CATALOG: ConfigEntry[] = [
     description: "Texto que ven los users nuevos en su primer login.",
     category:    "messages",
   },
+
+  // ── Integraciones IA ──────────────────────────────────────────────
+  {
+    key:         "GEMINI_MODEL",
+    type:        "string",
+    default:     "gemini-flash-latest",
+    label:       "Modelo Gemini (análisis de preguntas)",
+    description:
+      "Modelo de Google AI usado por /api/ai/explain. Valores recomendados: " +
+      "'gemini-flash-latest' (calidad alta, 250 RPD free), " +
+      "'gemini-2.5-flash-lite' (calidad correcta, 1000 RPD free), " +
+      "'gemini-2.5-pro' (calidad máxima, 100 RPD free, latencia mayor).",
+    category:    "integrations",
+  },
 ]
 
 // ── Getters tipados (cada uno lee BBDD con fallback al default) ──
@@ -135,4 +149,19 @@ export async function isFeatureEnabled(name: FeatureName): Promise<boolean> {
 export async function getWelcomeMessage(): Promise<string> {
   const entry = CONFIG_CATALOG.find((c) => c.key === "WELCOME_MESSAGE")!
   return getConfig("WELCOME_MESSAGE", entry.default as string)
+}
+
+/**
+ * Modelo de Gemini que usa /api/ai/explain. Configurable desde /admin
+ * (categoría Integraciones IA). Si no hay entrada en BBDD, usa el default
+ * 'gemini-flash-latest'.
+ *
+ * Nota: el script scripts/infer-subblock-titles.ts ignora este valor y
+ * tiene su propio default 'gemini-2.5-flash-lite' (override por flag
+ * --model). Esto es a propósito: el script es batch interno con quota
+ * gratuita más alta, no debe depender del modelo de producción.
+ */
+export async function getGeminiModel(): Promise<string> {
+  const entry = CONFIG_CATALOG.find((c) => c.key === "GEMINI_MODEL")!
+  return getConfig("GEMINI_MODEL", entry.default as string)
 }

@@ -135,7 +135,9 @@ async function main() {
   const { getEffectiveSecret } = await import("@/lib/secretCatalog")
   const apiKey = await getEffectiveSecret("GEMINI_API_KEY")
   if (!apiKey) throw new Error("Falta GEMINI_API_KEY (ni .env ni /admin/secrets)")
-  const model = process.env.GEMINI_MODEL || "gemini-flash-latest"
+  // Mismo default que src/lib/ai.ts: flash-lite (1000 RPD en free tier).
+  // Override con env GEMINI_MODEL si quieres probar otro modelo concreto.
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite"
 
   // 4) Procesar uno a uno (secuencial para no saturar la API)
   const results = new Map<string, string>()
