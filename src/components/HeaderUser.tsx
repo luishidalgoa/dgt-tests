@@ -5,8 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { LogOut, Settings, Sparkles, Crown, Shield } from "lucide-react"
 import { AI_QUOTA_CHANGED_EVENT, type MonthlyQuota } from "@/components/AIExplainPanel"
-
-type Plan = "FREE" | "PRO" | "ADMIN"
+import { getPlanBadgeMeta, type Plan } from "@/lib/planLinks"
 
 interface HeaderUserProps {
   username:           string
@@ -24,11 +23,17 @@ export function HeaderUser({ username, aiTokensRemaining, aiTokensMax, plan }: H
   const [liveRemaining, setLiveRemaining] = useState(aiTokensRemaining)
   const [liveMax,       setLiveMax]       = useState(aiTokensMax)
 
-  // Sincronizar si las props del server cambian (cambio de página / refresh)
+  // Sincronizar si las props del server cambian (cambio de página / refresh).
+  // El lint flag react-hooks/set-state-in-effect es estricto en React 19;
+  // este patrón "props → state" es necesario porque el state lo modifica
+  // también el event listener de abajo (no es derivable puro).
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setLiveRemaining(aiTokensRemaining) }, [aiTokensRemaining])
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setLiveMax(aiTokensMax) }, [aiTokensMax])
 
   // Escuchar el evento del panel IA para actualizar al instante
+   
   useEffect(() => {
     function onChange(e: Event) {
       const { detail } = e as CustomEvent<MonthlyQuota>
@@ -104,14 +109,13 @@ export function HeaderUser({ username, aiTokensRemaining, aiTokensMax, plan }: H
 }
 
 function PlanBadge({ plan }: { plan: Plan }) {
-  const style: Record<Plan, { bg: string; color: string; border: string; icon: React.ReactNode; label: string; tip: string }> = {
+  const style: Record<Plan, { bg: string; color: string; border: string; icon: React.ReactNode; label: string }> = {
     ADMIN: {
       bg: "linear-gradient(135deg, #facc15, #ea580c)",
       color: "#fff",
       border: "0",
       icon: <Shield className="h-3 w-3" />,
       label: "ADMIN",
-      tip: "Acceso total · sin facturación",
     },
     PRO: {
       bg: "linear-gradient(135deg, rgb(168, 85, 247), rgb(236, 72, 153))",
@@ -119,7 +123,6 @@ function PlanBadge({ plan }: { plan: Plan }) {
       border: "0",
       icon: <Crown className="h-3 w-3" />,
       label: "PRO",
-      tip: "Suscripción PRO activa",
     },
     FREE: {
       bg: "var(--slate-100)",
@@ -127,31 +130,54 @@ function PlanBadge({ plan }: { plan: Plan }) {
       border: "1px solid var(--slate-200)",
       icon: null,
       label: "FREE",
-      tip: "Plan gratuito — pulsa para mejorar",
     },
   }
   const s = style[plan]
-  return (
-    <span
-      title={s.tip}
-      className="font-mono-tabular"
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 4,
-        padding: "2px 7px",
-        borderRadius: 999,
-        background: s.bg,
-        color: s.color,
-        border: s.border,
-        fontSize: 10,
-        fontWeight: 900,
-        letterSpacing: "0.04em",
-        boxShadow: plan === "PRO" || plan === "ADMIN" ? "0 4px 10px -4px rgba(0,0,0,0.25)" : "none",
-      }}
-    >
+  const meta = getPlanBadgeMeta(plan)
+
+  const inner = (
+    <>
       {s.icon}
       {s.label}
+    </>
+  )
+  const sharedStyle: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    padding: "2px 7px",
+    borderRadius: 999,
+    background: s.bg,
+    color: s.color,
+    border: s.border,
+    fontSize: 10,
+    fontWeight: 900,
+    letterSpacing: "0.04em",
+    boxShadow: plan === "PRO" || plan === "ADMIN" ? "0 4px 10px -4px rgba(0,0,0,0.25)" : "none",
+    textDecoration: "none",
+  }
+
+  // ADMIN → /admin, FREE → /upgrade, PRO → no link (span)
+  if (meta.href) {
+    return (
+      <Link
+        href={meta.href}
+        title={meta.title}
+        className="font-mono-tabular"
+        style={{ ...sharedStyle, cursor: "pointer" }}
+      >
+        {inner}
+      </Link>
+    )
+  }
+
+  return (
+    <span
+      title={meta.title}
+      className="font-mono-tabular"
+      style={sharedStyle}
+    >
+      {inner}
     </span>
   )
 }
