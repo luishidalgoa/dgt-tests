@@ -19,6 +19,15 @@ import { getConfig } from "@/lib/appConfig"
 
 export type ConfigCategory = "quotas" | "features" | "messages" | "integrations"
 
+export interface ConfigOption {
+  /** Valor que se guarda en BBDD. */
+  value:        string
+  /** Texto corto que aparece en el dropdown. */
+  label:        string
+  /** Texto largo que aparece bajo el dropdown cuando esta opción está seleccionada. */
+  description?: string
+}
+
 export interface ConfigEntry {
   key:          string
   type:         "number" | "boolean" | "string"
@@ -26,6 +35,13 @@ export interface ConfigEntry {
   label:        string
   description?: string
   category:     ConfigCategory
+  /**
+   * Si se define, el campo se renderiza como dropdown en /admin (en
+   * vez del input/textarea por defecto). Solo aplica a entries de
+   * tipo "string". La descripción de cada opción se muestra debajo
+   * del select cuando se selecciona.
+   */
+  options?:     ConfigOption[]
 }
 
 export const CONFIG_CATALOG: ConfigEntry[] = [
@@ -105,12 +121,30 @@ export const CONFIG_CATALOG: ConfigEntry[] = [
     type:        "string",
     default:     "gemini-flash-latest",
     label:       "Modelo Gemini (análisis de preguntas)",
-    description:
-      "Modelo de Google AI usado por /api/ai/explain. Valores recomendados: " +
-      "'gemini-flash-latest' (calidad alta, 250 RPD free), " +
-      "'gemini-2.5-flash-lite' (calidad correcta, 1000 RPD free), " +
-      "'gemini-2.5-pro' (calidad máxima, 100 RPD free, latencia mayor).",
+    description: "Modelo de Google AI que usa /api/ai/explain para generar las explicaciones de las preguntas.",
     category:    "integrations",
+    options: [
+      {
+        value:       "gemini-flash-latest",
+        label:       "Flash — calidad alta (recomendado)",
+        description: "Alias dinámico al último Flash estable. Razonamiento profundo, buena comprensión de matices legales DGT. Free tier: 250 RPD. Latencia ~2-3s.",
+      },
+      {
+        value:       "gemini-2.5-flash-lite",
+        label:       "Flash-Lite — más throughput",
+        description: "Optimizado para velocidad. Calidad correcta para análisis estándar pero peor en casos límite con varias excepciones. Free tier: 1000 RPD (4x más que Flash). Latencia ~1s.",
+      },
+      {
+        value:       "gemini-2.5-pro",
+        label:       "Pro — calidad máxima",
+        description: "Modelo más capaz. Excelente en casos trampa y razonamiento extenso. Free tier: 100 RPD (2.5x menos que Flash). Latencia ~4-6s. Coste mayor en plan pagado.",
+      },
+      {
+        value:       "gemini-2.5-flash",
+        label:       "Flash 2.5 — versión fijada",
+        description: "Apunta a la versión 2.5 concreta de Flash, sin auto-actualizar. Útil si quieres estabilidad absoluta. Mismas cuotas y rendimiento que 'flash-latest' hoy mismo.",
+      },
+    ],
   },
 ]
 

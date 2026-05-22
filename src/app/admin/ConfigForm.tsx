@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react"
 import { Check, Loader2, X } from "lucide-react"
 import { updateConfigAction } from "./actions"
-import type { ConfigEntry } from "@/lib/configCatalog"
+import type { ConfigEntry, ConfigOption } from "@/lib/configCatalog"
 
 interface Props {
   entry:   ConfigEntry
@@ -59,7 +59,14 @@ export function ConfigForm({ entry, current }: Props) {
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        {entry.type === "boolean" ? (
+        {entry.options && entry.options.length > 0 ? (
+          <SelectField
+            entryKey={entry.key}
+            options={entry.options}
+            defaultValue={String(current)}
+            disabled={isPending}
+          />
+        ) : entry.type === "boolean" ? (
           <BooleanToggle name="value" defaultChecked={Boolean(current)} disabled={isPending} />
         ) : entry.type === "number" ? (
           <input
@@ -124,6 +131,71 @@ const inputStyle: React.CSSProperties = {
   outline: "none",
   background: "#fff",
   fontFamily: "inherit",
+}
+
+/**
+ * Dropdown con descripción dinámica del valor seleccionado. La descripción
+ * vive en el propio array de options (cada opción la trae). Cambia al
+ * vuelo cuando el usuario abre el select y elige otra entrada — sin
+ * necesidad de submit. Solo se persiste al pulsar "Guardar".
+ */
+function SelectField({
+  entryKey,
+  options,
+  defaultValue,
+  disabled,
+}: {
+  entryKey:     string
+  options:      ConfigOption[]
+  defaultValue: string
+  disabled:     boolean
+}) {
+  const initial = options.find((o) => o.value === defaultValue) ?? options[0]
+  const [selected, setSelected] = useState<string>(initial.value)
+  const description = options.find((o) => o.value === selected)?.description
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+      <select
+        id={`field-${entryKey}`}
+        name="value"
+        value={selected}
+        onChange={(e) => setSelected(e.target.value)}
+        disabled={disabled}
+        style={{
+          ...inputStyle,
+          flex:    "none",
+          padding: "8px 12px",
+          cursor:  disabled ? "not-allowed" : "pointer",
+        }}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+        {/* Valor desconocido (alguien tocó la BBDD a mano con un valor que
+            no está en el catálogo) — lo añadimos como opción extra para
+            no perderlo silenciosamente. */}
+        {!options.some((o) => o.value === defaultValue) && (
+          <option value={defaultValue}>
+            {defaultValue} (valor personalizado)
+          </option>
+        )}
+      </select>
+      {description && (
+        <small
+          style={{
+            fontSize:   12,
+            color:      "var(--slate-500)",
+            lineHeight: 1.45,
+            paddingLeft: 2,
+          }}
+        >
+          {description}
+        </small>
+      )}
+    </div>
+  )
 }
 
 function BooleanToggle({ name, defaultChecked, disabled }: { name: string; defaultChecked: boolean; disabled: boolean }) {
