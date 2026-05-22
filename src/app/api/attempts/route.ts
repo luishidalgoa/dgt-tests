@@ -6,7 +6,8 @@ import type { SubmitAttemptResponse } from "@/types/exam"
 
 const submitSchema = z.object({
   testId: z.number().int().nullable(),
-  mode:   z.enum(["normal", "errores"]),
+  // "normal" → test oficial · "errores" → /test-errores · "tema" → /temas/*
+  mode:   z.enum(["normal", "errores", "tema"]),
   answers: z
     .array(
       z.object({

@@ -211,20 +211,50 @@ export async function POST(req: Request) {
     })
   } catch (err) {
     await refundToken()
-    // Rate limit del provider (cuota agotada / saturación) → respondemos
-    // con un código identificable para que el front muestre un toast
-    // amigable en vez de un error técnico. Aplica a Gemini y a Groq.
-    if (err instanceof AIProviderError && err.isRateLimit) {
-      return NextResponse.json(
-        {
-          error: "La IA no está disponible ahora mismo. Inténtalo en unos minutos.",
-          code:  "ai_unavailable",
-        },
-        { status: 503 }
-      )
+    // Logueamos el detalle crudo del error en server-side para debug,
+    // pero NUNCA lo enviamos al cliente — siempre mapeamos a un mensaje
+    // amigable + código que el toast del front puede traducir.
+    console.error("[ai/explain] error del provider:", err)
+
+    if (err instanceof AIProviderError) {
+      switch (err.kind) {
+        case "rate_limit":
+          return NextResponse.json(
+            {
+              error: "La IA no está disponible ahora mismo. Inténtalo en unos minutos.",
+              code:  "ai_unavailable",
+            },
+            { status: 503 }
+          )
+        case "misconfigured":
+          return NextResponse.json(
+            {
+              error: "El servicio de IA está mal configurado. Avisa al administrador.",
+              code:  "ai_misconfigured",
+            },
+            { status: 503 }
+          )
+        case "bad_request":
+          return NextResponse.json(
+            {
+              error: "La IA no ha podido procesar esta pregunta. Prueba con otra.",
+              code:  "ai_bad_request",
+            },
+            { status: 502 }
+          )
+        case "server_error":
+          return NextResponse.json(
+            {
+              error: "Error temporal en el modelo de IA. Inténtalo en unos minutos.",
+              code:  "ai_server_error",
+            },
+            { status: 502 }
+          )
+      }
     }
+    // Genérico — error no clasificado (red, JSON inválido, etc.)
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Error al llamar a la IA" },
+      { error: "No se pudo generar el análisis. Inténtalo más tarde.", code: "ai_error" },
       { status: 502 }
     )
   }

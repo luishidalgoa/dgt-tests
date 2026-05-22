@@ -312,7 +312,7 @@ export default async function TemaPage({ params, searchParams }: PageProps) {
       </div>
       <ExamRunner
         data={data}
-        mode="errores"
+        mode="tema"
         aiQuota={getEffectiveTokenQuota(user)}
         aiQuotaRemaining={(await getQuotaStatus(user.id)).remaining}
       />

@@ -70,9 +70,27 @@ export interface AIProvider {
 }
 
 /**
- * Error tipado para fallos de cualquier proveedor de IA. Permite al endpoint
- * `/api/ai/explain` distinguir rate-limits (que se traducen a un toast
- * amigable en el front) de errores genéricos (502).
+ * Categoría de error de un provider de IA. El endpoint usa esto para
+ * decidir el código HTTP y el mensaje amigable que devuelve al cliente.
+ * NUNCA enviamos err.message crudo al usuario — siempre traducido.
+ */
+export type AIProviderErrorKind =
+  /** 429 / 503: cuota excedida o saturación temporal. "Inténtalo en unos minutos". */
+  | "rate_limit"
+  /** 401 / 403 / API_KEY_INVALID / API key expirada. Es problema del admin, no del user. */
+  | "misconfigured"
+  /** 400 (otros): el modelo no acepta la pregunta (imagen mal, formato raro...). */
+  | "bad_request"
+  /** 5xx (otros): error transitorio del modelo. */
+  | "server_error"
+  /** Cualquier otro caso no clasificado. */
+  | "unknown"
+
+/**
+ * Error tipado para fallos de cualquier proveedor de IA. El endpoint
+ * `/api/ai/explain` lo mapea a un código + mensaje amigable; el front
+ * muestra un toast según el código (sonner) sin filtrar nunca el
+ * mensaje crudo del provider al usuario.
  */
 export class AIProviderError extends Error {
   constructor(
@@ -83,12 +101,36 @@ export class AIProviderError extends Error {
     super(message)
     this.name = `${provider.charAt(0).toUpperCase()}${provider.slice(1)}Error`
   }
-  /**
-   * 429 = quota excedida (RPM/RPD).
-   * 503 = sobrecarga temporal del servidor.
-   * Para el usuario son el mismo caso ("inténtalo en unos minutos").
-   */
+
+  /** Backwards-compat: 429/503 sigue siendo "rate limit" para el front. */
   get isRateLimit(): boolean {
-    return this.status === 429 || this.status === 503
+    return this.kind === "rate_limit"
+  }
+
+  /**
+   * Clasifica el error según el HTTP status + algunas señales conocidas
+   * en el mensaje (porque varios providers usan 400 para cosas distintas).
+   */
+  get kind(): AIProviderErrorKind {
+    // 401/403: API key inválida/no autorizada
+    if (this.status === 401 || this.status === 403) return "misconfigured"
+    // Algunos providers (Google) devuelven 400 con reason API_KEY_INVALID
+    // o API_KEY_EXPIRED — clasificar como misconfigured para que el toast
+    // sea "configuración pendiente, contacta al admin" en lugar de
+    // "error genérico".
+    if (this.status === 400) {
+      const m = this.message.toLowerCase()
+      if (
+        m.includes("api_key_invalid") ||
+        m.includes("api key expired") ||
+        m.includes("api key not valid")
+      ) {
+        return "misconfigured"
+      }
+      return "bad_request"
+    }
+    if (this.status === 429 || this.status === 503) return "rate_limit"
+    if (this.status >= 500) return "server_error"
+    return "unknown"
   }
 }

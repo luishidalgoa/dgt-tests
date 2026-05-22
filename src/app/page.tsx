@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
+import { ATTEMPT_STATS_WHERE } from "@/lib/stats"
 import { Play, Zap, AlertTriangle, LogIn, UserPlus, Sparkles } from "lucide-react"
 import { ContinueExamPill } from "@/components/ContinueExamPill"
 
@@ -64,13 +65,21 @@ export default async function HomePage() {
     orderBy: { id: "asc" },
   })
 
-  // Stats del usuario
+  // Stats del usuario. Excluye los attempts del modo "errores"
+  // (/test-errores) del cálculo de racha + % aciertos — son práctica
+  // de repaso, no representan rendimiento en examen. Ver src/lib/stats.ts.
   const [totalAttempts, totalAnswers, correctAnswers, recentAttempts] = await Promise.all([
-    db.examAttempt.count({ where: { userId: user.id, finishedAt: { not: null } } }),
-    db.answer.count({ where: { attempt: { userId: user.id } } }),
-    db.answer.count({ where: { attempt: { userId: user.id }, isCorrect: true } }),
+    db.examAttempt.count({
+      where: { userId: user.id, finishedAt: { not: null }, ...ATTEMPT_STATS_WHERE },
+    }),
+    db.answer.count({
+      where: { attempt: { userId: user.id, ...ATTEMPT_STATS_WHERE } },
+    }),
+    db.answer.count({
+      where: { attempt: { userId: user.id, ...ATTEMPT_STATS_WHERE }, isCorrect: true },
+    }),
     db.examAttempt.findMany({
-      where: { userId: user.id, finishedAt: { not: null } },
+      where: { userId: user.id, finishedAt: { not: null }, ...ATTEMPT_STATS_WHERE },
       orderBy: { startedAt: "desc" },
       take: 5,
       include: { test: { include: { category: true } } },
@@ -91,10 +100,19 @@ export default async function HomePage() {
     doneByCategory.set(c.id, c._count.tests > 0 ? Math.round((done / c._count.tests) * 100) : 0)
   }
 
-  // Actividad: nº exámenes por día (últimos 7) + media diaria
+  // Actividad: nº exámenes por día (últimos 7) + media diaria.
+  // Date.now() lo lee react-hooks/purity como impuro, pero estamos en
+  // un Server Component dinámico (force-dynamic): cada request se sirve
+  // fresco y necesitamos la hora actual del servidor.
+  // eslint-disable-next-line react-hooks/purity
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
   const weekAttempts = await db.examAttempt.findMany({
-    where: { userId: user.id, finishedAt: { not: null }, startedAt: { gte: sevenDaysAgo } },
+    where: {
+      userId:     user.id,
+      finishedAt: { not: null },
+      startedAt:  { gte: sevenDaysAgo },
+      ...ATTEMPT_STATS_WHERE,
+    },
     select: { startedAt: true },
   })
   const todayMid = new Date()

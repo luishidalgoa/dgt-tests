@@ -191,7 +191,7 @@ describe("/api/ai/explain POST — cobro de tokens", () => {
     )
   })
 
-  it("Fase 98: Gemini 500 (no rate limit) sigue siendo 502 genérico", async () => {
+  it("Fase 98: Gemini 500 → 502 con code 'ai_server_error'", async () => {
     vi.mocked(db.aICacheEntry.findUnique).mockResolvedValue(null)
     vi.mocked(db.question.findUnique).mockResolvedValue({
       id: 100,
@@ -208,7 +208,77 @@ describe("/api/ai/explain POST — cobro de tokens", () => {
     const res = await POST(postBody({ questionId: 100 }))
     const body = await res.json()
     expect(res.status).toBe(502)
-    expect(body.code).toBeUndefined()
+    expect(body.code).toBe("ai_server_error")
+    // Mensaje amigable, NO el err.message crudo
+    expect(body.error).not.toMatch(/internal/i)
+  })
+
+  it("Fase 104: Gemini 400 API_KEY_INVALID → 503 con code 'ai_misconfigured'", async () => {
+    vi.mocked(db.aICacheEntry.findUnique).mockResolvedValue(null)
+    vi.mocked(db.question.findUnique).mockResolvedValue({
+      id: 100,
+      enunciado: "x", explicacion: "y", codigoTema: null, imagen: null,
+      options: [
+        { id: 1, letra: "A", texto: "a", isCorrect: true },
+        { id: 2, letra: "B", texto: "b", isCorrect: false },
+      ],
+    } as never)
+    vi.mocked(explainQuestion).mockRejectedValueOnce(
+      new AIProviderError(
+        "gemini",
+        400,
+        'Gemini 400: { "error": { "code": 400, "message": "API key expired. Please renew the API key.", "status": "INVALID_ARGUMENT", "details": [{ "@type": "type.googleapis.com/google.rpc.ErrorInfo", "reason": "API_KEY_INVALID" }] } }'
+      )
+    )
+
+    const res = await POST(postBody({ questionId: 100 }))
+    const body = await res.json()
+    expect(res.status).toBe(503)
+    expect(body.code).toBe("ai_misconfigured")
+    // NUNCA filtrar el JSON crudo de Google al usuario
+    expect(body.error).not.toMatch(/API_KEY_INVALID/)
+    expect(body.error).not.toMatch(/googleapis/)
+    expect(body.error).toMatch(/administrador|configura/i)
+  })
+
+  it("Fase 104: Gemini 401 → 503 con code 'ai_misconfigured'", async () => {
+    vi.mocked(db.aICacheEntry.findUnique).mockResolvedValue(null)
+    vi.mocked(db.question.findUnique).mockResolvedValue({
+      id: 100,
+      enunciado: "x", explicacion: "y", codigoTema: null, imagen: null,
+      options: [
+        { id: 1, letra: "A", texto: "a", isCorrect: true },
+        { id: 2, letra: "B", texto: "b", isCorrect: false },
+      ],
+    } as never)
+    vi.mocked(explainQuestion).mockRejectedValueOnce(
+      new AIProviderError("groq", 401, "Groq 401: invalid_api_key")
+    )
+
+    const res = await POST(postBody({ questionId: 100 }))
+    const body = await res.json()
+    expect(res.status).toBe(503)
+    expect(body.code).toBe("ai_misconfigured")
+  })
+
+  it("Fase 104: Gemini 400 sin API_KEY → 502 con code 'ai_bad_request'", async () => {
+    vi.mocked(db.aICacheEntry.findUnique).mockResolvedValue(null)
+    vi.mocked(db.question.findUnique).mockResolvedValue({
+      id: 100,
+      enunciado: "x", explicacion: "y", codigoTema: null, imagen: null,
+      options: [
+        { id: 1, letra: "A", texto: "a", isCorrect: true },
+        { id: 2, letra: "B", texto: "b", isCorrect: false },
+      ],
+    } as never)
+    vi.mocked(explainQuestion).mockRejectedValueOnce(
+      new AIProviderError("gemini", 400, "Gemini 400: bad prompt format")
+    )
+
+    const res = await POST(postBody({ questionId: 100 }))
+    const body = await res.json()
+    expect(res.status).toBe(502)
+    expect(body.code).toBe("ai_bad_request")
   })
 
   it("Fase 51: cobra aunque haya cache hit (primera vez)", async () => {

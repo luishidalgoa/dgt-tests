@@ -33,10 +33,20 @@ export interface TestRunnerData {
   questions: QuestionData[]
 }
 
+/**
+ * Modo del intento (ExamAttempt.mode):
+ *  - "normal":  test oficial del temario (cuenta para racha + % aciertos)
+ *  - "errores": práctica desde /test-errores (NO cuenta para stats)
+ *  - "tema":    práctica desde /temas/X o /temas/X/Y (sí cuenta)
+ *
+ * Cualquier modo distinto a "errores" suma en el dashboard y /stats.
+ */
+export type AttemptMode = "normal" | "errores" | "tema"
+
 /** Payload para finalizar un intento */
 export interface SubmitAttemptPayload {
   testId: number | null
-  mode: "normal" | "errores"
+  mode: AttemptMode
   answers: {
     questionId: number
     selectedOptionId: number | null

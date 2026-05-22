@@ -40,7 +40,7 @@ import type {
 
 interface ExamRunnerProps {
   data: TestRunnerData
-  mode?: "normal" | "errores"
+  mode?: "normal" | "errores" | "tema"
   /** Duración en segundos del temporizador. null = sin tiempo. */
   timeLimit?: number | null
   /** Si true, corregir en cliente y enviar a /preview-results en vez de POST /api/attempts. */
@@ -102,10 +102,13 @@ export function ExamRunner({
     showFeedback && selected !== null && selected === q.correctOptionId
 
   // ── Hidratación desde localStorage (solo 1 vez) ─────────────────────────
+  // El setHydrated dispara una re-render, pero solo PASA UNA VEZ por mount
+  // gracias al ref. Es un patrón de hidratación legítimo, no un anti-pattern.
   useEffect(() => {
     if (hydratedRef.current) return
     hydratedRef.current = true
     if (!isResumable) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setHydrated(true)
       return
     }
@@ -238,13 +241,22 @@ export function ExamRunner({
   }, [answers, isGuest, mode, questions, router, test.id, test.testNumber, test.category])
 
   // ── Temporizador ────────────────────────────────────────────────────────
+  // Patrón estándar de countdown: el setTimeout dispara el setSecondsLeft
+  // FUERA del render (no es sincrónico, ergo no causa cascadas). El
+  // handleFinish() al llegar a 0 termina el ciclo del effect, también safe.
+  // La regla react-hooks/set-state-in-effect es demasiado estricta aquí.
   useEffect(() => {
     if (secondsLeft === null) return
     if (secondsLeft <= 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       handleFinish()
       return
     }
-    const id = setTimeout(() => setSecondsLeft((s) => (s === null ? null : s - 1)), 1000)
+    const id = setTimeout(
+       
+      () => setSecondsLeft((s) => (s === null ? null : s - 1)),
+      1000
+    )
     return () => clearTimeout(id)
   }, [secondsLeft, handleFinish])
 

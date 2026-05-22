@@ -39,6 +39,36 @@ export interface MonthlyQuota {
  *  en vivo cuando la IA consume quota (sin esperar a router.refresh). */
 export const AI_QUOTA_CHANGED_EVENT = "dgt:ai-quota-changed"
 
+/**
+ * Mapeo de códigos de error del endpoint a textos del toast. Si el
+ * backend devuelve un code conocido, usamos este texto traducido (más
+ * útil para el usuario que un "503 Service Unavailable" genérico). Si
+ * llega un code "ai_*" desconocido, hacemos fallback al body.error
+ * que ya viene amigable del backend.
+ */
+const AI_ERROR_TOASTS: Record<string, { title: string; description: string }> = {
+  ai_unavailable: {
+    title:       "Análisis IA no disponible ahora mismo",
+    description: "Estamos saturados temporalmente. Inténtalo en unos minutos.",
+  },
+  ai_misconfigured: {
+    title:       "Servicio de IA no disponible",
+    description: "Hay un problema de configuración en el servidor. Avisa al administrador.",
+  },
+  ai_bad_request: {
+    title:       "La IA no pudo procesar esta pregunta",
+    description: "Prueba con otra pregunta, esta no se ha podido analizar.",
+  },
+  ai_server_error: {
+    title:       "Error temporal del modelo de IA",
+    description: "Inténtalo en unos minutos, el proveedor está fallando.",
+  },
+  ai_error: {
+    title:       "No se pudo generar el análisis",
+    description: "Algo ha fallado. Inténtalo más tarde.",
+  },
+}
+
 function emitQuotaChange(quota: MonthlyQuota) {
   if (typeof window === "undefined") return
   window.dispatchEvent(new CustomEvent(AI_QUOTA_CHANGED_EVENT, { detail: quota }))
@@ -170,18 +200,28 @@ export function AIExplainPanel({
           setQuota(body.quota)
           emitQuotaChange(body.quota)
         }
-        // Rate limit / saturación de Gemini → toast amigable + cerrar modal.
-        // No es un error del usuario; no queremos pintar nada rojo dentro
-        // del panel, solo una notificación efímera.
-        if (body.code === "ai_unavailable") {
-          toast.error("Análisis IA no disponible ahora mismo", {
-            description: "Estamos saturados temporalmente. Inténtalo en unos minutos.",
+        // Todos los errores del provider de IA (rate limit, key inválida,
+        // bad request, server error...) se muestran como toast amigable
+        // y cerramos el modal. NUNCA pintamos el mensaje crudo del
+        // backend en el panel — el backend ya manda un texto traducido.
+        const code: string | undefined = body.code
+        if (typeof code === "string" && code.startsWith("ai_")) {
+          const meta = AI_ERROR_TOASTS[code] ?? {
+            title:       "Análisis IA no disponible",
+            description: typeof body.error === "string"
+              ? body.error
+              : "Inténtalo en unos minutos.",
+          }
+          toast.error(meta.title, {
+            description: meta.description,
             duration:    7000,
           })
           setOpen(false)
           return
         }
-        throw new Error(body.error ?? "Error al consultar la IA")
+        // Caso raro (4xx no-IA, 401 de auth, etc.): error inline genérico
+        // sin filtrar mensaje crudo.
+        throw new Error(typeof body.error === "string" ? body.error : "Error al consultar la IA")
       }
       const data = (await res.json()) as {
         cached:   boolean

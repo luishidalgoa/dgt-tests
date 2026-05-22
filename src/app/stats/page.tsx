@@ -1,7 +1,9 @@
 import Link from "next/link"
+import { Prisma } from "@prisma/client"
 import { db } from "@/lib/db"
 import { requireUser } from "@/lib/auth"
 import { getTemaName, extractTemaPrefix, compareTemaCodes } from "@/lib/temas"
+import { ATTEMPT_STATS_WHERE, SQL_ATTEMPT_STATS_AND } from "@/lib/stats"
 import {
   ChevronLeft,
   ChartBar,
@@ -41,7 +43,7 @@ export default async function StatsPage() {
       COALESCE(SUM(CASE WHEN a.isCorrect = 1 THEN 1 ELSE 0 END), 0) AS correctAnswers
     FROM questions q
     LEFT JOIN answers a ON a.questionId = q.id
-    LEFT JOIN exam_attempts ea ON ea.id = a.attemptId AND ea.userId = ${user.id}
+    LEFT JOIN exam_attempts ea ON ea.id = a.attemptId AND ea.userId = ${user.id} ${Prisma.raw(SQL_ATTEMPT_STATS_AND)}
     WHERE q.codigoTema IS NOT NULL
       AND (a.id IS NULL OR ea.id IS NOT NULL)
     GROUP BY q.codigoTema
@@ -66,10 +68,18 @@ export default async function StatsPage() {
     compareTemaCodes(a.prefix, b.prefix)
   )
 
+  // Stats globales: excluyen los attempts mode="errores" (/test-errores) —
+  // son práctica de repaso, no rendimiento real. Ver src/lib/stats.ts.
   const [totalAttempts, totalAnswers, correctAnswers] = await Promise.all([
-    db.examAttempt.count({ where: { userId: user.id, finishedAt: { not: null } } }),
-    db.answer.count({ where: { attempt: { userId: user.id } } }),
-    db.answer.count({ where: { isCorrect: true, attempt: { userId: user.id } } }),
+    db.examAttempt.count({
+      where: { userId: user.id, finishedAt: { not: null }, ...ATTEMPT_STATS_WHERE },
+    }),
+    db.answer.count({
+      where: { attempt: { userId: user.id, ...ATTEMPT_STATS_WHERE } },
+    }),
+    db.answer.count({
+      where: { isCorrect: true, attempt: { userId: user.id, ...ATTEMPT_STATS_WHERE } },
+    }),
   ])
 
   const globalAccuracy = totalAnswers > 0 ? (correctAnswers / totalAnswers) * 100 : 0
