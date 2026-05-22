@@ -102,31 +102,77 @@ interface QuestionLite {
 // ── Manejo de Ctrl+C ────────────────────────────────────────────────────
 
 /**
- * Flag global que el loop principal consulta entre iteraciones. Al
- * recibir SIGINT (Ctrl+C) se activa, el loop sale limpiamente al final
- * del item en curso y el bloque post-loop persiste TODO lo procesado.
+ * Estado global mínimo para que el handler de SIGINT pueda hacer un
+ * emergency-save SÍNCRONO de lo procesado antes de salir, sin depender
+ * de que el loop o el item en curso terminen (en backoff de 90s sería
+ * un infierno de paciencia).
  *
- * Segundo Ctrl+C en menos de 5s = salida dura sin guardar (escape
- * hatch si la API está colgada y el item en curso no termina).
+ * El main() rellena estos refs nada más tener `data` y `jsonPath` listos.
+ */
+const _state: {
+  results:  Map<string, string> | null
+  data:     unknown  // Tema[] — usamos unknown para evitar forward ref
+  jsonPath: string | null
+} = { results: null, data: null, jsonPath: null }
+
+/**
+ * Flag que tanto el loop principal como los sleeps interrumpibles
+ * consultan para abortar limpiamente al recibir SIGINT.
  */
 let interrupted = false
 let lastSigintAt = 0
+
 process.on("SIGINT", () => {
   const now = Date.now()
   if (interrupted && now - lastSigintAt < 5000) {
-    console.log("\n⚠ Segundo Ctrl+C en <5s — salida dura (NO se guarda)")
+    console.log("\n⚠ Segundo Ctrl+C en <5s — salida dura inmediata.")
     process.exit(130)
   }
   interrupted = true
   lastSigintAt = now
-  console.log("\n⚠ Ctrl+C recibido. Termino el item actual y guardo… (otro Ctrl+C en 5s = salida dura)")
+  console.log("\n⚠ Ctrl+C recibido. Aborto backoffs y guardo lo procesado…")
+
+  // Emergency save SÍNCRONO. Esto se ejecuta AHORA, no espera a que
+  // el loop pase por su próximo check. Si el shell impacientado mata
+  // el proceso a base de Ctrl+Cs, al menos el JSON ya está en disco.
+  if (!DRY_RUN && _state.results && _state.data && _state.jsonPath && _state.results.size > 0) {
+    try {
+      const updated = applyTitles(_state.data as Tema[], _state.results)
+      writeFileSync(_state.jsonPath, JSON.stringify(updated, null, 2) + "\n", "utf8")
+      console.log(`💾 Emergency-save: ${_state.results.size} títulos en ${_state.jsonPath}`)
+    } catch (e) {
+      console.error("❌ Falló emergency-save:", (e as Error).message)
+    }
+  }
+  console.log("   (otro Ctrl+C en 5s = salida dura)")
 })
+
+/**
+ * Sleep "abortable": si el flag global `interrupted` se activa durante
+ * el wait, despierta antes y devuelve true. El caller decide qué hacer
+ * (típicamente, abortar el retry).
+ */
+async function sleepInterruptible(ms: number): Promise<boolean> {
+  const STEP = 250
+  let elapsed = 0
+  while (elapsed < ms) {
+    if (interrupted) return true
+    const wait = Math.min(STEP, ms - elapsed)
+    await new Promise((r) => setTimeout(r, wait))
+    elapsed += wait
+  }
+  return interrupted
+}
 
 // ── Main ────────────────────────────────────────────────────────────────
 
 async function main() {
   const jsonPath = resolve(process.cwd(), "src/data/manualIndice.json")
   const data = JSON.parse(readFileSync(jsonPath, "utf8")) as Tema[]
+  // Exponemos data y jsonPath al handler SIGINT (results se rellena
+  // unas líneas más abajo cuando se crea el Map).
+  _state.data = data
+  _state.jsonPath = jsonPath
 
   // 1) Recolectar nodos sin título (con al menos 1 pregunta)
   const pending: Node[] = []
@@ -193,6 +239,8 @@ async function main() {
 
   // 4) Procesar secuencialmente
   const results = new Map<string, string>()
+  // Exponer al handler SIGINT para emergency-save
+  _state.results = results
   let okCount = 0
   let errCount = 0
   let i = 0
@@ -225,7 +273,10 @@ async function main() {
       errCount++
       console.log(`${prefix}  ❌ ${(e as Error).message}`)
     }
-    await sleep(THROTTLE_MS)
+    // Throttle entre llamadas, también interrumpible (si Ctrl+C llega
+    // durante el wait, el próximo check de `interrupted` al inicio del
+    // loop hace break).
+    await sleepInterruptible(THROTTLE_MS)
   }
 
   // 5) Escribir o solo reportar
@@ -259,7 +310,11 @@ async function inferTitleWithRetry(
       if (!isRate || attempt === RETRY_BACKOFF_S.length) throw e
       const waitS = RETRY_BACKOFF_S[attempt]
       console.log(`${prefix}  ⏳ Rate limit, esperando ${waitS}s (intento ${attempt + 1}/${RETRY_BACKOFF_S.length})`)
-      await sleep(waitS * 1000)
+      const aborted = await sleepInterruptible(waitS * 1000)
+      // Si llegó Ctrl+C durante el wait, no reintentamos: propagamos el
+      // último error para que el catch del loop principal cuente como
+      // errCount y la próxima iteración del loop salga limpiamente.
+      if (aborted) throw e
     }
   }
   throw new Error("unreachable")
@@ -380,10 +435,6 @@ function applyTitles(data: Tema[], results: Map<string, string>): Tema[] {
       })),
     })),
   }))
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms))
 }
 
 main().catch((e) => {
