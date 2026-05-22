@@ -45,7 +45,7 @@ import { GET, POST } from "@/app/api/ai/explain/route"
 import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
 import { consumeToken, getQuotaStatus } from "@/lib/aiQuota"
-import { explainQuestion, GeminiError } from "@/lib/ai"
+import { explainQuestion, AIProviderError } from "@/lib/ai"
 
 const fakeUser = { id: 1, username: "luis" }
 const fakeQuota = { used: 1, max: 60, remaining: 59, month: "2026-05", resetsAt: "..." }
@@ -174,7 +174,7 @@ describe("/api/ai/explain POST — cobro de tokens", () => {
     } as never)
     // Gemini devuelve 429
     vi.mocked(explainQuestion).mockRejectedValueOnce(
-      new GeminiError(429, "Gemini 429: quota exceeded")
+      new AIProviderError("gemini", 429, "Gemini 429: quota exceeded")
     )
 
     const res = await POST(postBody({ questionId: 100 }))
@@ -202,7 +202,7 @@ describe("/api/ai/explain POST — cobro de tokens", () => {
       ],
     } as never)
     vi.mocked(explainQuestion).mockRejectedValueOnce(
-      new GeminiError(500, "Gemini 500: internal")
+      new AIProviderError("gemini", 500, "Gemini 500: internal")
     )
 
     const res = await POST(postBody({ questionId: 100 }))

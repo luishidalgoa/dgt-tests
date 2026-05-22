@@ -22,10 +22,17 @@ export type ConfigCategory = "quotas" | "features" | "messages" | "integrations"
 export interface ConfigOption {
   /** Valor que se guarda en BBDD. */
   value:        string
-  /** Texto corto que aparece en el dropdown. */
+  /** Título corto: aparece como nombre de la opción. */
   label:        string
-  /** Texto largo que aparece bajo el dropdown cuando esta opción está seleccionada. */
+  /** Una línea opcional debajo del label, solo se usa en variant 'cards'. */
+  subtitle?:    string
+  /** Texto largo descriptivo. En variant 'select' aparece debajo del select;
+   *  en variant 'cards' aparece como "footer" del grupo cuando esta opción
+   *  está seleccionada. */
   description?: string
+  /** Hint para mostrar un icono en variant 'cards'. Valores soportados:
+   *  'sparkles', 'zap', 'brain', 'cpu'. Otros se ignoran. */
+  iconHint?:    string
 }
 
 export interface ConfigEntry {
@@ -36,12 +43,18 @@ export interface ConfigEntry {
   description?: string
   category:     ConfigCategory
   /**
-   * Si se define, el campo se renderiza como dropdown en /admin (en
-   * vez del input/textarea por defecto). Solo aplica a entries de
-   * tipo "string". La descripción de cada opción se muestra debajo
-   * del select cuando se selecciona.
+   * Si se define, el campo se renderiza con un selector (dropdown o cards)
+   * en vez del input/textarea por defecto. Solo aplica a entries 'string'.
    */
   options?:     ConfigOption[]
+  /**
+   * Cómo renderizar las options:
+   *  - 'select' (default): <select> nativo con descripción debajo.
+   *  - 'cards':            cards horizontales tipo radio (con icono y
+   *                        subtitle). Útil para elegir entre 2-4 opciones
+   *                        muy visuales (p.ej. proveedor de IA).
+   */
+  optionVariant?: "select" | "cards"
 }
 
 export const CONFIG_CATALOG: ConfigEntry[] = [
@@ -117,6 +130,31 @@ export const CONFIG_CATALOG: ConfigEntry[] = [
 
   // ── Integraciones IA ──────────────────────────────────────────────
   {
+    key:           "AI_PROVIDER",
+    type:          "string",
+    default:       "gemini",
+    label:         "Proveedor de IA",
+    description:   "Motor de IA que se usa en /api/ai/explain. Puedes cambiarlo en caliente sin reiniciar.",
+    category:      "integrations",
+    optionVariant: "cards",
+    options: [
+      {
+        value:       "gemini",
+        label:       "Google Gemini",
+        subtitle:    "Multimodal · 250 RPD free",
+        iconHint:    "sparkles",
+        description: "Modelos Gemini de Google AI. Multimodal (entiende imágenes de señales DGT). Free tier limitado a 250 RPD en Flash. La API key se gestiona en /admin/secrets como GEMINI_API_KEY.",
+      },
+      {
+        value:       "groq",
+        label:       "Groq (Llama)",
+        subtitle:    "Ultra rápido · 14.400 RPD free",
+        iconHint:    "zap",
+        description: "Inferencia ultrarrápida sobre modelos Llama 3.x mediante LPU. Free tier muy generoso (14.400 RPD). NO procesa imágenes en esta versión — las preguntas con foto se analizan solo a partir del texto. API key en /admin/secrets como GROQ_API_KEY.",
+      },
+    ],
+  },
+  {
     key:         "GEMINI_MODEL",
     type:        "string",
     default:     "gemini-flash-latest",
@@ -143,6 +181,36 @@ export const CONFIG_CATALOG: ConfigEntry[] = [
         value:       "gemini-2.5-flash",
         label:       "Flash 2.5 — versión fijada",
         description: "Apunta a la versión 2.5 concreta de Flash, sin auto-actualizar. Útil si quieres estabilidad absoluta. Mismas cuotas y rendimiento que 'flash-latest' hoy mismo.",
+      },
+    ],
+  },
+  {
+    key:         "GROQ_MODEL",
+    type:        "string",
+    default:     "llama-3.3-70b-versatile",
+    label:       "Modelo Groq (Llama)",
+    description: "Modelo de Llama que ejecuta Groq para /api/ai/explain (solo aplica si AI_PROVIDER=groq).",
+    category:    "integrations",
+    options: [
+      {
+        value:       "llama-3.3-70b-versatile",
+        label:       "Llama 3.3 70B Versatile (recomendado)",
+        description: "Modelo grande, calidad alta en español y razonamiento legal. ~275 TPM en free tier. Mejor relación calidad/coste.",
+      },
+      {
+        value:       "llama-3.1-8b-instant",
+        label:       "Llama 3.1 8B Instant — más rápido",
+        description: "Modelo pequeño, latencia bajísima (<300ms). Calidad menor para preguntas con matices. Útil si vas a hacer muchísimas llamadas.",
+      },
+      {
+        value:       "mixtral-8x7b-32768",
+        label:       "Mixtral 8x7B — clásico",
+        description: "MoE de Mistral con contexto largo (32k). Buen español, calidad media-alta. Útil como fallback.",
+      },
+      {
+        value:       "gemma2-9b-it",
+        label:       "Gemma 2 9B IT — alternativa Google",
+        description: "Modelo de Google ejecutado en Groq. Calidad correcta, latencia baja. Útil para A/B testing.",
       },
     ],
   },
@@ -198,4 +266,22 @@ export async function getWelcomeMessage(): Promise<string> {
 export async function getGeminiModel(): Promise<string> {
   const entry = CONFIG_CATALOG.find((c) => c.key === "GEMINI_MODEL")!
   return getConfig("GEMINI_MODEL", entry.default as string)
+}
+
+/** Modelo de Llama que usa Groq. Solo aplica si AI_PROVIDER='groq'. */
+export async function getGroqModel(): Promise<string> {
+  const entry = CONFIG_CATALOG.find((c) => c.key === "GROQ_MODEL")!
+  return getConfig("GROQ_MODEL", entry.default as string)
+}
+
+export type AIProviderName = "gemini" | "groq"
+
+/**
+ * Proveedor de IA activo. Default 'gemini'. Si en BBDD hay un valor
+ * inválido (alguien metió 'azure' por ejemplo), caemos al default
+ * 'gemini' para que la app siga funcionando.
+ */
+export async function getAIProvider(): Promise<AIProviderName> {
+  const value = await getConfig("AI_PROVIDER", "gemini")
+  return value === "groq" ? "groq" : "gemini"
 }

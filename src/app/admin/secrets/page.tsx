@@ -4,6 +4,7 @@ import { decryptSecret } from "@/lib/crypto"
 import { detectRuntimeEnv, detectStripeMode } from "@/lib/runtimeEnv"
 import { detectEnvFiles, getEnvFileForVar } from "@/lib/envFiles"
 import { SecretForm } from "./SecretForm"
+import { TestAIConnectionButton } from "@/components/TestAIConnectionButton"
 import { KeyRound, ExternalLink, Cloud, Laptop } from "lucide-react"
 
 export const dynamic = "force-dynamic"
@@ -157,6 +158,16 @@ export default async function AdminSecretsPage() {
               )}
 
               <SecretForm secretKey={entry.key} hasValue={Boolean(row)} />
+
+              {/* Botón "Probar conexión" solo para API keys de proveedores
+                  de IA. Hace un ping real al modelo configurado y reporta
+                  latencia + ok/error vía toast. */}
+              {entry.aiProvider && (
+                <TestAIConnectionButton
+                  provider={entry.aiProvider}
+                  label={entry.label}
+                />
+              )}
 
               {entry.providerUrl && (
                 <a

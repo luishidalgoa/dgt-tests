@@ -22,6 +22,12 @@ export interface SecretEntry {
   formatHint?:  string
   /** Pista del proveedor para enlazar al dashboard. */
   providerUrl?: string
+  /**
+   * Si este secret es la API key de un proveedor de IA, su identificador.
+   * El panel renderiza un botón "Probar conexión" debajo del form para
+   * hacer un health check en vivo con la key + modelo configurados.
+   */
+  aiProvider?:  "gemini" | "groq"
 }
 
 export const SECRET_CATALOG: SecretEntry[] = [
@@ -42,9 +48,18 @@ export const SECRET_CATALOG: SecretEntry[] = [
   {
     key:          "GEMINI_API_KEY",
     label:        "Gemini API key",
-    description:  "Para el chatbot IA que explica las preguntas del test.",
+    description:  "Para el chatbot IA que explica las preguntas del test (cuando AI_PROVIDER=gemini).",
     formatHint:   "AIza...",
     providerUrl:  "https://aistudio.google.com/apikey",
+    aiProvider:   "gemini",
+  },
+  {
+    key:          "GROQ_API_KEY",
+    label:        "Groq API key",
+    description:  "Proveedor IA alternativo basado en Llama (cuando AI_PROVIDER=groq). Más throughput, latencia menor.",
+    formatHint:   "gsk_...",
+    providerUrl:  "https://console.groq.com/keys",
+    aiProvider:   "groq",
   },
   {
     key:          "GMAIL_APP_PASSWORD",

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
-import { explainQuestion, GeminiError, type AIExplanationResult } from "@/lib/ai"
+import { explainQuestion, AIProviderError, type AIExplanationResult } from "@/lib/ai"
 import { consumeToken, getQuotaStatus } from "@/lib/aiQuota"
 
 const postSchema = z.object({
@@ -211,10 +211,10 @@ export async function POST(req: Request) {
     })
   } catch (err) {
     await refundToken()
-    // Rate limit de Gemini (cuota gratuita / saturación) → respondemos
+    // Rate limit del provider (cuota agotada / saturación) → respondemos
     // con un código identificable para que el front muestre un toast
-    // amigable en vez de un error técnico.
-    if (err instanceof GeminiError && err.isRateLimit) {
+    // amigable en vez de un error técnico. Aplica a Gemini y a Groq.
+    if (err instanceof AIProviderError && err.isRateLimit) {
       return NextResponse.json(
         {
           error: "La IA no está disponible ahora mismo. Inténtalo en unos minutos.",
