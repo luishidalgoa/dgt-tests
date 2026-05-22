@@ -1,8 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server"
 import type Stripe from "stripe"
 import { db } from "@/lib/db"
-import { getStripe, STRIPE_WEBHOOK_SECRET, getSubscriptionPeriodEnd, willNotAutoRenew, getSubscriptionEndDate } from "@/lib/stripe"
+import { getStripe, STRIPE_WEBHOOK_SECRET, getSubscriptionPeriodEnd, willNotAutoRenew, getSubscriptionEndDate, appUrl } from "@/lib/stripe"
 import { handleChargeRefunded } from "@/lib/handleChargeRefunded"
+import { composePaymentFailedEmail, composeInvoiceUpcomingEmail, sendUserEmail } from "@/lib/userEmails"
 
 /**
  * Stripe webhook handler.
@@ -67,6 +68,11 @@ export async function POST(req: NextRequest) {
       case "invoice.payment_failed": {
         const invoice = event.data.object as Stripe.Invoice
         await onInvoicePaymentFailed(invoice)
+        break
+      }
+      case "invoice.upcoming": {
+        const invoice = event.data.object as Stripe.Invoice
+        await onInvoiceUpcoming(invoice)
         break
       }
       case "charge.refunded": {
@@ -189,26 +195,73 @@ async function onSubscriptionUpdated(sub: Stripe.Subscription) {
  *   - Nuestro `hasFullAccess` permite past_due como grace period
  *   - El user mantiene acceso PRO
  *
- * Aquí solo logueamos para tener trazabilidad. El email al user lo
- * implementaremos en Fase 89 (Resend, igual que las alertas Turso).
+ * Adicionalmente enviamos email al user para que actualice su tarjeta
+ * antes de quedarse sin acceso (Fase 89).
  */
 async function onInvoicePaymentFailed(invoice: Stripe.Invoice) {
-  const inv = invoice as Stripe.Invoice & {
-    subscription?: string | { id: string } | null
-  }
-  const subId = typeof inv.subscription === "string"
-    ? inv.subscription
-    : inv.subscription?.id ?? null
+  const customerId = typeof invoice.customer === "string"
+    ? invoice.customer
+    : invoice.customer?.id ?? null
   console.warn("[stripe webhook] invoice.payment_failed", {
-    invoiceId:        invoice.id,
-    subscriptionId:   subId,
-    customerId:       typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id,
-    amountDue:        invoice.amount_due,
-    attemptCount:     invoice.attempt_count,
+    invoiceId:          invoice.id,
+    customerId,
+    amountDue:          invoice.amount_due,
+    attemptCount:       invoice.attempt_count,
     nextPaymentAttempt: invoice.next_payment_attempt,
   })
-  // El customer.subscription.updated que viene poco después se
-  // encarga de actualizar status="past_due" en BBDD.
+
+  if (!customerId) return
+  const user = await db.user.findFirst({ where: { stripeCustomerId: customerId } })
+  if (!user || !user.email) {
+    console.warn("[stripe webhook] invoice.payment_failed: sin user/email, skip email")
+    return
+  }
+
+  const { subject, html } = composePaymentFailedEmail(
+    { username: user.username, displayName: user.displayName, email: user.email },
+    {
+      amountCents:   invoice.amount_due ?? 0,
+      currency:      invoice.currency ?? "eur",
+      nextAttemptTs: invoice.next_payment_attempt ?? null,
+      attemptCount:  invoice.attempt_count ?? 1,
+      portalUrl:     appUrl("/settings"),
+    }
+  )
+  await sendUserEmail({ to: user.email, subject, html })
+}
+
+/**
+ * Aviso ~1 día antes de un cobro de renovación (configurable en Stripe).
+ * No cambia BBDD; solo notifica al user.
+ */
+async function onInvoiceUpcoming(invoice: Stripe.Invoice) {
+  const customerId = typeof invoice.customer === "string"
+    ? invoice.customer
+    : invoice.customer?.id ?? null
+  console.log("[stripe webhook] invoice.upcoming", {
+    invoiceId:    invoice.id,
+    customerId,
+    amountDue:    invoice.amount_due,
+    periodEnd:    invoice.period_end,
+  })
+
+  if (!customerId) return
+  const user = await db.user.findFirst({ where: { stripeCustomerId: customerId } })
+  if (!user || !user.email) {
+    console.warn("[stripe webhook] invoice.upcoming: sin user/email, skip email")
+    return
+  }
+
+  const { subject, html } = composeInvoiceUpcomingEmail(
+    { username: user.username, displayName: user.displayName, email: user.email },
+    {
+      amountCents:    invoice.amount_due ?? 0,
+      currency:       invoice.currency ?? "eur",
+      willChargeOnTs: invoice.period_end ?? Math.floor(Date.now() / 1000),
+      portalUrl:      appUrl("/settings"),
+    }
+  )
+  await sendUserEmail({ to: user.email, subject, html })
 }
 
 async function onSubscriptionDeleted(sub: Stripe.Subscription) {
