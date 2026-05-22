@@ -401,7 +401,32 @@ export function ExamRunner({
                 >
                   {current + 1}
                 </span>
-                <h2 className="text-lg font-semibold leading-snug m-0">{q.enunciado}</h2>
+                <h2 className="text-lg font-semibold leading-snug m-0">
+                  {q.enunciado}
+                  {q.aiGenerated && (
+                    <span
+                      title="Esta pregunta fue generada por IA, revisada y aprobada por un admin"
+                      style={{
+                        marginLeft:   8,
+                        display:      "inline-flex",
+                        alignItems:   "center",
+                        gap:          3,
+                        padding:      "2px 7px",
+                        borderRadius: 999,
+                        background:   "rgba(168, 85, 247, 0.10)",
+                        border:       "1px solid rgba(168, 85, 247, 0.30)",
+                        color:        "rgb(126, 34, 206)",
+                        fontSize:     10.5,
+                        fontWeight:   800,
+                        letterSpacing: "0.04em",
+                        verticalAlign: "middle",
+                        cursor:       "help",
+                      }}
+                    >
+                      ✨ IA
+                    </span>
+                  )}
+                </h2>
               </div>
 
               <div className="space-y-2 mt-4">

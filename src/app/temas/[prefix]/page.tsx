@@ -315,6 +315,7 @@ export default async function TemaPage({ params, searchParams }: PageProps) {
       // Práctica por tema: siempre enviamos solución para feedback inline
       correctOptionId: q.options.find((o) => o.isCorrect)?.id ?? null,
       explicacion:     q.explicacion ?? null,
+      aiGenerated:     q.aiGenerated,
     })),
   }
 

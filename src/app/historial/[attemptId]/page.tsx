@@ -163,7 +163,29 @@ export default async function HistoryDetailPage({ params }: PageProps) {
                       ) : (
                         <XCircle className={`h-5 w-5 ${isBlank ? "text-slate-400" : "text-red-500"} flex-shrink-0 mt-1`} />
                       )}
-                      <h3 className="text-base font-medium leading-snug">{a.question.enunciado}</h3>
+                      <h3 className="text-base font-medium leading-snug">
+                        {a.question.enunciado}
+                        {a.question.aiGenerated && (
+                          <span
+                            title="Pregunta generada por IA, revisada por un admin"
+                            className="font-mono-tabular"
+                            style={{
+                              marginLeft: 8,
+                              padding: "2px 7px",
+                              borderRadius: 999,
+                              background: "rgba(168, 85, 247, 0.10)",
+                              border: "1px solid rgba(168, 85, 247, 0.30)",
+                              color: "rgb(126, 34, 206)",
+                              fontSize: 10.5,
+                              fontWeight: 800,
+                              verticalAlign: "middle",
+                              cursor: "help",
+                            }}
+                          >
+                            ✨ IA
+                          </span>
+                        )}
+                      </h3>
                     </div>
 
                     <div className="space-y-1.5">

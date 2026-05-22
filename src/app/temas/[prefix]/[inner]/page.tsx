@@ -203,6 +203,7 @@ export default async function InnerBlockPage({ params, searchParams }: PageProps
       options:    q.options.map((o) => ({ id: o.id, letra: o.letra, texto: o.texto })),
       correctOptionId: q.options.find((o) => o.isCorrect)?.id ?? null,
       explicacion:     q.explicacion ?? null,
+      aiGenerated:     q.aiGenerated,
     })),
   }
 

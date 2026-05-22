@@ -17,6 +17,8 @@ export interface QuestionData {
   correctOptionId?: number | null
   /** Solo viene del servidor cuando el usuario es invitado */
   explicacion?: string | null
+  /** true si esta pregunta fue generada por IA (mostrar badge en UI) */
+  aiGenerated?: boolean
 }
 
 export interface TestRunnerData {

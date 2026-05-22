@@ -153,6 +153,7 @@ export default async function TestErroresPage({ searchParams }: PageProps) {
       // Modo errores: feedback inline al responder
       correctOptionId: q.options.find((o) => o.isCorrect)?.id ?? null,
       explicacion:     q.explicacion ?? null,
+      aiGenerated:     q.aiGenerated,
     })),
   }
 
