@@ -17,6 +17,7 @@ import {
   type AIQuestionPayload,
   type AIExplanationResult,
   type ProviderPingResult,
+  type AICompleteOptions,
 } from "./types"
 
 const ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models"
@@ -147,6 +148,58 @@ async function explainQuestion(payload: AIQuestionPayload): Promise<AIExplanatio
 }
 
 /**
+ * Llamada genérica al modelo. Gemini no distingue 'system' como rol
+ * separado — concatenamos system+user en un solo prompt, que es lo
+ * que hace internamente el SDK oficial también.
+ */
+async function complete(
+  systemPrompt: string,
+  userPrompt:   string,
+  opts: AICompleteOptions = {},
+): Promise<string> {
+  const { apiKey, model } = await getEnv()
+  const url = `${ENDPOINT}/${encodeURIComponent(model)}:generateContent`
+
+  const fullPrompt = systemPrompt
+    ? `${systemPrompt}\n\n${userPrompt}`
+    : userPrompt
+
+  const generationConfig: Record<string, unknown> = {}
+  if (opts.temperature !== undefined) generationConfig.temperature      = opts.temperature
+  if (opts.maxTokens)                 generationConfig.maxOutputTokens  = opts.maxTokens
+  if (opts.jsonMode)                  generationConfig.responseMimeType = "application/json"
+
+  const body: Record<string, unknown> = {
+    contents: [{ parts: [{ text: fullPrompt }] }],
+  }
+  if (Object.keys(generationConfig).length > 0) {
+    body.generationConfig = generationConfig
+  }
+
+  const res = await fetch(url, {
+    method:  "POST",
+    headers: {
+      "Content-Type":  "application/json",
+      "X-goog-api-key": apiKey,
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "")
+    throw new AIProviderError("gemini", res.status, `Gemini ${res.status}: ${text || res.statusText}`)
+  }
+
+  const data = (await res.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[]
+  }
+  const text =
+    data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("").trim() ?? ""
+  if (!text) throw new AIProviderError("gemini", 500, "Gemini no devolvió texto")
+  return text
+}
+
+/**
  * Ping = una llamada minimal "responde 'ok'" para verificar que la API key
  * y el modelo son válidos. Coste: ~10 tokens.
  */
@@ -174,5 +227,6 @@ export const geminiProvider: AIProvider = {
   name:        "gemini",
   displayName: "Google Gemini",
   explainQuestion,
+  complete,
   ping,
 }

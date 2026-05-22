@@ -1,16 +1,18 @@
 /**
  * Recorre los nodos de src/data/manualIndice.json sin título y los infiere
- * llamando a Gemini con un sample de hasta 5 preguntas representativas del
- * nodo, pasándole el contexto jerárquico (tema padre + bloque padre).
+ * llamando a un proveedor de IA con un sample de hasta 5 preguntas
+ * representativas del nodo + contexto jerárquico (tema padre + bloque padre).
  *
  * Uso:
- *   npm run manual:infer-titles                  # procesa TODOS los vacíos
- *   npm run manual:infer-titles -- --dry-run     # solo muestra sugerencias
- *   npm run manual:infer-titles -- --limit 5     # procesa solo los 5 primeros
- *   npm run manual:infer-titles -- --dry-run --limit 5
+ *   npm run manual:infer-titles                            # provider por defecto (groq, 14.4k RPD)
+ *   npm run manual:infer-titles -- --provider gemini       # usa Gemini en su lugar
+ *   npm run manual:infer-titles -- --dry-run               # solo muestra sugerencias
+ *   npm run manual:infer-titles -- --limit 5               # procesa solo los 5 primeros
+ *   npm run manual:infer-titles -- --provider groq --limit 20 --dry-run
  *
- * Modelo: GEMINI_MODEL del entorno, o "gemini-flash-latest" por defecto.
- * Auth:   GEMINI_API_KEY desde BBDD encriptada (gana) o env (fallback).
+ * Auth y modelo se leen de BBDD/env vía AIProvider:
+ *   - Groq:   GROQ_API_KEY  + GROQ_MODEL  (default llama-3.3-70b-versatile)
+ *   - Gemini: GEMINI_API_KEY + GEMINI_MODEL (default gemini-flash-latest)
  *
  * NOTA: el script NO pisa títulos no-vacíos. Si quieres re-generar uno
  * que ya tiene título, bórralo a mano antes de ejecutar.
@@ -20,8 +22,11 @@ import { readFileSync, writeFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { db } from "@/lib/db"
 import { classifyCodigoTema } from "@/lib/temas"
+import { AIProviderError, type AICompleteOptions } from "@/lib/ai"
+import type { AIProvider } from "@/lib/aiProviders/types"
 
 // ── Args ────────────────────────────────────────────────────────────────
+
 const DRY_RUN = process.argv.includes("--dry-run")
 const LIMIT   = (() => {
   const idx = process.argv.indexOf("--limit")
@@ -30,26 +35,35 @@ const LIMIT   = (() => {
   return Number.isFinite(n) && n > 0 ? n : Infinity
 })()
 /**
- * Throttle entre llamadas. Gemini Free Tier ≈ 15 RPM, así que 4500ms
- * (~13 RPM) deja margen. Si tienes plan de pago puedes bajarlo con
- * `--throttle 200`. Si sigues recibiendo 429, súbelo a 6000.
+ * Provider a usar — default groq porque tiene 14.400 RPD free (58x
+ * más que Gemini Flash). Si quieres usar Gemini, --provider gemini.
+ */
+const PROVIDER_NAME: "gemini" | "groq" = (() => {
+  const idx = process.argv.indexOf("--provider")
+  if (idx < 0) return "groq"
+  const val = process.argv[idx + 1] ?? ""
+  return val === "gemini" ? "gemini" : "groq"
+})()
+/**
+ * Throttle entre llamadas. Default ajustado por provider:
+ *   - groq:   200ms  (~300 RPM, sobra free tier de 30 RPM Vision o
+ *                     mucho más en text-only; ajustar con --throttle)
+ *   - gemini: 4500ms (~13 RPM, debajo del límite gratuito de 15 RPM)
  */
 const THROTTLE_MS = (() => {
   const idx = process.argv.indexOf("--throttle")
-  if (idx < 0) return 4500
-  const n = parseInt(process.argv[idx + 1] ?? "", 10)
-  return Number.isFinite(n) && n >= 0 ? n : 4500
+  if (idx >= 0) {
+    const n = parseInt(process.argv[idx + 1] ?? "", 10)
+    if (Number.isFinite(n) && n >= 0) return n
+  }
+  return PROVIDER_NAME === "groq" ? 200 : 4500
 })()
 const MAX_QUESTIONS_PER_NODE = 5
-/** Espera al recibir HTTP 429, en segundos. Incrementa entre reintentos. */
 const RETRY_BACKOFF_S = [30, 60, 90]
-/** Auto-guardar el JSON cada N éxitos para no perder trabajo si peta. */
 const AUTOSAVE_EVERY = 25
 
-// ── Constantes Gemini ───────────────────────────────────────────────────
-const ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models"
-
 // ── Tipos del JSON ──────────────────────────────────────────────────────
+
 interface SubBloque { codigo: string; titulo: string; _preguntas: number }
 interface Bloque    { codigo: string; titulo: string; _preguntas: number; subBloques: SubBloque[] }
 interface Tema      { codigo: string; titulo: string; _preguntas: number; bloques:    Bloque[] }
@@ -102,12 +116,11 @@ async function main() {
       }
     }
   }
-
-  // Aplicar --limit
   const toProcess = pending.slice(0, LIMIT)
 
   console.log(`\n📋 ${pending.length} nodos sin título · procesando ${toProcess.length}`)
-  console.log(`   throttle: ${THROTTLE_MS}ms entre llamadas (~${Math.round(60000 / Math.max(THROTTLE_MS, 1))} RPM)`)
+  console.log(`   proveedor: ${PROVIDER_NAME}`)
+  console.log(`   throttle:  ${THROTTLE_MS}ms entre llamadas (~${Math.round(60000 / Math.max(THROTTLE_MS, 1))} RPM)`)
   if (DRY_RUN) console.log(`   modo --dry-run: no se escribirá el JSON\n`)
   else          console.log(``)
 
@@ -131,15 +144,10 @@ async function main() {
     }
   }
 
-  // 3) Auth Gemini
-  const { getEffectiveSecret } = await import("@/lib/secretCatalog")
-  const apiKey = await getEffectiveSecret("GEMINI_API_KEY")
-  if (!apiKey) throw new Error("Falta GEMINI_API_KEY (ni .env ni /admin/secrets)")
-  // Mismo default que src/lib/ai.ts: flash-lite (1000 RPD en free tier).
-  // Override con env GEMINI_MODEL si quieres probar otro modelo concreto.
-  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite"
+  // 3) Resolver provider (Gemini o Groq según --provider)
+  const provider = await loadProvider(PROVIDER_NAME)
 
-  // 4) Procesar uno a uno (secuencial para no saturar la API)
+  // 4) Procesar secuencialmente
   const results = new Map<string, string>()
   let okCount = 0
   let errCount = 0
@@ -155,12 +163,11 @@ async function main() {
     }
 
     try {
-      const title = await inferTitleWithRetry(apiKey, model, node, questions, prefix)
+      const title = await inferTitleWithRetry(provider, node, questions, prefix)
       results.set(node.codigo, title)
       okCount++
       console.log(`${prefix}  ✅ "${title}"`)
 
-      // Auto-save periódico para no perder trabajo si algo peta
       if (!DRY_RUN && okCount > 0 && okCount % AUTOSAVE_EVERY === 0) {
         const partial = applyTitles(data, results)
         writeFileSync(jsonPath, JSON.stringify(partial, null, 2) + "\n", "utf8")
@@ -175,7 +182,7 @@ async function main() {
 
   // 5) Escribir o solo reportar
   console.log(`\n────────────────────────────────────`)
-  console.log(`Procesados: ${toProcess.length}  ·  OK: ${okCount}  ·  Errores: ${errCount}`)
+  console.log(`Provider: ${PROVIDER_NAME}  ·  Procesados: ${toProcess.length}  ·  OK: ${okCount}  ·  Errores: ${errCount}`)
 
   if (!DRY_RUN && results.size > 0) {
     const updated = applyTitles(data, results)
@@ -188,70 +195,54 @@ async function main() {
   await db.$disconnect()
 }
 
-// ── Inferencia con retry para 429 (rate limit) ──────────────────────────
+// ── Inferencia con retry para 429 ───────────────────────────────────────
 
-/**
- * Wrap de inferTitle con reintentos automáticos cuando Gemini devuelve
- * HTTP 429 (rate limit). Espera tiempos crecientes entre reintentos.
- * Otros errores propagan sin reintento.
- */
 async function inferTitleWithRetry(
-  apiKey: string,
-  model:  string,
-  node:   Node,
+  provider: AIProvider,
+  node:     Node,
   questions: QuestionLite[],
-  prefix: string,
+  prefix:   string,
 ): Promise<string> {
   for (let attempt = 0; attempt <= RETRY_BACKOFF_S.length; attempt++) {
     try {
-      return await inferTitle(apiKey, model, node, questions)
+      return await inferTitle(provider, node, questions)
     } catch (e) {
-      const msg = (e as Error).message
-      const is429 = msg.includes("HTTP 429")
-      if (!is429 || attempt === RETRY_BACKOFF_S.length) throw e
+      const isRate = e instanceof AIProviderError && e.isRateLimit
+      if (!isRate || attempt === RETRY_BACKOFF_S.length) throw e
       const waitS = RETRY_BACKOFF_S[attempt]
-      console.log(`${prefix}  ⏳ HTTP 429, esperando ${waitS}s antes de reintentar (intento ${attempt + 1}/${RETRY_BACKOFF_S.length})`)
+      console.log(`${prefix}  ⏳ Rate limit, esperando ${waitS}s (intento ${attempt + 1}/${RETRY_BACKOFF_S.length})`)
       await sleep(waitS * 1000)
     }
   }
   throw new Error("unreachable")
 }
 
-// ── Inferencia (1 llamada a Gemini) ─────────────────────────────────────
-
 async function inferTitle(
-  apiKey: string,
-  model:  string,
-  node:   Node,
+  provider:  AIProvider,
+  node:      Node,
   questions: QuestionLite[],
 ): Promise<string> {
-  const prompt = buildPrompt(node, questions)
-  const url    = `${ENDPOINT}/${encodeURIComponent(model)}:generateContent`
+  const systemPrompt = [
+    "Eres un experto en el temario del permiso de conducir B español (DGT / AEOL).",
+    "Recibes varias preguntas del examen teórico que pertenecen al mismo nodo del temario,",
+    "junto con su contexto jerárquico (tema padre + bloque padre).",
+    "Tu trabajo es darme un TÍTULO CORTO que describa el tema concreto que abordan.",
+    "",
+    "Devuelves EXCLUSIVAMENTE un JSON con esta forma:  { \"titulo\": \"...\" }",
+    "",
+    "Reglas del título:",
+    "- Entre 3 y 7 palabras, en español.",
+    "- Estilo del manual de autoescuela: formal, claro, sin floritura.",
+    "- Mayúscula SOLO en la primera palabra (capitalize), sin punto final.",
+    "- NO repitas el título exacto del Tema o del Bloque padre — sé específico de este sub-nivel.",
+    "- Sin emojis, sin signos de exclamación, sin comillas.",
+  ].join("\n")
 
-  const res = await fetch(url, {
-    method:  "POST",
-    headers: {
-      "Content-Type":   "application/json",
-      "X-goog-api-key": apiKey,
-    },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-    }),
-  })
+  const userPrompt = buildUserPrompt(node, questions)
+  const opts: AICompleteOptions = { jsonMode: true, temperature: 0.2, maxTokens: 200 }
+  const text = await provider.complete(systemPrompt, userPrompt, opts)
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "")
-    throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`)
-  }
-
-  const data = (await res.json()) as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[]
-  }
-  const text =
-    data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("").trim() ?? ""
-  if (!text) throw new Error("respuesta vacía")
-
-  // Limpiar y parsear JSON
+  // Parsear JSON robusto (algunos modelos meten ```json fences a pesar de jsonMode)
   const cleaned = text
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/\s*```$/i, "")
@@ -270,7 +261,7 @@ async function inferTitle(
   return parsed.titulo.trim()
 }
 
-function buildPrompt(node: Node, questions: QuestionLite[]): string {
+function buildUserPrompt(node: Node, questions: QuestionLite[]): string {
   const contextLines: string[] = []
   if (node.temaTitle) contextLines.push(`- Tema TC ${node.temaCode}: "${node.temaTitle}"`)
   if (node.bloqueTitle && node.bloqueCode) {
@@ -293,30 +284,25 @@ function buildPrompt(node: Node, questions: QuestionLite[]): string {
     .join("\n\n")
 
   return [
-    "Eres un experto en el temario del permiso de conducir B español (DGT / AEOL).",
-    "Te paso varias preguntas del examen teórico que pertenecen al mismo nodo del temario.",
-    "Tu trabajo es darme un TÍTULO CORTO que describa el tema concreto que abordan.",
-    "",
     "CONTEXTO JERÁRQUICO:",
     ...contextLines,
     "",
     `PREGUNTAS DEL NODO (${questions.length}):`,
     "",
     qsBlock,
-    "",
-    "Devuelve EXCLUSIVAMENTE un JSON sin markdown ni explicaciones extra:",
-    '{ "titulo": "..." }',
-    "",
-    "Reglas del título:",
-    "- Entre 3 y 7 palabras, en español.",
-    "- Estilo del manual de autoescuela: formal, claro, sin floritura.",
-    "- Mayúscula SOLO en la primera palabra (estilo capitalize), sin punto final.",
-    "- NO repitas el título exacto del Tema o del Bloque padre — sé específico de este sub-nivel.",
-    "- Sin emojis, sin signos de exclamación, sin comillas.",
   ].join("\n")
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────
+
+async function loadProvider(name: "gemini" | "groq"): Promise<AIProvider> {
+  if (name === "groq") {
+    const { groqProvider } = await import("@/lib/aiProviders/groq")
+    return groqProvider
+  }
+  const { geminiProvider } = await import("@/lib/aiProviders/gemini")
+  return geminiProvider
+}
 
 function applyTitles(data: Tema[], results: Map<string, string>): Tema[] {
   return data.map((t) => ({

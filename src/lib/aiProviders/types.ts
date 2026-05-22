@@ -31,6 +31,18 @@ export type ProviderPingResult =
   | { ok: true;  latencyMs: number; model: string }
   | { ok: false; error: string }
 
+/** Opciones genéricas para .complete() — válidas en cualquier provider. */
+export interface AICompleteOptions {
+  /** Pide al modelo que devuelva JSON estricto. Internamente:
+   *   - Gemini: setea generationConfig.responseMimeType = "application/json"
+   *   - Groq:   setea response_format = { type: "json_object" } */
+  jsonMode?:    boolean
+  /** 0–1, default 0.2 (poco creativo, ideal para extracción). */
+  temperature?: number
+  /** Tope de output tokens. Default 1024. */
+  maxTokens?:   number
+}
+
 export interface AIProvider {
   /** Identificador interno (también se usa para AI_PROVIDER en configCatalog). */
   readonly name: "gemini" | "groq"
@@ -38,6 +50,15 @@ export interface AIProvider {
   readonly displayName: string
   /** Llamada principal: explica una pregunta del examen. */
   explainQuestion(payload: AIQuestionPayload): Promise<AIExplanationResult>
+  /**
+   * Llamada genérica para tareas custom (scripts batch, herramientas
+   * admin, etc.). Devuelve el texto crudo de la respuesta — el caller
+   * se encarga de parsearlo (JSON normalmente).
+   *
+   * Errores HTTP 429/503 se propagan como AIProviderError.isRateLimit
+   * para que el caller pueda hacer retry con backoff.
+   */
+  complete(systemPrompt: string, userPrompt: string, opts?: AICompleteOptions): Promise<string>
   /** Health check minimal — usado por el botón "Probar conexión" de /admin. */
   ping(): Promise<ProviderPingResult>
 }

@@ -21,6 +21,7 @@ import {
   type AIQuestionPayload,
   type AIExplanationResult,
   type ProviderPingResult,
+  type AICompleteOptions,
 } from "./types"
 
 const ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
@@ -150,6 +151,51 @@ async function explainQuestion(payload: AIQuestionPayload): Promise<AIExplanatio
 }
 
 /**
+ * Llamada genérica al modelo. Groq usa la API compatible OpenAI, así
+ * que system/user van como mensajes separados (lo natural).
+ */
+async function complete(
+  systemPrompt: string,
+  userPrompt:   string,
+  opts: AICompleteOptions = {},
+): Promise<string> {
+  const { apiKey, model } = await getEnv()
+
+  const messages: { role: "system" | "user"; content: string }[] = []
+  if (systemPrompt) messages.push({ role: "system", content: systemPrompt })
+  messages.push({ role: "user", content: userPrompt })
+
+  const body: Record<string, unknown> = {
+    model,
+    messages,
+    temperature: opts.temperature ?? 0.2,
+    max_tokens:  opts.maxTokens ?? 1024,
+  }
+  if (opts.jsonMode) body.response_format = { type: "json_object" }
+
+  const res = await fetch(ENDPOINT, {
+    method:  "POST",
+    headers: {
+      "Content-Type":  "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "")
+    throw new AIProviderError("groq", res.status, `Groq ${res.status}: ${text || res.statusText}`)
+  }
+
+  const data = (await res.json()) as {
+    choices?: { message?: { content?: string } }[]
+  }
+  const text = data.choices?.[0]?.message?.content?.trim() ?? ""
+  if (!text) throw new AIProviderError("groq", 500, "Groq no devolvió texto")
+  return text
+}
+
+/**
  * Health check: llamada minimal "responde 'ok'" para verificar API key
  * y modelo. Coste: ~5 tokens, latencia típica < 500ms en Groq.
  */
@@ -183,5 +229,6 @@ export const groqProvider: AIProvider = {
   name:        "groq",
   displayName: "Groq (Llama)",
   explainQuestion,
+  complete,
   ping,
 }

@@ -20,6 +20,7 @@ export {
   type AIQuestionPayload,
   type AIExplanationResult,
   type ProviderPingResult,
+  type AICompleteOptions,
 } from "./aiProviders/types"
 
 /** Resuelve el provider activo según AI_PROVIDER en configCatalog. */
