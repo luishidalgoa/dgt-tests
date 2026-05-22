@@ -127,6 +127,15 @@ const CATEGORIES: Category[] = [
       {
         name:        "turso:apply-migration",
         description: "Aplica una migración SQL concreta a Turso",
+        examples:    ["npm run turso:apply-migration -- 20260522190000_add_ai_question_fields"],
+      },
+      {
+        name:        "turso:sync-ai-questions",
+        description: "Sube solo las preguntas IA locales que aún no estén en Turso",
+        examples: [
+          "npm run turso:sync-ai-questions             # sube las que faltan",
+          "npm run turso:sync-ai-questions -- --dry-run",
+        ],
       },
     ],
   },
