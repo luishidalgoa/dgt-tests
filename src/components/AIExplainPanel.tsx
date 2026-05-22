@@ -95,6 +95,13 @@ interface Props {
    * es global por (user, question) — útil en modo práctica.
    */
   attemptId?:   number
+  /**
+   * Pre-cargado server-side: la combinación (questionId, withImage) en este
+   * scope (attempt o global) ya ha sido pagada por el usuario. Si va a true,
+   * el botón muestra el badge "✓ Gratis" en verde en lugar del contador X/5
+   * y deja entrar aunque la quota esté agotada.
+   */
+  initiallyPaid?: boolean
   /** Se llama si la IA devolvió respuesta (cached o no). Sirve para descontar quota. */
   onConsume:    (cached: boolean) => void
   /** Pasar las key phrases al panel padre para sincronizar el subrayado. */
@@ -110,6 +117,7 @@ export function AIExplainPanel({
   correctLetra,
   options = [],
   attemptId,
+  initiallyPaid = false,
   onConsume,
   onResult,
 }: Props) {
@@ -125,8 +133,10 @@ export function AIExplainPanel({
   const [quota, setQuota]     = useState<MonthlyQuota | null>(null)
 
   // alreadyPaid=true cuando el user ya gastó token por esta pregunta
-  // previamente. En ese caso cargamos la respuesta sin cobrar nada.
-  const [alreadyPaid, setAlreadyPaid] = useState(false)
+  // previamente. Se inicializa con initiallyPaid (resuelto server-side por
+  // el padre) para poder marcar el botón como "gratis" desde el primer
+  // render, sin esperar a que abra el modal y dispare el GET.
+  const [alreadyPaid, setAlreadyPaid] = useState(initiallyPaid)
   // Mientras hacemos el GET para comprobar si ya pagó, mostramos un loader
   // suave en vez del CTA, para no parpadear el "1 token" antes de saberlo.
   const [checkingPaid, setCheckingPaid] = useState(false)
@@ -271,26 +281,54 @@ export function AIExplainPanel({
             color: "rgb(126, 34, 206)",
             fontWeight: 700,
             fontSize: 13,
-            cursor: noQuota ? "not-allowed" : "pointer",
-            opacity: noQuota ? 0.5 : 1,
+            // Si ya está pagado, el botón nunca se deshabilita por quota:
+            // ver una respuesta ya pagada no consume nada.
+            cursor: noQuota && !alreadyPaid ? "not-allowed" : "pointer",
+            opacity: noQuota && !alreadyPaid ? 0.5 : 1,
           }}
-          disabled={noQuota}
-          title={noQuota ? "Sin preguntas disponibles para este examen" : "Pregúntale a la IA"}
+          disabled={noQuota && !alreadyPaid}
+          title={
+            alreadyPaid
+              ? "Ya pagaste esta explicación · verla es gratis"
+              : noQuota
+              ? "Sin preguntas disponibles para este examen"
+              : "Pregúntale a la IA"
+          }
         >
           <Sparkles className="h-4 w-4" />
           Analizar con IA
-          <span
-            className="font-mono-tabular"
-            style={{
-              marginLeft: 4,
-              padding: "1px 6px",
-              borderRadius: 6,
-              background: "rgba(168, 85, 247, 0.18)",
-              fontSize: 11,
-            }}
-          >
-            {remaining}/{maxAllowed}
-          </span>
+          {alreadyPaid ? (
+            <span
+              className="font-mono-tabular"
+              style={{
+                marginLeft:    4,
+                padding:       "1px 7px",
+                borderRadius:  6,
+                background:    "#e7f2df",
+                color:         "#3d7a1a",
+                border:        "1px solid #c5dcb0",
+                fontSize:      11,
+                fontWeight:    800,
+                lineHeight:    1.4,
+              }}
+              aria-label="Gratis · ya pagado"
+            >
+              ✓<span className="hidden sm:inline" style={{ marginLeft: 3 }}>Gratis</span>
+            </span>
+          ) : (
+            <span
+              className="font-mono-tabular"
+              style={{
+                marginLeft: 4,
+                padding: "1px 6px",
+                borderRadius: 6,
+                background: "rgba(168, 85, 247, 0.18)",
+                fontSize: 11,
+              }}
+            >
+              {remaining}/{maxAllowed}
+            </span>
+          )}
         </button>
       </DialogTrigger>
 

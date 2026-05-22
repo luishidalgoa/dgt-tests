@@ -76,6 +76,16 @@ export default async function ResultPage({ params }: PageProps) {
   const codigos = orderedAnswers.map((a) => a.question.codigoTema)
   const manualByCodigo = await findManualSectionsForCodes(codigos)
 
+  // Pre-cargar qué (questionId, withImage) ya están pagadas para este attempt.
+  // Sirve para marcar el botón "Analizar con IA" como gratis ANTES de que el
+  // user lo pulse — evita el "ya pagaste" que aparecía solo al abrir el modal.
+  const paidRows = await db.userAiPaid.findMany({
+    where:  { userId: user.id, attemptId: attempt.id },
+    select: { questionId: true, withImage: true },
+  })
+  const paidKey  = (qId: number, wImg: boolean) => `${qId}:${wImg ? 1 : 0}`
+  const paidSet  = new Set(paidRows.map((p) => paidKey(p.questionId, p.withImage)))
+
   return (
     <div className="space-y-6">
       <Link
@@ -370,6 +380,7 @@ export default async function ResultPage({ params }: PageProps) {
                       hasImage={Boolean(a.question.imagen)}
                       options={a.question.options.map((o) => ({ letra: o.letra, texto: o.texto }))}
                       correctLetra={a.question.options.find((o) => o.isCorrect)?.letra}
+                      initiallyPaid={paidSet.has(paidKey(a.question.id, Boolean(a.question.imagen)))}
                     />
                   )}
 

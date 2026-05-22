@@ -14,6 +14,10 @@ interface Props {
   hasImage:     boolean
   options:      { letra: string; texto: string }[]
   correctLetra: string | undefined
+  /** Pre-cargado server-side: este (questionId, withImage) ya está pagado en
+   *  este attempt → mostrar el botón como "gratis" sin esperar a que se
+   *  abra el modal. */
+  initiallyPaid?: boolean
 }
 
 /**
@@ -27,17 +31,20 @@ interface Props {
  * - Si la IA devuelve resultado, se renderiza la explicación oficial con
  *   las keyPhrases subrayadas (efecto rotulador).
  */
-export function ResultsAIButton({ attemptId, questionId, explicacion, hasImage, options, correctLetra }: Props) {
+export function ResultsAIButton({ attemptId, questionId, explicacion, hasImage, options, correctLetra, initiallyPaid = false }: Props) {
   const key = `dgt:ai-quota-results-${attemptId}`
   const [remaining, setRemaining] = useState(MAX_PER_REVIEW)
   const [aiResult,  setAiResult]  = useState<AIResult | null>(null)
 
-  // Cargar quota al montar
+  // Cargar quota al montar — patrón estándar de hidratación desde
+  // sessionStorage. El setState aquí es intencional (sync inicial), no
+  // un anti-pattern como avisa react-hooks/set-state-in-effect.
   useEffect(() => {
     try {
       const stored = window.sessionStorage.getItem(key)
       if (stored !== null) {
         const n = parseInt(stored, 10)
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         if (!Number.isNaN(n)) setRemaining(n)
       }
     } catch {
@@ -80,6 +87,7 @@ export function ResultsAIButton({ attemptId, questionId, explicacion, hasImage, 
           maxAllowed={MAX_PER_REVIEW}
           options={options}
           correctLetra={correctLetra}
+          initiallyPaid={initiallyPaid}
           onConsume={() => {
             // Tanto cache hit como miss descuentan en server
             sync(Math.max(0, remaining - 1))
