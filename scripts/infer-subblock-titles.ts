@@ -263,7 +263,10 @@ async function inferTitle(
   const opts: AICompleteOptions = {
     jsonMode:    true,
     temperature: 0.2,
-    maxTokens:   200,
+    // 800 tokens: cubre con margen el JSON real (~30 tokens) + posibles
+    // "thinking tokens" internos que Gemini 2.5 consume antes de generar
+    // la respuesta visible. Antes con 200 algunos modelos respondían "".
+    maxTokens:   800,
     ...(MODEL_OVERRIDE ? { model: MODEL_OVERRIDE } : {}),
   }
   const text = await provider.complete(systemPrompt, userPrompt, opts)
@@ -278,7 +281,14 @@ async function inferTitle(
     parsed = JSON.parse(cleaned) as { titulo?: string }
   } catch {
     const match = cleaned.match(/\{[\s\S]*\}/)
-    if (!match) throw new Error("respuesta no es JSON")
+    if (!match) {
+      // Mostrar lo que realmente vino para diagnosticar — sin el preview
+      // estábamos a ciegas. Truncamos a 200 chars y aplastamos whitespace.
+      const preview = cleaned.length === 0
+        ? "(respuesta vacía)"
+        : `"${cleaned.slice(0, 200).replace(/\s+/g, " ")}${cleaned.length > 200 ? "..." : ""}"`
+      throw new Error(`respuesta no es JSON · recibido: ${preview}`)
+    }
     parsed = JSON.parse(match[0]) as { titulo?: string }
   }
   if (!parsed.titulo || typeof parsed.titulo !== "string") {

@@ -192,11 +192,26 @@ async function complete(
   }
 
   const data = (await res.json()) as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[]
+    candidates?: {
+      content?:      { parts?: { text?: string }[] }
+      finishReason?: string
+    }[]
+    promptFeedback?: { blockReason?: string }
   }
+  const candidate = data.candidates?.[0]
   const text =
-    data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("").trim() ?? ""
-  if (!text) throw new AIProviderError("gemini", 500, "Gemini no devolvió texto")
+    candidate?.content?.parts?.map((p) => p.text ?? "").join("").trim() ?? ""
+  if (!text) {
+    // Caso común: finishReason="MAX_TOKENS" cuando el modelo consumió todos
+    // los tokens en "thinking" antes de generar la respuesta. Reportamos
+    // el motivo para que el caller pueda actuar (subir maxTokens, etc.).
+    const reason = candidate?.finishReason ?? data.promptFeedback?.blockReason ?? "unknown"
+    throw new AIProviderError(
+      "gemini",
+      500,
+      `Gemini no devolvió texto (finishReason=${reason})`
+    )
+  }
   return text
 }
 
