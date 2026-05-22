@@ -1,4 +1,5 @@
 import Link from "next/link"
+import Image from "next/image"
 import type { Metadata } from "next"
 import {
   ChevronLeft,
@@ -27,24 +28,25 @@ function GithubIcon({ className }: { className?: string }) {
 }
 
 export const metadata: Metadata = {
-  title:       "Sobre el desarrollador",
+  title:       "Sobre mí",
   description: "Sobre Luis Hidalgo, desarrollador de DGT Tests.",
 }
 
 const PORTFOLIO_URL = "https://luishidalgoa.vercel.app/"
 const GITHUB_URL    = "https://github.com/luishidalgoa"
 const REPO_URL      = "https://github.com/luishidalgoa/dgt-tests"
+const AVATAR_SRC    = "/luis.jpg"   // Guardar en /public/luis.jpg
 
 const TECH = [
   { group: "Frontend",  items: ["Next.js 16 (App Router + Turbopack)", "React 19", "TypeScript", "Tailwind CSS 4", "Radix UI"] },
   { group: "Backend",   items: ["Next.js Route Handlers", "iron-session (auth)", "Zod (validación)", "bcryptjs"] },
   { group: "Base de datos", items: ["Prisma ORM 6", "SQLite local + Turso (libSQL) en producción"] },
   { group: "IA",        items: ["Google Gemini Flash (multimodal: texto + imagen)", "Cache propio en Prisma"] },
-  { group: "Infra",     items: ["Vercel (deploy + edge)", "Resend (alertas email)"] },
+  { group: "Infra",     items: ["Vercel (deploy + edge)", "nodemailer + Gmail SMTP"] },
   { group: "Extra",     items: ["react-pageflip (manual)", "PDF.js (pre-rasterizado)", "Playwright + Firecrawl (scraping de fuentes)"] },
 ] as const
 
-export default function SobrePage() {
+export default function SobreMiPage() {
   return (
     <div>
       <Link href="/" className="back-link">
@@ -64,25 +66,26 @@ export default function SobrePage() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
+          {/* Foto */}
           <div
-            aria-hidden="true"
             style={{
-              width: 84,
-              height: 84,
+              width: 96,
+              height: 96,
               borderRadius: "50%",
-              background: "linear-gradient(135deg, var(--orange-500), var(--red-600))",
-              color: "#fff",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 36,
-              fontWeight: 900,
-              letterSpacing: "-0.02em",
-              boxShadow: "0 14px 28px -12px rgba(220, 38, 38, 0.5)",
+              overflow: "hidden",
               flexShrink: 0,
+              boxShadow: "0 14px 28px -12px rgba(0, 0, 0, 0.35)",
+              border: "3px solid #fff",
             }}
           >
-            LH
+            <Image
+              src={AVATAR_SRC}
+              alt="Luis Hidalgo"
+              width={96}
+              height={96}
+              priority
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
           </div>
           <div style={{ flex: 1, minWidth: 250 }}>
             <div
@@ -95,7 +98,7 @@ export default function SobrePage() {
                 marginBottom: 4,
               }}
             >
-              Sobre el desarrollador
+              Sobre mí
             </div>
             <h1 style={{ margin: 0, fontSize: 30, fontWeight: 900, letterSpacing: "-0.02em" }}>
               Luis Hidalgo

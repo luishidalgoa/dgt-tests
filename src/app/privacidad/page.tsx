@@ -158,8 +158,8 @@ export default function PrivacidadPage() {
         <p style={{ margin: 0, marginTop: 12, fontSize: 12.5, color: "var(--slate-500)" }}>
           Responsable: Luis Hidalgo · proyecto personal sin ánimo de lucro · contacto a través
           del{" "}
-          <Link href="/sobre" style={{ color: "var(--orange-600)", textDecoration: "underline" }}>
-            portfolio
+          <Link href="/sobre-mi" style={{ color: "var(--orange-600)", textDecoration: "underline" }}>
+            sobre mí
           </Link>
           .
         </p>

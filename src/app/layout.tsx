@@ -88,7 +88,7 @@ export default async function RootLayout({
         >
           Hecho por{" "}
           <Link
-            href="/sobre"
+            href="/sobre-mi"
             style={{ color: "var(--orange-600)", fontWeight: 700, textDecoration: "none" }}
           >
             Luis Hidalgo
