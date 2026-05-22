@@ -1,8 +1,22 @@
 import Link from "next/link"
 import { db } from "@/lib/db"
-import { QUESTION_PENDING_REVIEW_WHERE } from "@/lib/questions"
+import { QUESTION_PENDING_REVIEW_WHERE, QUESTION_VISIBLE_WHERE } from "@/lib/questions"
+import { classifyCodigoTema } from "@/lib/temas"
 import { ChevronLeft, Sparkles } from "lucide-react"
 import { QuestionCard } from "./QuestionCard"
+
+const MAX_REFERENCES_PER_QUESTION = 5
+
+/**
+ * Vista compacta de una pregunta de referencia (humana o IA aprobada)
+ * del MISMO sub-bloque que la pregunta en revisión. Se renderiza en
+ * QuestionCard como desplegable para que el admin compare estilo.
+ */
+export interface ReferenceQuestion {
+  id:        number
+  enunciado: string
+  options:   { letra: string; texto: string; isCorrect: boolean }[]
+}
 
 export const dynamic = "force-dynamic"
 
@@ -34,6 +48,63 @@ export default async function ReviewQuestionsPage() {
   const totalDiscarded = await db.question.count({
     where: { aiGenerated: true, aiApproved: false },
   })
+
+  // Cargar referencias del mismo sub-bloque para CADA pending.
+  // Estrategia: 1 query con todos los codigoTema únicos, agrupamos en JS
+  // por subCode (vía classifyCodigoTema), elegimos hasta 5 por pending.
+  //
+  // Solo referencias VISIBLES (humanas o IA aprobadas). NO incluimos otras
+  // pendientes en revisión — confundirían al admin.
+  const referencesByPendingId = new Map<number, ReferenceQuestion[]>()
+  if (pending.length > 0) {
+    const pendingSubCodes = new Set<string>()
+    const pendingToSubCode = new Map<number, string | null>()
+    for (const q of pending) {
+      const cls = classifyCodigoTema(q.codigoTema)
+      const sub = cls?.subCode ?? null
+      pendingToSubCode.set(q.id, sub)
+      if (sub) pendingSubCodes.add(sub)
+    }
+
+    // Una sola query: todas las preguntas visibles cuyo codigoTema
+    // pueda corresponder a algún sub-bloque que estemos revisando.
+    // Filtramos en JS por classify exacto.
+    if (pendingSubCodes.size > 0) {
+      const candidates = await db.question.findMany({
+        where: {
+          ...QUESTION_VISIBLE_WHERE,
+          codigoTema: { not: null },
+          id:         { notIn: pending.map((p) => p.id) },
+        },
+        include: { options: { orderBy: { letra: "asc" } } },
+      })
+      // Agrupar por subCode
+      const bySubCode = new Map<string, ReferenceQuestion[]>()
+      for (const c of candidates) {
+        const cls = classifyCodigoTema(c.codigoTema)
+        if (!cls?.subCode) continue
+        if (!pendingSubCodes.has(cls.subCode)) continue
+        const list = bySubCode.get(cls.subCode) ?? []
+        if (list.length >= MAX_REFERENCES_PER_QUESTION) continue
+        list.push({
+          id:        c.id,
+          enunciado: c.enunciado,
+          options:   c.options.map((o) => ({
+            letra:     o.letra,
+            texto:     o.texto,
+            isCorrect: o.isCorrect,
+          })),
+        })
+        bySubCode.set(cls.subCode, list)
+      }
+      // Mapear por pending.id
+      for (const [pendingId, sub] of pendingToSubCode) {
+        if (!sub) continue
+        const refs = bySubCode.get(sub)
+        if (refs && refs.length > 0) referencesByPendingId.set(pendingId, refs)
+      }
+    }
+  }
 
   return (
     <div>
@@ -99,6 +170,7 @@ export default async function ReviewQuestionsPage() {
               }))}
               aiModel={q.aiModel}
               createdLabel={"recientemente"}
+              references={referencesByPendingId.get(q.id) ?? []}
             />
           ))}
         </div>

@@ -2,8 +2,9 @@
 
 import { useState, useTransition } from "react"
 import { toast } from "sonner"
-import { CheckCircle2, XCircle, Pencil, Save, X, Loader2 } from "lucide-react"
+import { CheckCircle2, XCircle, Pencil, Save, X, Loader2, ChevronDown, ChevronRight, Library } from "lucide-react"
 import { approveQuestionAction, discardQuestionAction, editQuestionAction } from "./actions"
+import type { ReferenceQuestion } from "./page"
 
 interface OptionData {
   id:        number
@@ -20,6 +21,9 @@ interface Props {
   options:     OptionData[]
   aiModel:     string | null
   createdLabel: string
+  /** Hasta 5 preguntas existentes del mismo sub-bloque (humanas o IA
+   *  aprobadas) para que el admin compare estilo/dificultad. */
+  references:  ReferenceQuestion[]
 }
 
 /**
@@ -31,6 +35,7 @@ interface Props {
 export function QuestionCard(props: Props) {
   const [isPending, startTransition] = useTransition()
   const [editing, setEditing] = useState(false)
+  const [showRefs, setShowRefs] = useState(false)
 
   // Estado local para el modo edición
   const [enunciado, setEnunciado] = useState(props.enunciado)
@@ -210,6 +215,82 @@ export function QuestionCard(props: Props) {
           </p>
         )}
       </div>
+
+      {/* Referencias del mismo sub-bloque (colapsable) */}
+      {props.references.length > 0 ? (
+        <div style={{ marginBottom: 14 }}>
+          <button
+            type="button"
+            onClick={() => setShowRefs((v) => !v)}
+            style={{
+              display:      "inline-flex",
+              alignItems:   "center",
+              gap:          6,
+              padding:      "5px 10px",
+              borderRadius: 8,
+              border:       "1px dashed var(--slate-300)",
+              background:   "var(--slate-50, #f8fafc)",
+              fontSize:     12,
+              fontWeight:   600,
+              color:        "var(--slate-600)",
+              cursor:       "pointer",
+            }}
+          >
+            {showRefs ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+            <Library className="h-3.5 w-3.5" />
+            {showRefs ? "Ocultar" : "Ver"} {props.references.length} pregunta{props.references.length === 1 ? "" : "s"} de referencia del mismo sub-bloque
+          </button>
+          {showRefs && (
+            <div style={{
+              marginTop: 8,
+              padding: "12px 14px",
+              borderRadius: 10,
+              background: "rgba(59, 130, 246, 0.04)",
+              border: "1px solid rgba(59, 130, 246, 0.15)",
+            }}>
+              {props.references.map((ref, i) => (
+                <div
+                  key={ref.id}
+                  style={{
+                    paddingBottom: i < props.references.length - 1 ? 12 : 0,
+                    marginBottom:  i < props.references.length - 1 ? 12 : 0,
+                    borderBottom:  i < props.references.length - 1 ? "1px dashed rgba(59, 130, 246, 0.20)" : "none",
+                  }}
+                >
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--slate-700)", lineHeight: 1.45 }}>
+                    {ref.enunciado}
+                  </div>
+                  <div style={{ marginTop: 4, paddingLeft: 8, fontSize: 12, color: "var(--slate-600)" }}>
+                    {ref.options.map((o) => (
+                      <div
+                        key={o.letra}
+                        style={{
+                          padding: "1px 0",
+                          color: o.isCorrect ? "var(--green-d)" : "var(--slate-500)",
+                          fontWeight: o.isCorrect ? 600 : 400,
+                        }}
+                      >
+                        <span className="font-mono-tabular" style={{ marginRight: 6 }}>
+                          {o.letra.toUpperCase()})
+                        </span>
+                        {o.texto}
+                        {o.isCorrect && <span style={{ marginLeft: 6, fontSize: 10 }}>✓</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div style={{
+          marginBottom: 14, fontSize: 11.5, color: "var(--slate-400)",
+          fontStyle: "italic",
+        }}>
+          Sin preguntas de referencia del mismo sub-bloque · esta es la primera del bloque.
+        </div>
+      )}
 
       {/* Acciones */}
       <div style={{ display: "flex", gap: 8 }}>
