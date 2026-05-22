@@ -19,6 +19,25 @@ import path from "node:path"
 
 const ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models"
 
+/**
+ * Error tipado para fallos de Gemini. Llevamos el código HTTP para que
+ * el endpoint pueda decidir qué responder al cliente (especialmente para
+ * 429 = rate limit, donde queremos un toast amigable en el front en vez
+ * del 502 genérico).
+ */
+export class GeminiError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message)
+    this.name = "GeminiError"
+  }
+  get isRateLimit(): boolean {
+    // 429 = quota excedida (RPM o RPD). 503 ocasional cuando el modelo
+    // está saturado lo tratamos igual porque al usuario le da igual la
+    // distinción.
+    return this.status === 429 || this.status === 503
+  }
+}
+
 export interface AIQuestionPayload {
   enunciado:    string
   explicacion:  string
@@ -137,7 +156,7 @@ export async function explainQuestion(payload: AIQuestionPayload): Promise<AIExp
 
   if (!res.ok) {
     const text = await res.text().catch(() => "")
-    throw new Error(`Gemini ${res.status}: ${text || res.statusText}`)
+    throw new GeminiError(res.status, `Gemini ${res.status}: ${text || res.statusText}`)
   }
 
   const data = (await res.json()) as {

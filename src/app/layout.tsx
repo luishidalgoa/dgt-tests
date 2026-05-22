@@ -10,6 +10,7 @@ import { Navbar } from "@/components/Navbar"
 import { UserNotifications } from "@/components/UserNotifications"
 import { CookieConsent } from "@/components/CookieConsent"
 import { MaintenancePage } from "@/components/MaintenancePage"
+import { Toaster } from "sonner"
 import "./globals.css"
 
 const inter = Inter({
@@ -118,6 +119,9 @@ export default async function RootLayout({
           </Link>
         </footer>
         <CookieConsent />
+        {/* Toaster global de sonner — los componentes cliente disparan
+            toasts con `import { toast } from "sonner"` y se muestran aquí. */}
+        <Toaster richColors position="top-right" closeButton />
       </body>
     </html>
   )

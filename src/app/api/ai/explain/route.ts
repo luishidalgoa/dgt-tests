@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
-import { explainQuestion, type AIExplanationResult } from "@/lib/ai"
+import { explainQuestion, GeminiError, type AIExplanationResult } from "@/lib/ai"
 import { consumeToken, getQuotaStatus } from "@/lib/aiQuota"
 
 const postSchema = z.object({
@@ -211,6 +211,18 @@ export async function POST(req: Request) {
     })
   } catch (err) {
     await refundToken()
+    // Rate limit de Gemini (cuota gratuita / saturación) → respondemos
+    // con un código identificable para que el front muestre un toast
+    // amigable en vez de un error técnico.
+    if (err instanceof GeminiError && err.isRateLimit) {
+      return NextResponse.json(
+        {
+          error: "La IA no está disponible ahora mismo. Inténtalo en unos minutos.",
+          code:  "ai_unavailable",
+        },
+        { status: 503 }
+      )
+    }
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Error al llamar a la IA" },
       { status: 502 }

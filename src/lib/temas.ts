@@ -138,6 +138,64 @@ export function getTemaPadreName(padre: string): string {
   return TEMA_NAMES[padre] ?? padre
 }
 
+// ── CLASIFICACIÓN A 3 NIVELES (Tema > Bloque > SubBloque) ────────────────
+
+export interface TemaClassification {
+  /** Código del tema padre, sin "TC ". Ej: "1", "4", "Def". */
+  padreCode:  string
+  /** Código del bloque, sin "TC ". Ej: "1.2", "4.1", "Def.2". */
+  bloqueCode: string
+  /** Código del sub-bloque, sin "TC ". Ej: "1.2.5.3". `null` si la pregunta
+   *  cae directamente en el bloque sin más profundidad. */
+  subCode:    string | null
+}
+
+/**
+ * Mapea un `codigoTema` a su (Tema padre, Bloque, SubBloque) jerárquico.
+ *
+ * Regla clave: los temas SIN subtema decimal en BBDD (TC 4, TC 5, TC 6,
+ * TC 8, TC 9, TC 10, TC Def) usan el PRIMER segmento del inner como
+ * bloque, para casar con la numeración del manual oficial. Por ejemplo
+ * `TC 4-2.2.1` se clasifica como bloque "4.2", sub-bloque "4.2.2.1".
+ *
+ * Los temas CON subtema decimal (TC 1.2, TC 7.3…) usan el prefix como
+ * bloque directamente.
+ *
+ * Devuelve `null` si el codigoTema no es parseable.
+ */
+export function classifyCodigoTema(codigoTema: string | null | undefined): TemaClassification | null {
+  if (!codigoTema) return null
+  const prefix = extractTemaPrefix(codigoTema)
+  if (!prefix) return null
+  const padre = extractTemaPadre(prefix) ?? prefix
+  const inner = extractTemaInner(codigoTema)
+
+  const padreCode = padre.replace(/^TC\s+/, "")
+  const hasSubtemaDecimal = prefix !== padre
+
+  if (hasSubtemaDecimal) {
+    const bloqueCode = prefix.replace(/^TC\s+/, "")
+    const subCode    = inner ? `${bloqueCode}.${inner}` : null
+    return { padreCode, bloqueCode, subCode }
+  }
+
+  // Tema sin subtema decimal — el primer segmento del inner pasa a bloque
+  if (!inner) {
+    // codigoTema sin guion estructural ("TC 4 (4) (4)"). Pregunta huérfana
+    // que metemos en un bloque "general" X.0 sin sub-bloque.
+    return {
+      padreCode,
+      bloqueCode: `${padreCode}.0`,
+      subCode:    null,
+    }
+  }
+  const parts = inner.split(".")
+  const bloqueCode = `${padreCode}.${parts[0]}`
+  const rest = parts.slice(1).join(".")
+  const subCode = rest ? `${bloqueCode}.${rest}` : null
+  return { padreCode, bloqueCode, subCode }
+}
+
 // ── ORDEN NUMÉRICO ───────────────────────────────────────────────────────
 
 /**

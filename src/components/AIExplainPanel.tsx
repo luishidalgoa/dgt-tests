@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { toast } from "sonner"
 import {
   Dialog,
   DialogContent,
@@ -168,6 +169,17 @@ export function AIExplainPanel({
         if (body.quota) {
           setQuota(body.quota)
           emitQuotaChange(body.quota)
+        }
+        // Rate limit / saturación de Gemini → toast amigable + cerrar modal.
+        // No es un error del usuario; no queremos pintar nada rojo dentro
+        // del panel, solo una notificación efímera.
+        if (body.code === "ai_unavailable") {
+          toast.error("Análisis IA no disponible ahora mismo", {
+            description: "Estamos saturados temporalmente. Inténtalo en unos minutos.",
+            duration:    7000,
+          })
+          setOpen(false)
+          return
         }
         throw new Error(body.error ?? "Error al consultar la IA")
       }

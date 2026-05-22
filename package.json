@@ -37,6 +37,8 @@
     "stripe:listen": "stripe listen --forward-to http://localhost:4321/api/webhooks/stripe",
     "images:copy": "tsx scripts/copy-images.ts",
     "manual:import": "tsx --env-file=.env scripts/import-manual.ts",
+    "manual:extract-skeleton": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/extract-manual-skeleton.ts",
+    "manual:infer-titles": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/infer-subblock-titles.ts",
     "ingest": "npm run db:seed && npm run images:copy && npm run manual:import"
   },
   "dependencies": {
@@ -57,6 +59,7 @@
     "react-dom": "19.2.4",
     "react-pageflip": "^2.0.3",
     "react-pdf": "^10.4.1",
+    "sonner": "^2.0.7",
     "stripe": "^22.1.1",
     "tailwind-merge": "^3.6.0",
     "tailwindcss-animate": "^1.0.7",

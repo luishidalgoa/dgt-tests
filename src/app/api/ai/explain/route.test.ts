@@ -31,15 +31,21 @@ vi.mock("@/lib/aiQuota", () => ({
   getQuotaStatus: vi.fn(),
 }))
 
-vi.mock("@/lib/ai", () => ({
-  explainQuestion: vi.fn(),
-}))
+// Mockeamos solo explainQuestion (la llamada a Gemini); el resto del
+// módulo (GeminiError, tipos) lo dejamos real para poder hacer `instanceof`.
+vi.mock("@/lib/ai", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/ai")>("@/lib/ai")
+  return {
+    ...actual,
+    explainQuestion: vi.fn(),
+  }
+})
 
 import { GET, POST } from "@/app/api/ai/explain/route"
 import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
 import { consumeToken, getQuotaStatus } from "@/lib/aiQuota"
-import { explainQuestion } from "@/lib/ai"
+import { explainQuestion, GeminiError } from "@/lib/ai"
 
 const fakeUser = { id: 1, username: "luis" }
 const fakeQuota = { used: 1, max: 60, remaining: 59, month: "2026-05", resetsAt: "..." }
@@ -150,6 +156,59 @@ describe("/api/ai/explain POST — cobro de tokens", () => {
   it("body inválido → 400", async () => {
     const res = await POST(postBody({ questionId: "no es número" }))
     expect(res.status).toBe(400)
+  })
+
+  it("Fase 98: Gemini 429 → 503 + code 'ai_unavailable' + reembolso", async () => {
+    // Forzar cache miss para que SÍ se llame a Gemini
+    vi.mocked(db.aICacheEntry.findUnique).mockResolvedValue(null)
+    vi.mocked(db.question.findUnique).mockResolvedValue({
+      id: 100,
+      enunciado:   "x",
+      explicacion: "y",
+      codigoTema:  null,
+      imagen:      null,
+      options: [
+        { id: 1, letra: "A", texto: "a", isCorrect: true },
+        { id: 2, letra: "B", texto: "b", isCorrect: false },
+      ],
+    } as never)
+    // Gemini devuelve 429
+    vi.mocked(explainQuestion).mockRejectedValueOnce(
+      new GeminiError(429, "Gemini 429: quota exceeded")
+    )
+
+    const res = await POST(postBody({ questionId: 100 }))
+    const body = await res.json()
+    expect(res.status).toBe(503)
+    expect(body.code).toBe("ai_unavailable")
+    expect(body.error).toMatch(/no está disponible/i)
+    // Reembolso: el token consumido se devuelve
+    expect(db.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 1 },
+        data:  { aiTokensUsed: { decrement: 1 } },
+      })
+    )
+  })
+
+  it("Fase 98: Gemini 500 (no rate limit) sigue siendo 502 genérico", async () => {
+    vi.mocked(db.aICacheEntry.findUnique).mockResolvedValue(null)
+    vi.mocked(db.question.findUnique).mockResolvedValue({
+      id: 100,
+      enunciado: "x", explicacion: "y", codigoTema: null, imagen: null,
+      options: [
+        { id: 1, letra: "A", texto: "a", isCorrect: true },
+        { id: 2, letra: "B", texto: "b", isCorrect: false },
+      ],
+    } as never)
+    vi.mocked(explainQuestion).mockRejectedValueOnce(
+      new GeminiError(500, "Gemini 500: internal")
+    )
+
+    const res = await POST(postBody({ questionId: 100 }))
+    const body = await res.json()
+    expect(res.status).toBe(502)
+    expect(body.code).toBeUndefined()
   })
 
   it("Fase 51: cobra aunque haya cache hit (primera vez)", async () => {

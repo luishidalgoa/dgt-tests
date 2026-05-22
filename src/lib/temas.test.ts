@@ -6,6 +6,7 @@ import {
   getTemaName,
   getTemaPadreName,
   compareTemaCodes,
+  classifyCodigoTema,
 } from "./temas"
 
 /**
@@ -140,6 +141,86 @@ describe("getTemaPadreName", () => {
 
   it("hace fallback al código si no hay mapeo", () => {
     expect(getTemaPadreName("TC Def")).toBe("Definiciones")
+  })
+})
+
+describe("classifyCodigoTema", () => {
+  describe("tema CON subtema decimal (caso normal)", () => {
+    it("clasifica 'TC 1.2-5.3' como Tema 1 / Bloque 1.2 / SubBloque 1.2.5.3", () => {
+      expect(classifyCodigoTema("TC 1.2-5.3 (1-2.5)")).toEqual({
+        padreCode:  "1",
+        bloqueCode: "1.2",
+        subCode:    "1.2.5.3",
+      })
+    })
+
+    it("clasifica 'TC 7.3-3.1.3' con inner de 3 niveles", () => {
+      expect(classifyCodigoTema("TC 7.3-3.1.3 (7-3.3.1)")).toEqual({
+        padreCode:  "7",
+        bloqueCode: "7.3",
+        subCode:    "7.3.3.1.3",
+      })
+    })
+
+    it("sin inner (TC 2.8 sin guion) → subCode null", () => {
+      expect(classifyCodigoTema("TC 2.8 (2-8.1)")).toEqual({
+        padreCode:  "2",
+        bloqueCode: "2.8",
+        subCode:    null,
+      })
+    })
+  })
+
+  describe("tema SIN subtema decimal (TC 4, TC 5, TC Def…)", () => {
+    it("reagrupa 'TC 4-2.2.1' como Tema 4 / Bloque 4.2 / SubBloque 4.2.2.1", () => {
+      expect(classifyCodigoTema("TC 4-2.2.1 (4-2.2.1)")).toEqual({
+        padreCode:  "4",
+        bloqueCode: "4.2",
+        subCode:    "4.2.2.1",
+      })
+    })
+
+    it("'TC 5-2.4' → Tema 5 / Bloque 5.2 / SubBloque 5.2.4", () => {
+      expect(classifyCodigoTema("TC 5-2.4 (5-2.4)")).toEqual({
+        padreCode:  "5",
+        bloqueCode: "5.2",
+        subCode:    "5.2.4",
+      })
+    })
+
+    it("'TC 10-2' (inner de un solo dígito) → bloque sin subCode", () => {
+      expect(classifyCodigoTema("TC 10-2 (10-2) (10-2)")).toEqual({
+        padreCode:  "10",
+        bloqueCode: "10.2",
+        subCode:    null,
+      })
+    })
+
+    it("'TC Def-2.2' → Tema Def / Bloque Def.2 / SubBloque Def.2.2", () => {
+      expect(classifyCodigoTema("TC Def-2.2 (Def-2)")).toEqual({
+        padreCode:  "Def",
+        bloqueCode: "Def.2",
+        subCode:    "Def.2.2",
+      })
+    })
+
+    it("codigoTema sin guion estructural ('TC 4 (4) (4)') → bloque 4.0 huérfano", () => {
+      expect(classifyCodigoTema("TC 4 (4) (4)")).toEqual({
+        padreCode:  "4",
+        bloqueCode: "4.0",
+        subCode:    null,
+      })
+    })
+  })
+
+  describe("entradas inválidas", () => {
+    it("devuelve null para nulos y strings sin estructura", () => {
+      expect(classifyCodigoTema(null)).toBeNull()
+      expect(classifyCodigoTema(undefined)).toBeNull()
+      expect(classifyCodigoTema("")).toBeNull()
+      expect(classifyCodigoTema("TC")).toBeNull()
+      expect(classifyCodigoTema("xyz")).toBeNull()
+    })
   })
 })
 
