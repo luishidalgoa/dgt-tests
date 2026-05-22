@@ -30,6 +30,11 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# pnpm — este proyecto usa npm. Si por error corres pnpm, sus
+# lockfiles no deben llegar al repo (confunden a Vercel y a CI).
+pnpm-lock.yaml
+pnpm-workspace.yaml
+
 # env files (can opt-in for committing if needed)
 .env*
 
