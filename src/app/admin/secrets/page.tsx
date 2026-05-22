@@ -2,6 +2,7 @@ import { db } from "@/lib/db"
 import { SECRET_CATALOG, maskSecret } from "@/lib/secretCatalog"
 import { decryptSecret } from "@/lib/crypto"
 import { detectRuntimeEnv, detectStripeMode } from "@/lib/runtimeEnv"
+import { detectEnvFiles, getEnvFileForVar } from "@/lib/envFiles"
 import { SecretForm } from "./SecretForm"
 import { KeyRound, ExternalLink, Cloud, Laptop } from "lucide-react"
 
@@ -28,6 +29,8 @@ export default async function AdminSecretsPage() {
   const rowsByKey = new Map(rows.map(r => [r.key, r]))
 
   const runtime = detectRuntimeEnv()
+  // En local solo: lista de archivos .env existentes (no aplica en Vercel).
+  const envFiles = runtime.isLocal ? detectEnvFiles() : []
 
   return (
     <div>
@@ -56,7 +59,19 @@ export default async function AdminSecretsPage() {
         ) : (
           <Cloud className="h-4 w-4" style={{ color: "var(--green-d)" }} />
         )}
-        Entorno detectado: <b>{runtime.label}</b>
+        <span>
+          Entorno detectado: <b>{runtime.label}</b>
+          {envFiles.length > 0 && (
+            <>
+              {" "}
+              <span style={{ color: "var(--slate-500)" }}>
+                · archivos {envFiles.map((f, i) => (
+                  <code key={f} style={{ background: "rgba(168, 85, 247, 0.1)", padding: "1px 5px", borderRadius: 4, marginLeft: i ? 4 : 0 }}>{f}</code>
+                ))}
+              </span>
+            </>
+          )}
+        </span>
       </div>
 
       <div className="space-y-5">
@@ -114,13 +129,26 @@ export default async function AdminSecretsPage() {
                 </div>
               )}
 
-              {!row && envFallback && (
-                <div style={{ fontSize: 12, color: "var(--slate-500)", marginBottom: 8 }}>
-                  Usando el valor del entorno actual ({runtime.isLocal
-                    ? <code>.env</code>
-                    : <code>Vercel Environment Variables</code>}).
-                </div>
-              )}
+              {!row && envFallback && (() => {
+                // Detectamos el ARCHIVO concreto que aporta el valor en local.
+                // En Vercel no hay archivos físicos → mostramos "Vercel Env Variables".
+                const sourceFile = runtime.isLocal
+                  ? getEnvFileForVar(entry.key)
+                  : null
+                return (
+                  <div style={{ fontSize: 12, color: "var(--slate-500)", marginBottom: 8 }}>
+                    Usando el valor de{" "}
+                    {runtime.isLocal ? (
+                      sourceFile
+                        ? <code>{sourceFile}</code>
+                        : <span><code>process.env</code> (no encontrado en ningún archivo .env — ¿lo exportaste desde el shell?)</span>
+                    ) : (
+                      <code>Vercel Environment Variables</code>
+                    )}
+                    .
+                  </div>
+                )
+              })()}
 
               {!row && !envFallback && (
                 <div style={{ fontSize: 12, color: "var(--red-600)", marginBottom: 8, fontWeight: 600 }}>
