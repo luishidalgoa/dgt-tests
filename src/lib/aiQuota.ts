@@ -11,6 +11,7 @@
 
 import { db } from "@/lib/db"
 import { getEffectiveTokenQuota } from "@/lib/permissions"
+import { getAITokensFree, getAITokensPro } from "@/lib/configCatalog"
 
 export interface AIQuotaStatus {
   used:        number
@@ -48,7 +49,7 @@ export async function getQuotaStatus(userId: number): Promise<AIQuotaStatus> {
       subscriptionStatus: true,
     },
   })
-  const max = getEffectiveTokenQuota(user)
+  const max = await getEffectiveQuotaForUser(user)
   if (!user) {
     return { used: 0, max, remaining: max, month: monthKey, resetsAt: nextMonthResetIso() }
   }
@@ -87,7 +88,7 @@ export async function consumeToken(userId: number): Promise<AIQuotaStatus | null
       subscriptionStatus: true,
     },
   })
-  const max = getEffectiveTokenQuota(updated)
+  const max = await getEffectiveQuotaForUser(updated)
   return {
     used:      updated.aiTokensUsed,
     max,
@@ -96,3 +97,24 @@ export async function consumeToken(userId: number): Promise<AIQuotaStatus | null
     resetsAt:  nextMonthResetIso(),
   }
 }
+
+/**
+ * Como permissions.getEffectiveTokenQuota pero leyendo los límites de
+ * AppConfig (panel admin Fase 92). Si la BBDD no tiene override, cae al
+ * default del catálogo (que coincide con la constante histórica).
+ */
+async function getEffectiveQuotaForUser(
+  user: { role: string | null; subscriptionStatus: string | null } | null
+): Promise<number> {
+  const isFullAccess = Boolean(
+    user && (user.role === "ADMIN" ||
+      (user.role === "SUBSCRIBER" &&
+        (user.subscriptionStatus === "active" ||
+         user.subscriptionStatus === "trialing" ||
+         user.subscriptionStatus === "past_due")))
+  )
+  return isFullAccess ? await getAITokensPro() : await getAITokensFree()
+}
+// Mantenemos el import para que el linter no se queje de unused.
+// Los callers síncronos (UI que no quiere awaits) pueden seguir usándolo.
+void getEffectiveTokenQuota

@@ -3,11 +3,13 @@ import Link from "next/link"
 import { Inter, JetBrains_Mono } from "next/font/google"
 import { getCurrentUser } from "@/lib/auth"
 import { getQuotaStatus } from "@/lib/aiQuota"
-import { planLabel } from "@/lib/permissions"
+import { planLabel, isAdmin } from "@/lib/permissions"
+import { isMaintenanceMode } from "@/lib/configCatalog"
 import { firstPendingNotification } from "@/lib/notifications"
 import { Navbar } from "@/components/Navbar"
 import { UserNotifications } from "@/components/UserNotifications"
 import { CookieConsent } from "@/components/CookieConsent"
+import { MaintenancePage } from "@/components/MaintenancePage"
 import "./globals.css"
 
 const inter = Inter({
@@ -37,6 +39,13 @@ export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const user = await getCurrentUser()
+
+  // Modo mantenimiento: si está activo y el user NO es admin, mostramos
+  // página "volvemos en breve" en lugar del contenido normal. El admin
+  // sigue viendo todo para poder hacer la migración.
+  const maintenance = await isMaintenanceMode()
+  const showMaintenance = maintenance && !isAdmin(user)
+
   const quota = user ? await getQuotaStatus(user.id) : null
   const plan  = planLabel(user) ?? undefined
   // Primera notificación one-time pendiente para este usuario (welcome, etc.)
@@ -58,7 +67,7 @@ export default async function RootLayout({
           plan={plan}
         />
         <main className="flex-1 mx-auto w-full max-w-[1200px] px-6 py-7">
-          {children}
+          {showMaintenance ? <MaintenancePage /> : children}
         </main>
         {user && (
           <UserNotifications
