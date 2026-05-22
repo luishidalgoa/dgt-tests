@@ -34,7 +34,7 @@ async function main() {
 
   console.log(`👤 Destinatario: ${user.username} <${user.email}>`)
   console.log(`📧 Tipo: ${kind}`)
-  console.log(`📤 From: ${process.env.ALERT_FROM ?? "(default onboarding@resend.dev)"}`)
+  console.log(`📤 From: ${process.env.GMAIL_FROM ?? process.env.GMAIL_USER ?? "(no configurado)"}`)
 
   const nextRenewalTs = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60
   const portalUrl = process.env.NEXT_PUBLIC_APP_URL
@@ -68,10 +68,10 @@ async function main() {
 
   const ok = await sendUserEmail({ to: user.email, subject: composed.subject, html: composed.html })
   if (ok) {
-    console.log("✅ Resend aceptó el envío (HTTP 200/202).")
-    console.log("   Si no llega, revisa carpeta de spam o el dashboard de Resend.")
+    console.log("✅ Email aceptado por el SMTP de Gmail.")
+    console.log("   Si no llega, revisa la carpeta de spam.")
   } else {
-    console.error("❌ Resend rechazó o fetch falló — revisa logs arriba.")
+    console.error("❌ El SMTP rechazó el envío o el mailer no está configurado — revisa logs arriba.")
     process.exit(1)
   }
 }
