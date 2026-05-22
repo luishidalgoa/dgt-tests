@@ -3,10 +3,28 @@ import { redirect } from "next/navigation"
 import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
 import { hasFullAccess } from "@/lib/permissions"
-import { getTemaName } from "@/lib/temas"
+import {
+  extractTemaPrefix,
+  extractTemaPadre,
+  getTemaName,
+  getTemaPadreName,
+  compareTemaCodes,
+} from "@/lib/temas"
 import { ChevronLeft, BookMarked, ArrowRight, BookOpen } from "lucide-react"
 
 export const dynamic = "force-dynamic"
+
+interface SubtemaCard {
+  prefix:         string
+  totalQuestions: number
+  totalAnswers:   number
+  correctAnswers: number
+}
+
+interface TemaPadreGroup {
+  padre:    string
+  subtemas: SubtemaCard[]
+}
 
 export default async function TemasPage() {
   const user = await getCurrentUser()
@@ -16,60 +34,62 @@ export default async function TemasPage() {
   // Tampoco para free — es contenido PRO
   if (!hasFullAccess(user)) redirect("/upgrade")
 
-  // Para invitados: solo conteo de preguntas por tema (sin stats personales).
-  // Para usuarios logueados: además, contar respuestas y aciertos.
-  let temas: { prefix: string; totalQuestions: number; totalAnswers: number; correctAnswers: number }[]
+  // 1) Recuperar conteos por codigoTema CRUDO (sin INSTR ni SUBSTR).
+  //    El parser de prefijo se hace en JS — la SQL antigua tenía un bug:
+  //    `SUBSTR(c, 1, INSTR(c, '-')-1)` para "TC 2.8 (2-8.1)" devolvía
+  //    "TC 2.8 (2" porque cortaba en el guion del paréntesis.
+  const raw = await db.$queryRaw<
+    {
+      codigoTema:     string
+      totalQuestions: bigint
+      totalAnswers:   bigint
+      correctAnswers: bigint
+    }[]
+  >`
+    SELECT
+      q.codigoTema                                 AS codigoTema,
+      COUNT(DISTINCT q.id)                         AS totalQuestions,
+      COUNT(a.id)                                  AS totalAnswers,
+      COALESCE(SUM(CASE WHEN a.isCorrect = 1 THEN 1 ELSE 0 END), 0) AS correctAnswers
+    FROM questions q
+    LEFT JOIN answers a ON a.questionId = q.id
+    LEFT JOIN exam_attempts ea ON ea.id = a.attemptId AND ea.userId = ${user.id}
+    WHERE q.codigoTema IS NOT NULL
+      AND (a.id IS NULL OR ea.id IS NOT NULL)
+    GROUP BY q.codigoTema
+  `
 
-  if (user) {
-    const raw = await db.$queryRaw<
-      { prefix: string; totalQuestions: bigint; totalAnswers: bigint; correctAnswers: bigint }[]
-    >`
-      SELECT
-        CASE
-          WHEN INSTR(q.codigoTema, '-') > 0
-          THEN SUBSTR(q.codigoTema, 1, INSTR(q.codigoTema, '-') - 1)
-          ELSE q.codigoTema
-        END                                          AS prefix,
-        COUNT(DISTINCT q.id)                         AS totalQuestions,
-        COUNT(a.id)                                  AS totalAnswers,
-        COALESCE(SUM(CASE WHEN a.isCorrect = 1 THEN 1 ELSE 0 END), 0) AS correctAnswers
-      FROM questions q
-      LEFT JOIN answers a ON a.questionId = q.id
-      LEFT JOIN exam_attempts ea ON ea.id = a.attemptId AND ea.userId = ${user.id}
-      WHERE q.codigoTema IS NOT NULL
-        AND (a.id IS NULL OR ea.id IS NOT NULL)
-      GROUP BY prefix
-      ORDER BY prefix
-    `
-    temas = raw.map((r) => ({
-      prefix:         r.prefix.trim(),
-      totalQuestions: Number(r.totalQuestions),
-      totalAnswers:   Number(r.totalAnswers),
-      correctAnswers: Number(r.correctAnswers),
-    }))
-  } else {
-    const raw = await db.$queryRaw<
-      { prefix: string; totalQuestions: bigint }[]
-    >`
-      SELECT
-        CASE
-          WHEN INSTR(q.codigoTema, '-') > 0
-          THEN SUBSTR(q.codigoTema, 1, INSTR(q.codigoTema, '-') - 1)
-          ELSE q.codigoTema
-        END                                          AS prefix,
-        COUNT(DISTINCT q.id)                         AS totalQuestions
-      FROM questions q
-      WHERE q.codigoTema IS NOT NULL
-      GROUP BY prefix
-      ORDER BY prefix
-    `
-    temas = raw.map((r) => ({
-      prefix:         r.prefix.trim(),
-      totalQuestions: Number(r.totalQuestions),
+  // 2) Agrupar en JS por subtema (prefix).
+  const byPrefix = new Map<string, SubtemaCard>()
+  for (const row of raw) {
+    const prefix = extractTemaPrefix(row.codigoTema)
+    if (!prefix) continue // descarta basura como "TC" sin más (4 preguntas)
+    const card = byPrefix.get(prefix) ?? {
+      prefix,
+      totalQuestions: 0,
       totalAnswers:   0,
       correctAnswers: 0,
-    }))
+    }
+    card.totalQuestions += Number(row.totalQuestions)
+    card.totalAnswers   += Number(row.totalAnswers)
+    card.correctAnswers += Number(row.correctAnswers)
+    byPrefix.set(prefix, card)
   }
+
+  // 3) Agrupar subtemas por tema PADRE (nivel 1 de la jerarquía).
+  const byPadre = new Map<string, TemaPadreGroup>()
+  for (const card of byPrefix.values()) {
+    const padre = extractTemaPadre(card.prefix) ?? card.prefix
+    const group = byPadre.get(padre) ?? { padre, subtemas: [] }
+    group.subtemas.push(card)
+    byPadre.set(padre, group)
+  }
+
+  // 4) Ordenar padres y, dentro, los subtemas.
+  const grupos = [...byPadre.values()].sort((a, b) =>
+    compareTemaCodes(a.padre, b.padre)
+  )
+  for (const g of grupos) g.subtemas.sort((a, b) => compareTemaCodes(a.prefix, b.prefix))
 
   return (
     <div>
@@ -97,7 +117,7 @@ export default async function TemasPage() {
           alignItems: "center",
           gap: 16,
           padding: 22,
-          marginBottom: 20,
+          marginBottom: 24,
           textDecoration: "none",
           color: "inherit",
           background:
@@ -128,68 +148,145 @@ export default async function TemasPage() {
         <ArrowRight className="h-5 w-5" style={{ color: "var(--orange-600)", flexShrink: 0 }} />
       </Link>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {temas.map((t) => {
-          const acc = t.totalAnswers > 0 ? (t.correctAnswers / t.totalAnswers) * 100 : null
-          const accColor = acc === null
-            ? "var(--slate-400)"
-            : acc < 70
-            ? "var(--red-500)"
-            : acc >= 90
-            ? "var(--green)"
-            : "var(--amber)"
-          return (
-            <Link
-              key={t.prefix}
-              href={`/temas/${encodeURIComponent(t.prefix)}`}
-              className="card-soft"
+      {/* GRUPOS POR TEMA PADRE */}
+      {grupos.map((g) => (
+        <section key={g.padre} style={{ marginBottom: 28 }}>
+          {/* Header del tema padre */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              gap: 10,
+              padding: "0 4px",
+              marginBottom: 10,
+            }}
+          >
+            <span
+              className="font-mono-tabular"
               style={{
-                padding: 18,
-                textDecoration: "none",
-                color: "inherit",
-                display: "block",
-                transition: "transform 0.15s, border-color 0.15s, box-shadow 0.15s",
+                fontSize: 11,
+                fontWeight: 800,
+                color: "var(--orange-600)",
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
               }}
             >
-              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                    <span
-                      className="font-mono-tabular"
-                      style={{
-                        padding: "3px 9px",
-                        borderRadius: 6,
-                        background: "rgba(249, 115, 22, 0.12)",
-                        color: "var(--orange-600)",
-                        fontSize: 11.5,
-                        fontWeight: 700,
-                      }}
-                    >
-                      {t.prefix}
-                    </span>
-                    {acc !== null && (
-                      <span
-                        className="font-mono-tabular"
-                        style={{ marginLeft: "auto", fontSize: 14, fontWeight: 800, color: accColor }}
+              Tema {g.padre.replace(/^TC\s+/, "")}
+            </span>
+            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "var(--slate-700)" }}>
+              {getTemaPadreName(g.padre)}
+            </h2>
+            <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--slate-400)" }}>
+              {g.subtemas.length} {g.subtemas.length === 1 ? "subtema" : "subtemas"}
+            </span>
+          </div>
+
+          {/* Grid de subtemas (mismo tamaño que antes: 3 columnas en lg) */}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {g.subtemas.map((t) => {
+              const acc =
+                t.totalAnswers > 0
+                  ? (t.correctAnswers / t.totalAnswers) * 100
+                  : null
+              const accColor =
+                acc === null
+                  ? "var(--slate-400)"
+                  : acc < 70
+                  ? "var(--red-500)"
+                  : acc >= 90
+                  ? "var(--green)"
+                  : "var(--amber)"
+              return (
+                <Link
+                  key={t.prefix}
+                  href={`/temas/${encodeURIComponent(t.prefix)}`}
+                  className="card-soft"
+                  style={{
+                    padding: 18,
+                    textDecoration: "none",
+                    color: "inherit",
+                    display: "block",
+                    transition: "transform 0.15s, border-color 0.15s, box-shadow 0.15s",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      justifyContent: "space-between",
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          marginBottom: 8,
+                        }}
                       >
-                        {acc.toFixed(0)}%
-                      </span>
-                    )}
+                        <span
+                          className="font-mono-tabular"
+                          style={{
+                            padding: "3px 9px",
+                            borderRadius: 6,
+                            background: "rgba(249, 115, 22, 0.12)",
+                            color: "var(--orange-600)",
+                            fontSize: 11.5,
+                            fontWeight: 700,
+                          }}
+                        >
+                          {t.prefix}
+                        </span>
+                        {acc !== null && (
+                          <span
+                            className="font-mono-tabular"
+                            style={{
+                              marginLeft: "auto",
+                              fontSize: 14,
+                              fontWeight: 800,
+                              color: accColor,
+                            }}
+                          >
+                            {acc.toFixed(0)}%
+                          </span>
+                        )}
+                      </div>
+                      <h3
+                        style={{
+                          fontSize: 15,
+                          fontWeight: 700,
+                          lineHeight: 1.35,
+                          margin: 0,
+                        }}
+                      >
+                        {getTemaName(t.prefix)}
+                      </h3>
+                      <div
+                        style={{
+                          marginTop: 10,
+                          fontSize: 12,
+                          color: "var(--slate-500)",
+                          fontWeight: 500,
+                        }}
+                      >
+                        {t.totalQuestions} preguntas
+                        {t.totalAnswers > 0 &&
+                          ` · ${t.correctAnswers}/${t.totalAnswers} aciertos`}
+                      </div>
+                    </div>
+                    <ArrowRight
+                      className="h-4 w-4"
+                      style={{ color: "var(--slate-400)", flexShrink: 0, marginTop: 2 }}
+                    />
                   </div>
-                  <h3 style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.35, margin: 0 }}>
-                    {getTemaName(t.prefix)}
-                  </h3>
-                  <div style={{ marginTop: 10, fontSize: 12, color: "var(--slate-500)", fontWeight: 500 }}>
-                    {t.totalQuestions} preguntas
-                    {t.totalAnswers > 0 && ` · ${t.correctAnswers}/${t.totalAnswers} aciertos`}
-                  </div>
-                </div>
-                <ArrowRight className="h-4 w-4" style={{ color: "var(--slate-400)", flexShrink: 0, marginTop: 2 }} />
-              </div>
-            </Link>
-          )
-        })}
-      </div>
+                </Link>
+              )
+            })}
+          </div>
+        </section>
+      ))}
     </div>
   )
 }

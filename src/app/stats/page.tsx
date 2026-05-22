@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { db } from "@/lib/db"
 import { requireUser } from "@/lib/auth"
-import { getTemaName } from "@/lib/temas"
+import { getTemaName, extractTemaPrefix, compareTemaCodes } from "@/lib/temas"
 import {
   ChevronLeft,
   ChartBar,
@@ -22,15 +22,20 @@ interface TemaStatsRow {
 export default async function StatsPage() {
   const user = await requireUser()
 
+  // Recuperamos conteos por codigoTema CRUDO. El parser de prefijo se hace
+  // en JS — el `SUBSTR/INSTR` anterior tenía un bug con códigos que llevaban
+  // un guion dentro del paréntesis (p.ej. "TC 2.8 (2-8.1)" salía como
+  // "TC 2.8 (2"). Ver src/lib/temas.ts y temas.test.ts para el fix.
   const raw = await db.$queryRaw<
-    { prefix: string; totalQuestions: bigint; totalAnswers: bigint; correctAnswers: bigint }[]
+    {
+      codigoTema:     string
+      totalQuestions: bigint
+      totalAnswers:   bigint
+      correctAnswers: bigint
+    }[]
   >`
     SELECT
-      CASE
-        WHEN INSTR(q.codigoTema, '-') > 0
-        THEN SUBSTR(q.codigoTema, 1, INSTR(q.codigoTema, '-') - 1)
-        ELSE q.codigoTema
-      END                                          AS prefix,
+      q.codigoTema                                 AS codigoTema,
       COUNT(DISTINCT q.id)                         AS totalQuestions,
       COUNT(a.id)                                  AS totalAnswers,
       COALESCE(SUM(CASE WHEN a.isCorrect = 1 THEN 1 ELSE 0 END), 0) AS correctAnswers
@@ -39,16 +44,27 @@ export default async function StatsPage() {
     LEFT JOIN exam_attempts ea ON ea.id = a.attemptId AND ea.userId = ${user.id}
     WHERE q.codigoTema IS NOT NULL
       AND (a.id IS NULL OR ea.id IS NOT NULL)
-    GROUP BY prefix
-    ORDER BY prefix
+    GROUP BY q.codigoTema
   `
 
-  const temas: TemaStatsRow[] = raw.map((r) => ({
-    prefix:         r.prefix.trim(),
-    totalQuestions: Number(r.totalQuestions),
-    totalAnswers:   Number(r.totalAnswers),
-    correctAnswers: Number(r.correctAnswers),
-  }))
+  const byPrefix = new Map<string, TemaStatsRow>()
+  for (const r of raw) {
+    const prefix = extractTemaPrefix(r.codigoTema)
+    if (!prefix) continue // descarta basura ("TC" sin más, 4 preguntas)
+    const card = byPrefix.get(prefix) ?? {
+      prefix,
+      totalQuestions: 0,
+      totalAnswers:   0,
+      correctAnswers: 0,
+    }
+    card.totalQuestions += Number(r.totalQuestions)
+    card.totalAnswers   += Number(r.totalAnswers)
+    card.correctAnswers += Number(r.correctAnswers)
+    byPrefix.set(prefix, card)
+  }
+  const temas: TemaStatsRow[] = [...byPrefix.values()].sort((a, b) =>
+    compareTemaCodes(a.prefix, b.prefix)
+  )
 
   const [totalAttempts, totalAnswers, correctAnswers] = await Promise.all([
     db.examAttempt.count({ where: { userId: user.id, finishedAt: { not: null } } }),

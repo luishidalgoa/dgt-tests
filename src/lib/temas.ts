@@ -1,8 +1,22 @@
 /**
  * Utilidades para trabajar con los códigos de tema (codigoTema).
  *
- * El formato es "TC X.Y-Z.W (...)" donde la parte "TC X.Y" identifica
- * el capítulo del libro AEOL. Agrupamos por ese prefijo.
+ * El formato típico es `TC X.Y-Z.W (X-Y.Z)` donde:
+ *   - `TC X.Y` (o `TC X`) = subtema visible en la UI ("La vía", "Peatones"…)
+ *   - `-Z.W`              = subdivisión interna dentro del subtema
+ *   - `(…)`               = codificación alternativa, ignorable para parsing
+ *
+ * Ejemplos reales (2676 preguntas, ~50 patrones):
+ *   "TC 1.2-5.3 (1-2.5)"        →  prefix="TC 1.2", padre="TC 1", inner="5.3"
+ *   "TC 7.3-3.1.3 (7-3.3.1)"    →  prefix="TC 7.3", padre="TC 7", inner="3.1.3"
+ *   "TC 2.8 (2-8.1)"            →  prefix="TC 2.8", padre="TC 2", inner=null
+ *   "TC 5-2.4 (5-2.4)"          →  prefix="TC 5",   padre="TC 5", inner="2.4"
+ *   "TC 7.3-3.4_ADAS (7-3.4)"   →  prefix="TC 7.3", padre="TC 7", inner="3.4"
+ *   "TC Def-2.2 (Def-2)"        →  prefix="TC Def", padre="TC Def", inner=null
+ *
+ * Bug histórico (corregido en Fase 96): la SQL antigua usaba
+ * `INSTR(codigoTema, '-')` lo cual cortaba "TC 2.8 (2-8.1)" en "TC 2.8 (2".
+ * Por eso aparecía una tarjeta huérfana "TC 2.8 (2" en la página /temas.
  */
 
 const TEMA_NAMES: Record<string, string> = {
@@ -41,14 +55,110 @@ const TEMA_NAMES: Record<string, string> = {
   "TC 8":    "Transporte de cargas",
   "TC 9":    "Accidentes",
   "TC 10":   "Cuestiones administrativas",
+  "TC Def":  "Definiciones",
 }
+
+// ── PREFIJO (subtema visible) ────────────────────────────────────────────
+
+/**
+ * Extrae el prefijo de subtema visible, p.ej. "TC 1.2".
+ *
+ * Devuelve `null` si la entrada no es parseable (codigoTema vacío, solo "TC",
+ * o un valor sin estructura reconocible). La UI agrupa esos en "Otros".
+ *
+ * Casos que acepta:
+ *   - `TC X.Y` con o sin sufijos de subdivisión
+ *   - `TC X`   (tema sin subtema decimal)
+ *   - `TC Def` (definiciones del manual, 16 preguntas)
+ */
+export function extractTemaPrefix(codigoTema: string | null | undefined): string | null {
+  if (!codigoTema) return null
+  const trimmed = codigoTema.trim()
+  if (!trimmed) return null
+  // "TC " + (dígitos[.dígitos] | "Def")
+  const m = trimmed.match(/^TC\s+(\d+(?:\.\d+)?|Def)\b/i)
+  return m ? `TC ${m[1]}` : null
+}
+
+// ── TEMA PADRE (nivel 1 de la jerarquía) ─────────────────────────────────
+
+/**
+ * Dado un prefijo de subtema, devuelve el código del tema padre.
+ * Ejemplo: `extractTemaPadre("TC 1.2")` → `"TC 1"`.
+ *
+ * Se usa para agrupar subtemas bajo un header común en /temas.
+ */
+export function extractTemaPadre(prefix: string | null | undefined): string | null {
+  if (!prefix) return null
+  const trimmed = prefix.trim()
+  if (!trimmed) return null
+  // "TC " + dígitos | "Def"  (descarta el sufijo .N si lo hay)
+  const m = trimmed.match(/^TC\s+(\d+|Def)/i)
+  return m ? `TC ${m[1]}` : null
+}
+
+// ── SUBDIVISIÓN INTERNA (nivel 2) ────────────────────────────────────────
+
+/**
+ * Devuelve la parte después del primer guion estructural, normalizada.
+ * Ejemplo: `extractTemaInner("TC 1.2-5.3 (1-2.5)")` → `"5.3"`.
+ *
+ * Acepta sufijos como `_ADAS` y los descarta — se agrupan junto al resto
+ * del mismo número (`3.4_ADAS` → `3.4`).
+ *
+ * Devuelve `null` cuando el codigoTema no tiene guion estructural — el
+ * subtema es indivisible.
+ */
+export function extractTemaInner(codigoTema: string | null | undefined): string | null {
+  if (!codigoTema) return null
+  const trimmed = codigoTema.trim()
+  if (!trimmed) return null
+  // Buscamos el primer guion ANTES del paréntesis (la "parte exterior").
+  const beforeParen = trimmed.split("(")[0].trim()
+  const dashIdx = beforeParen.indexOf("-")
+  if (dashIdx < 0) return null
+  const tail = beforeParen.slice(dashIdx + 1).trim()
+  if (!tail) return null
+  // Normalizar: quitar sufijos tipo _ADAS conservando solo dígitos y puntos.
+  const m = tail.match(/^(\d+(?:\.\d+)*)/)
+  return m ? m[1] : null
+}
+
+// ── NOMBRES LEGIBLES ─────────────────────────────────────────────────────
 
 export function getTemaName(code: string): string {
   return TEMA_NAMES[code] ?? code
 }
 
-export function extractTemaPrefix(codigoTema: string | null): string | null {
-  if (!codigoTema) return null
-  const match = codigoTema.match(/^(TC\s+\d+(?:\.\d+)?)/)
-  return match ? match[1].trim() : codigoTema
+/**
+ * Devuelve el nombre legible del tema padre (`TC 1` → "La conducción").
+ * Si no hay mapeo, devuelve el código tal cual.
+ */
+export function getTemaPadreName(padre: string): string {
+  return TEMA_NAMES[padre] ?? padre
+}
+
+// ── ORDEN NUMÉRICO ───────────────────────────────────────────────────────
+
+/**
+ * Comparator para ordenar códigos de tema/subtema numéricamente.
+ * Sin esto, `localeCompare` mete "TC 10" antes que "TC 2".
+ * "TC Def" se sortea al final (sentido: definiciones no son un tema numerado).
+ *
+ * Uso: `temas.sort((a, b) => compareTemaCodes(a.prefix, b.prefix))`
+ */
+export function compareTemaCodes(a: string, b: string): number {
+  const ka = temaSortKey(a)
+  const kb = temaSortKey(b)
+  if (ka[0] !== kb[0]) return ka[0] - kb[0]
+  if (ka[1] !== kb[1]) return ka[1] - kb[1]
+  return a.localeCompare(b)
+}
+
+function temaSortKey(prefix: string): [number, number] {
+  const m = prefix.match(/^TC\s+(Def|\d+)(?:\.(\d+))?/i)
+  if (!m) return [99_999, 0]
+  const padre = m[1].toLowerCase() === "def" ? 9_000 : parseInt(m[1], 10)
+  const sub   = m[2] ? parseInt(m[2], 10) : 0
+  return [padre, sub]
 }
