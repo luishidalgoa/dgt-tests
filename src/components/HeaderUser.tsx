@@ -56,6 +56,10 @@ export function HeaderUser({ username, aiTokensRemaining, aiTokensMax, plan }: H
   const hasQuota = typeof liveRemaining === "number" && typeof liveMax === "number"
   const lowQuota = hasQuota && liveRemaining! <= 5
 
+  // ⚠ No envolvemos TODO el avatar en un solo <Link> porque PlanBadge
+  // (cuando es ADMIN/FREE) renderiza su propio <Link> — anidar <a> es
+  // HTML inválido y rompe la hidratación de React. En su lugar, los
+  // elementos clicables son siblings independientes dentro del avatar.
   return (
     <div className="avatar">
       <Link
@@ -65,34 +69,41 @@ export function HeaderUser({ username, aiTokensRemaining, aiTokensMax, plan }: H
       >
         <span className="pic" aria-hidden="true">{initial}</span>
         <span className="name">{username}</span>
-        {plan && <PlanBadge plan={plan} />}
-        {hasQuota && (
-          <span
-            title={`Te quedan ${liveRemaining} de ${liveMax} tokens IA este mes`}
-            className="font-mono-tabular"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 4,
-              padding: "2px 8px",
-              borderRadius: 999,
-              background: lowQuota
-                ? "rgba(239, 68, 68, 0.12)"
-                : "rgba(168, 85, 247, 0.12)",
-              color: lowQuota ? "var(--red-600)" : "rgb(126, 34, 206)",
-              fontSize: 11,
-              fontWeight: 800,
-              border: lowQuota
-                ? "1px solid rgba(239, 68, 68, 0.30)"
-                : "1px solid rgba(168, 85, 247, 0.25)",
-              transition: "background 0.2s, color 0.2s",
-            }}
-          >
-            <Sparkles className="h-3 w-3" />
-            {liveRemaining}/{liveMax}
-          </span>
-        )}
-        <Settings className="h-3.5 w-3.5" style={{ color: "var(--slate-400)" }} />
+      </Link>
+      {plan && <PlanBadge plan={plan} />}
+      {hasQuota && (
+        <span
+          title={`Te quedan ${liveRemaining} de ${liveMax} tokens IA este mes`}
+          className="font-mono-tabular"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            padding: "2px 8px",
+            borderRadius: 999,
+            background: lowQuota
+              ? "rgba(239, 68, 68, 0.12)"
+              : "rgba(168, 85, 247, 0.12)",
+            color: lowQuota ? "var(--red-600)" : "rgb(126, 34, 206)",
+            fontSize: 11,
+            fontWeight: 800,
+            border: lowQuota
+              ? "1px solid rgba(239, 68, 68, 0.30)"
+              : "1px solid rgba(168, 85, 247, 0.25)",
+            transition: "background 0.2s, color 0.2s",
+          }}
+        >
+          <Sparkles className="h-3 w-3" />
+          {liveRemaining}/{liveMax}
+        </span>
+      )}
+      <Link
+        href="/settings"
+        title="Configuración"
+        aria-label="Configuración"
+        style={{ display: "inline-flex", color: "var(--slate-400)", textDecoration: "none" }}
+      >
+        <Settings className="h-3.5 w-3.5" />
       </Link>
       <button
         type="button"
