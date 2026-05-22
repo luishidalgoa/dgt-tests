@@ -55,6 +55,7 @@ model User {
   hostedParties   Party[]       @relation("HostedParties")
   partyPlays      PartyPlayer[] @relation("PartyParticipations")
   aiPaid          UserAiPaid[]
+  configUpdates   AppConfig[]   @relation("AppConfigUpdates")
 
   @@map("users")
 }
@@ -267,6 +268,28 @@ model AICacheEntry {
 
   @@unique([questionId, withImage])
   @@map("ai_cache_entries")
+}
+
+// ── Config runtime de la aplicación (panel admin) ──────────────────────
+// Cosas que el admin puede cambiar sin redeploy: quotas, feature flags,
+// API keys (cifradas con AES-256-GCM via APP_MASTER_KEY), textos UI…
+//
+// Convención: la `key` es un string identificador (p. ej. "AI_TOKENS_PRO",
+// "FEATURE_COMPETIR", "STRIPE_SECRET_KEY"). El value:
+//   - Si encrypted=false → JSON string ("60", "true", "\"texto\"", etc.)
+//   - Si encrypted=true  → envelope crypto.ts (iv:tag:ct base64)
+//
+// El src/lib/appConfig.ts wrapea get/set con tipado y descifrado.
+model AppConfig {
+  key       String    @id
+  value     String
+  encrypted Boolean   @default(false)
+  updatedAt DateTime  @updatedAt
+  /// Id del admin que cambió el valor por última vez (null = seed inicial).
+  updatedBy Int?
+  updatedByUser User? @relation("AppConfigUpdates", fields: [updatedBy], references: [id], onDelete: SetNull)
+
+  @@map("app_config")
 }
 
 // ── Registro per-user de "ya pagué por esta explicación IA" ──────────────
