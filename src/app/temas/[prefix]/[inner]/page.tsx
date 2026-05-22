@@ -10,6 +10,7 @@ import {
 import { Prisma } from "@prisma/client"
 import { shuffle } from "@/lib/shuffle"
 import { QUESTION_VISIBLE_WHERE, SQL_QUESTION_VISIBLE_AND } from "@/lib/questions"
+import { getSubBloqueInfo } from "@/lib/manualIndice"
 import { ExamRunner } from "@/components/ExamRunner"
 import { getEffectiveTokenQuota, hasFullAccess } from "@/lib/permissions"
 import { getQuotaStatus } from "@/lib/aiQuota"
@@ -63,6 +64,12 @@ export default async function InnerBlockPage({ params, searchParams }: PageProps
   if (totalAvailable === 0) notFound()
 
   const innerLabel = innerCode === "general" ? "General" : `${prefix}-${innerCode}`
+  // Título legible del sub-bloque (si está en manualIndice.json).
+  // Sub-bloque code jerárquico: prefix sin "TC " + "." + innerCode.
+  const subCode = innerCode === "general"
+    ? null
+    : `${prefix.replace(/^TC\s+/, "")}.${innerCode}`
+  const subInfo = subCode ? getSubBloqueInfo(subCode) : null
 
   // Vista selector (sin ?n=)
   if (!requested) {
@@ -101,7 +108,7 @@ export default async function InnerBlockPage({ params, searchParams }: PageProps
                 · {getTemaName(prefix)}
               </span>
             </div>
-            <h1>Sub-bloque {innerCode === "general" ? "general" : innerCode}</h1>
+            <h1>{subInfo?.titulo ?? (innerCode === "general" ? "General" : `Sub-bloque ${innerCode}`)}</h1>
           </div>
         </header>
 

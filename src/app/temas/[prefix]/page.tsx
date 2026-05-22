@@ -11,6 +11,7 @@ import {
 import { Prisma } from "@prisma/client"
 import { shuffle } from "@/lib/shuffle"
 import { QUESTION_VISIBLE_WHERE, SQL_QUESTION_VISIBLE_AND } from "@/lib/questions"
+import { getSubBloqueInfo } from "@/lib/manualIndice"
 import { ExamRunner } from "@/components/ExamRunner"
 import { getEffectiveTokenQuota, hasFullAccess } from "@/lib/permissions"
 import { getQuotaStatus } from "@/lib/aiQuota"
@@ -217,7 +218,15 @@ export default async function TemaPage({ params, searchParams }: PageProps) {
               </span>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {innerBuckets.map((b) => (
+              {innerBuckets.map((b) => {
+                // Buscar título legible del sub-bloque en manualIndice.json.
+                // El subCode jerárquico es `bloque-prefix-sin-TC + "." + inner`,
+                // p.ej. "1.2" + "." + "5.3" → "1.2.5.3".
+                const subCode = b.inner === "general"
+                  ? null
+                  : `${prefix.replace(/^TC\s+/, "")}.${b.inner}`
+                const subTitle = subCode ? getSubBloqueInfo(subCode)?.titulo : null
+                return (
                 <Link
                   key={b.inner}
                   href={`/temas/${rawPrefix}/${encodeURIComponent(b.inner)}`}
@@ -246,6 +255,14 @@ export default async function TemaPage({ params, searchParams }: PageProps) {
                       >
                         {b.inner === "general" ? "General" : `${prefix}-${b.inner}`}
                       </span>
+                      {subTitle && (
+                        <div style={{
+                          fontSize: 14, fontWeight: 700, color: "var(--ink)",
+                          marginBottom: 4, lineHeight: 1.35,
+                        }}>
+                          {subTitle}
+                        </div>
+                      )}
                       <div style={{ fontSize: 13, color: "var(--slate-600)", fontWeight: 600 }}>
                         {b.count} {b.count === 1 ? "pregunta" : "preguntas"}
                       </div>
@@ -256,7 +273,8 @@ export default async function TemaPage({ params, searchParams }: PageProps) {
                     />
                   </div>
                 </Link>
-              ))}
+                )
+              })}
             </div>
           </section>
         )}

@@ -122,9 +122,13 @@ describe("extractTemaInner", () => {
 })
 
 describe("getTemaName", () => {
-  it("devuelve nombres conocidos del catálogo", () => {
-    expect(getTemaName("TC 1.2")).toBe("La vía")
-    expect(getTemaName("TC 7.3")).toBe("Seguridad activa y pasiva")
+  // Desde Fase 97.2, los títulos vienen primero de src/data/manualIndice.json
+  // (catálogo curado del manual oficial AEOL) y solo cae al TEMA_NAMES
+  // hardcoded como fallback. Estos tests validan que la jerarquía del
+  // JSON gana sobre el hardcoded.
+  it("devuelve nombres del manualIndice.json para bloques", () => {
+    expect(getTemaName("TC 1.2")).toBe("Los vehículos en la vía")
+    expect(getTemaName("TC 7.3")).toBe("El factor vehículo")
   })
 
   it("hace fallback al propio código si no está en catálogo", () => {
@@ -133,10 +137,10 @@ describe("getTemaName", () => {
 })
 
 describe("getTemaPadreName", () => {
-  it("devuelve el nombre del tema padre", () => {
-    expect(getTemaPadreName("TC 1")).toBe("La conducción")
-    expect(getTemaPadreName("TC 7")).toBe("Equipamiento del vehículo")
-    expect(getTemaPadreName("TC 10")).toBe("Cuestiones administrativas")
+  it("devuelve el nombre del tema padre desde manualIndice.json", () => {
+    expect(getTemaPadreName("TC 1")).toBe("El uso de las vías")
+    expect(getTemaPadreName("TC 7")).toBe("Accidentes y factores que intervienen")
+    expect(getTemaPadreName("TC 10")).toBe("Técnicas de conducción")
   })
 
   it("hace fallback al código si no hay mapeo", () => {

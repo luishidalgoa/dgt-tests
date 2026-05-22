@@ -126,16 +126,37 @@ export function extractTemaInner(codigoTema: string | null | undefined): string 
 
 // ── NOMBRES LEGIBLES ─────────────────────────────────────────────────────
 
+import { getBloqueInfo, getTemaInfo } from "./manualIndice"
+
+/**
+ * Resuelve el nombre legible de un código TC X.Y o TC X.
+ *
+ * Orden de preferencia:
+ *   1. manualIndice.json (catálogo curado por admin; refleja /admin)
+ *   2. TEMA_NAMES hardcoded (fallback histórico)
+ *   3. El propio código (si no hay mapeo en ninguno)
+ *
+ * Funciona tanto con "TC 1.2" (bloque) como "TC 1" (tema).
+ */
 export function getTemaName(code: string): string {
-  return TEMA_NAMES[code] ?? code
+  return (
+    getBloqueInfo(code)?.titulo ??
+    getTemaInfo(code)?.titulo ??
+    TEMA_NAMES[code] ??
+    code
+  )
 }
 
 /**
  * Devuelve el nombre legible del tema padre (`TC 1` → "La conducción").
- * Si no hay mapeo, devuelve el código tal cual.
+ * Misma estrategia de fallback que getTemaName.
  */
 export function getTemaPadreName(padre: string): string {
-  return TEMA_NAMES[padre] ?? padre
+  return (
+    getTemaInfo(padre)?.titulo ??
+    TEMA_NAMES[padre] ??
+    padre
+  )
 }
 
 // ── CLASIFICACIÓN A 3 NIVELES (Tema > Bloque > SubBloque) ────────────────
