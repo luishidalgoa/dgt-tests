@@ -69,9 +69,15 @@ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_live_..."
 STRIPE_WEBHOOK_SECRET="whsec_..."       # del endpoint LIVE del dashboard
 STRIPE_PRICE_ID="price_live_..."        # del producto en modo LIVE
 NEXT_PUBLIC_APP_URL="https://dgt-tests.vercel.app"
-RESEND_API_KEY="re_..."
-ALERT_EMAIL="..."
+ALERT_EMAIL="..."                       # destinatario de alertas admin
+# Email (nodemailer + Gmail SMTP) — Fase 90
+GMAIL_USER="..."                        # tu cuenta gmail
+GMAIL_APP_PASSWORD="..."                # https://myaccount.google.com/apppasswords
+GMAIL_FROM="DGT Tests <...@gmail.com>"  # opcional, sender bonito
 ```
+
+> ⚠ La columna RESEND_API_KEY de versiones anteriores ya NO se usa
+> desde Fase 90. Puedes borrarla de Vercel sin afectar a nada.
 
 ### `.env.local` — overrides para DESARROLLO
 

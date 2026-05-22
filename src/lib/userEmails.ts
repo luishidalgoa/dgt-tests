@@ -152,42 +152,19 @@ export function composeInvoiceUpcomingEmail(
 }
 
 /**
- * Envía un email al user vía Resend. Igual que sendEmail() de alerts.ts
- * pero con destinatario custom. Si RESEND_API_KEY no está configurada,
- * loguea y vuelve (modo desarrollo sin Resend).
+ * Envía un email al user. Wrapper finísimo del mailer central.
  *
- * Devuelve true si Resend aceptó (HTTP 200/202), false si hubo error.
+ * Devuelve true si el SMTP aceptó la entrega, false en cualquier otro
+ * caso (sin config, error de transporte, etc.). No lanza.
  */
 export async function sendUserEmail(opts: {
   to:      string
   subject: string
   html:    string
 }): Promise<boolean> {
-  const apiKey = process.env.RESEND_API_KEY
-  const from   = process.env.ALERT_FROM ?? "DGT Tests <onboarding@resend.dev>"
-
-  if (!apiKey) {
-    console.warn("[userEmails] RESEND_API_KEY no configurada — email omitido:", opts.subject, "→", opts.to)
-    return false
-  }
-
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization:  `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ from, to: [opts.to], subject: opts.subject, html: opts.html }),
-    })
-    if (!res.ok) {
-      const txt = await res.text().catch(() => "")
-      console.error(`[userEmails] Resend ${res.status}: ${txt}`)
-      return false
-    }
-    return true
-  } catch (err) {
-    console.error("[userEmails] error enviando email:", err)
-    return false
-  }
+  // Import dinámico para mantener desacoplado el resto del módulo, que
+  // es 100% puro (los composers). Así los tests de los composers no
+  // arrastran al mailer.
+  const { sendMail } = await import("@/lib/mailer")
+  return sendMail(opts)
 }

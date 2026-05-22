@@ -1,14 +1,16 @@
 /**
- * Avisos por email cuando algo crítico falla.
+ * Avisos por email al admin cuando algo crítico falla en el servidor.
  *
- * Usa Resend (https://resend.com) — la free tier vale para alertas. Necesita:
- *   RESEND_API_KEY     → API key de Resend
- *   ALERT_EMAIL        → email donde enviar las alertas
- *   ALERT_FROM         → opcional, sender (por defecto onboarding@resend.dev)
+ * Usa el mailer central (src/lib/mailer.ts → nodemailer + Gmail).
+ * Env vars que esto necesita:
+ *   ALERT_EMAIL   → email del admin (a dónde llegan las alertas)
+ *   GMAIL_USER, GMAIL_APP_PASSWORD → ver src/lib/mailer.ts
  *
- * Rate-limit en memoria: máximo 1 email por hora por tipo, para no spamear
- * cuando la cuota está rota y cada request falla.
+ * Rate-limit en memoria: máximo 1 email por hora por tipo, para no
+ * spamear cuando la cuota está rota y cada request falla.
  */
+
+import { sendMail } from "@/lib/mailer"
 
 const RATE_LIMIT_MS = 60 * 60 * 1000 // 1 hora
 const lastSentByKey = new Map<string, number>()
@@ -29,36 +31,15 @@ async function sendEmail({ key, subject, html }: SendOptions): Promise<void> {
   }
   lastSentByKey.set(key, now)
 
-  // 2. Config
-  const apiKey = process.env.RESEND_API_KEY
-  const to     = process.env.ALERT_EMAIL
-  const from   = process.env.ALERT_FROM ?? "DGT Tests Alerts <onboarding@resend.dev>"
-
-  if (!apiKey || !to) {
-    console.warn(
-      "[alerts] RESEND_API_KEY o ALERT_EMAIL no configurados — alerta omitida:",
-      subject
-    )
+  // 2. Destino: ALERT_EMAIL (admin, no user)
+  const to = process.env.ALERT_EMAIL
+  if (!to) {
+    console.warn("[alerts] ALERT_EMAIL no configurado — alerta omitida:", subject)
     return
   }
 
-  // 3. Enviar
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization:  `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ from, to: [to], subject, html }),
-    })
-    if (!res.ok) {
-      const txt = await res.text().catch(() => "")
-      console.error(`[alerts] Resend ${res.status}: ${txt}`)
-    }
-  } catch (err) {
-    console.error("[alerts] error enviando email:", err)
-  }
+  // 3. Enviar vía mailer central
+  await sendMail({ to, subject, html })
 }
 
 /**

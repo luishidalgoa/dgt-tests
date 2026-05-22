@@ -86,19 +86,20 @@ describe("composeInvoiceUpcomingEmail", () => {
   })
 })
 
-describe("sendUserEmail", () => {
-  beforeEach(() => {
-    process.env.RESEND_API_KEY = "re_test_dummy"
-  })
-  afterEach(() => {
-    delete process.env.RESEND_API_KEY
-    vi.restoreAllMocks()
+// sendUserEmail ahora delega a @/lib/mailer.sendMail. Mockeamos eso.
+vi.mock("@/lib/mailer", () => ({
+  sendMail: vi.fn(),
+}))
+
+describe("sendUserEmail (delega a mailer)", () => {
+  beforeEach(async () => {
+    const mailer = await import("@/lib/mailer")
+    vi.mocked(mailer.sendMail).mockReset()
   })
 
-  it("hace POST a Resend con el body correcto", async () => {
-    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue(
-      new Response("{}", { status: 200 })
-    )
+  it("llama a mailer.sendMail con los mismos args y devuelve su resultado", async () => {
+    const mailer = await import("@/lib/mailer")
+    vi.mocked(mailer.sendMail).mockResolvedValue(true)
 
     const ok = await sendUserEmail({
       to:      "user@example.com",
@@ -106,35 +107,17 @@ describe("sendUserEmail", () => {
       html:    "<p>hi</p>",
     })
     expect(ok).toBe(true)
-    expect(fetchSpy).toHaveBeenCalledOnce()
-    const [url, init] = fetchSpy.mock.calls[0]!
-    expect(url).toBe("https://api.resend.com/emails")
-    const body = JSON.parse((init?.body as string))
-    expect(body).toMatchObject({
-      to:      ["user@example.com"],
+    expect(mailer.sendMail).toHaveBeenCalledWith({
+      to:      "user@example.com",
       subject: "test subject",
       html:    "<p>hi</p>",
     })
   })
 
-  it("devuelve false si Resend responde error", async () => {
-    vi.spyOn(global, "fetch").mockResolvedValue(
-      new Response("{\"error\":\"bad\"}", { status: 400 })
-    )
-    const ok = await sendUserEmail({ to: "x@x.com", subject: "s", html: "h" })
-    expect(ok).toBe(false)
-  })
+  it("devuelve false si mailer falla", async () => {
+    const mailer = await import("@/lib/mailer")
+    vi.mocked(mailer.sendMail).mockResolvedValue(false)
 
-  it("devuelve false sin RESEND_API_KEY y NO hace fetch", async () => {
-    delete process.env.RESEND_API_KEY
-    const fetchSpy = vi.spyOn(global, "fetch")
-    const ok = await sendUserEmail({ to: "x@x.com", subject: "s", html: "h" })
-    expect(ok).toBe(false)
-    expect(fetchSpy).not.toHaveBeenCalled()
-  })
-
-  it("devuelve false si fetch lanza excepción", async () => {
-    vi.spyOn(global, "fetch").mockRejectedValue(new Error("network down"))
     const ok = await sendUserEmail({ to: "x@x.com", subject: "s", html: "h" })
     expect(ok).toBe(false)
   })
