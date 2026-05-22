@@ -6,13 +6,19 @@
  * Uso:
  *   npm run manual:infer-titles                            # provider por defecto (groq, 14.4k RPD)
  *   npm run manual:infer-titles -- --provider gemini       # usa Gemini en su lugar
+ *   npm run manual:infer-titles -- --model mixtral-8x7b-32768
+ *                                                          # override del modelo (sin tocar BBDD)
  *   npm run manual:infer-titles -- --dry-run               # solo muestra sugerencias
  *   npm run manual:infer-titles -- --limit 5               # procesa solo los 5 primeros
- *   npm run manual:infer-titles -- --provider groq --limit 20 --dry-run
+ *   npm run manual:infer-titles -- --provider groq --model llama-3.1-8b-instant --limit 20
  *
- * Auth y modelo se leen de BBDD/env vía AIProvider:
+ * Auth y modelo POR DEFECTO se leen de BBDD/env (compartido con el front):
  *   - Groq:   GROQ_API_KEY  + GROQ_MODEL  (default llama-3.3-70b-versatile)
  *   - Gemini: GEMINI_API_KEY + GEMINI_MODEL (default gemini-flash-latest)
+ *
+ * El flag --model permite usar otro modelo SOLO para esta ejecución, útil
+ * si quieres tirar de un modelo más barato/rápido para el batch sin
+ * cambiar el que ven los usuarios en /api/ai/explain.
  *
  * NOTA: el script NO pisa títulos no-vacíos. Si quieres re-generar uno
  * que ya tiene título, bórralo a mano antes de ejecutar.
@@ -43,6 +49,16 @@ const PROVIDER_NAME: "gemini" | "groq" = (() => {
   if (idx < 0) return "groq"
   const val = process.argv[idx + 1] ?? ""
   return val === "gemini" ? "gemini" : "groq"
+})()
+/**
+ * Modelo override SOLO para este run. Si no se pasa, el provider usa
+ * GEMINI_MODEL / GROQ_MODEL de BBDD (mismo que /api/ai/explain).
+ */
+const MODEL_OVERRIDE: string | undefined = (() => {
+  const idx = process.argv.indexOf("--model")
+  if (idx < 0) return undefined
+  const v = process.argv[idx + 1]
+  return v && v.trim().length > 0 ? v.trim() : undefined
 })()
 /**
  * Throttle entre llamadas. Default ajustado por provider:
@@ -120,6 +136,11 @@ async function main() {
 
   console.log(`\n📋 ${pending.length} nodos sin título · procesando ${toProcess.length}`)
   console.log(`   proveedor: ${PROVIDER_NAME}`)
+  if (MODEL_OVERRIDE) {
+    console.log(`   modelo:    ${MODEL_OVERRIDE} (override CLI)`)
+  } else {
+    console.log(`   modelo:    el configurado en /admin para ${PROVIDER_NAME}`)
+  }
   console.log(`   throttle:  ${THROTTLE_MS}ms entre llamadas (~${Math.round(60000 / Math.max(THROTTLE_MS, 1))} RPM)`)
   if (DRY_RUN) console.log(`   modo --dry-run: no se escribirá el JSON\n`)
   else          console.log(``)
@@ -239,7 +260,12 @@ async function inferTitle(
   ].join("\n")
 
   const userPrompt = buildUserPrompt(node, questions)
-  const opts: AICompleteOptions = { jsonMode: true, temperature: 0.2, maxTokens: 200 }
+  const opts: AICompleteOptions = {
+    jsonMode:    true,
+    temperature: 0.2,
+    maxTokens:   200,
+    ...(MODEL_OVERRIDE ? { model: MODEL_OVERRIDE } : {}),
+  }
   const text = await provider.complete(systemPrompt, userPrompt, opts)
 
   // Parsear JSON robusto (algunos modelos meten ```json fences a pesar de jsonMode)

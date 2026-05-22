@@ -41,6 +41,12 @@ export interface AICompleteOptions {
   temperature?: number
   /** Tope de output tokens. Default 1024. */
   maxTokens?:   number
+  /**
+   * Override del modelo SOLO para esta llamada. Si va, el provider lo usa
+   * en vez del configurado en BBDD (GEMINI_MODEL / GROQ_MODEL). Útil
+   * para scripts batch que quieren modelo distinto sin tocar config global.
+   */
+  model?:       string
 }
 
 export interface AIProvider {

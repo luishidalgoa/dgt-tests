@@ -164,22 +164,22 @@ export const CONFIG_CATALOG: ConfigEntry[] = [
     options: [
       {
         value:       "gemini-flash-latest",
-        label:       "Flash — calidad alta (recomendado)",
+        label:       "Gemini Flash · latest (recomendado)",
         description: "Alias dinámico al último Flash estable. Razonamiento profundo, buena comprensión de matices legales DGT. Free tier: 250 RPD. Latencia ~2-3s.",
       },
       {
         value:       "gemini-2.5-flash-lite",
-        label:       "Flash-Lite — más throughput",
+        label:       "Gemini 2.5 Flash-Lite",
         description: "Optimizado para velocidad. Calidad correcta para análisis estándar pero peor en casos límite con varias excepciones. Free tier: 1000 RPD (4x más que Flash). Latencia ~1s.",
       },
       {
         value:       "gemini-2.5-pro",
-        label:       "Pro — calidad máxima",
+        label:       "Gemini 2.5 Pro",
         description: "Modelo más capaz. Excelente en casos trampa y razonamiento extenso. Free tier: 100 RPD (2.5x menos que Flash). Latencia ~4-6s. Coste mayor en plan pagado.",
       },
       {
         value:       "gemini-2.5-flash",
-        label:       "Flash 2.5 — versión fijada",
+        label:       "Gemini 2.5 Flash · versión fijada",
         description: "Apunta a la versión 2.5 concreta de Flash, sin auto-actualizar. Útil si quieres estabilidad absoluta. Mismas cuotas y rendimiento que 'flash-latest' hoy mismo.",
       },
     ],
@@ -195,22 +195,22 @@ export const CONFIG_CATALOG: ConfigEntry[] = [
       {
         value:       "llama-3.3-70b-versatile",
         label:       "Llama 3.3 70B Versatile (recomendado)",
-        description: "Modelo grande, calidad alta en español y razonamiento legal. ~275 TPM en free tier. Mejor relación calidad/coste.",
+        description: "Modelo grande, calidad alta en español y razonamiento legal. Free tier: ~14.400 RPD · 100k TPD. Mejor relación calidad/coste.",
       },
       {
         value:       "llama-3.1-8b-instant",
-        label:       "Llama 3.1 8B Instant — más rápido",
-        description: "Modelo pequeño, latencia bajísima (<300ms). Calidad menor para preguntas con matices. Útil si vas a hacer muchísimas llamadas.",
+        label:       "Llama 3.1 8B Instant",
+        description: "Modelo pequeño, latencia bajísima (<300ms). Calidad menor para preguntas con matices. Útil para muchísimas llamadas o tareas simples.",
       },
       {
         value:       "mixtral-8x7b-32768",
-        label:       "Mixtral 8x7B — clásico",
-        description: "MoE de Mistral con contexto largo (32k). Buen español, calidad media-alta. Útil como fallback.",
+        label:       "Mixtral 8x7B (32k contexto)",
+        description: "Mixture-of-Experts de Mistral con contexto largo. Buen español, calidad media-alta. Útil como fallback si Llama agota cuota.",
       },
       {
         value:       "gemma2-9b-it",
-        label:       "Gemma 2 9B IT — alternativa Google",
-        description: "Modelo de Google ejecutado en Groq. Calidad correcta, latencia baja. Útil para A/B testing.",
+        label:       "Gemma 2 9B Instruct",
+        description: "Modelo de Google ejecutado en Groq LPU. Calidad correcta, latencia baja. Útil para A/B testing.",
       },
     ],
   },

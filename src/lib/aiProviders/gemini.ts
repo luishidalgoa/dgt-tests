@@ -157,7 +157,8 @@ async function complete(
   userPrompt:   string,
   opts: AICompleteOptions = {},
 ): Promise<string> {
-  const { apiKey, model } = await getEnv()
+  const { apiKey, model: defaultModel } = await getEnv()
+  const model = opts.model ?? defaultModel
   const url = `${ENDPOINT}/${encodeURIComponent(model)}:generateContent`
 
   const fullPrompt = systemPrompt

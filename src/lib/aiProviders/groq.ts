@@ -159,7 +159,8 @@ async function complete(
   userPrompt:   string,
   opts: AICompleteOptions = {},
 ): Promise<string> {
-  const { apiKey, model } = await getEnv()
+  const { apiKey, model: defaultModel } = await getEnv()
+  const model = opts.model ?? defaultModel
 
   const messages: { role: "system" | "user"; content: string }[] = []
   if (systemPrompt) messages.push({ role: "system", content: systemPrompt })
