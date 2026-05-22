@@ -125,27 +125,27 @@
           },
           {
             "codigo": "1.3.1.2",
-            "titulo": "",
+            "titulo": "Cruce de peatones en calzada",
             "_preguntas": 3
           },
           {
             "codigo": "1.3.1.3",
-            "titulo": "",
+            "titulo": "Prohibiciones a peatones",
             "_preguntas": 3
           },
           {
             "codigo": "1.3.1.4",
-            "titulo": "",
+            "titulo": "Seguridad peatonal nocturna",
             "_preguntas": 4
           },
           {
             "codigo": "1.3.2.1",
-            "titulo": "",
+            "titulo": "Circulación de animales en vías",
             "_preguntas": 4
           },
           {
             "codigo": "1.3.2.3",
-            "titulo": "",
+            "titulo": "Circulación de animales y vehículos",
             "_preguntas": 2
           }
         ]
@@ -157,27 +157,27 @@
         "subBloques": [
           {
             "codigo": "1.4.1.1",
-            "titulo": "",
+            "titulo": "Velocidades en carreteras convencionales",
             "_preguntas": 44
           },
           {
             "codigo": "1.4.1.2",
-            "titulo": "",
+            "titulo": "Velocidad en vías urbanas",
             "_preguntas": 11
           },
           {
             "codigo": "1.4.1.3",
-            "titulo": "",
+            "titulo": "Velocidad y seguridad vial",
             "_preguntas": 9
           },
           {
             "codigo": "1.4.1.4",
-            "titulo": "",
+            "titulo": "Velocidad máxima permitida",
             "_preguntas": 9
           },
           {
             "codigo": "1.4.1.5",
-            "titulo": "",
+            "titulo": "Velocidad anormalmente reducida",
             "_preguntas": 11
           },
           {
@@ -192,7 +192,7 @@
           },
           {
             "codigo": "1.4.3.1",
-            "titulo": "",
+            "titulo": "Velocidad en situaciones especiales",
             "_preguntas": 22
           },
           {
@@ -214,57 +214,57 @@
         "subBloques": [
           {
             "codigo": "1.5.2.2",
-            "titulo": "",
+            "titulo": "Prioridad en intersecciones",
             "_preguntas": 16
           },
           {
             "codigo": "1.5.2.4",
-            "titulo": "",
+            "titulo": "Ceder el paso con seguridad",
             "_preguntas": 3
           },
           {
             "codigo": "1.5.2.5",
-            "titulo": "",
+            "titulo": "Prioridad en intersecciones",
             "_preguntas": 7
           },
           {
             "codigo": "1.5.3.1",
-            "titulo": "",
+            "titulo": "Prioridad en intersecciones especiales",
             "_preguntas": 11
           },
           {
             "codigo": "1.5.3.2",
-            "titulo": "",
+            "titulo": "Prioridad de paso a peatones",
             "_preguntas": 18
           },
           {
             "codigo": "1.5.4.1",
-            "titulo": "",
+            "titulo": "Vehículos prioritarios en servicio",
             "_preguntas": 12
           },
           {
             "codigo": "1.5.4.2",
-            "titulo": "",
+            "titulo": "Conducción en situaciones de emergencia",
             "_preguntas": 4
           },
           {
             "codigo": "1.5.4.3",
-            "titulo": "",
+            "titulo": "Prioridad de paso en situaciones especiales",
             "_preguntas": 5
           },
           {
             "codigo": "1.5.5.2",
-            "titulo": "",
+            "titulo": "Prioridad en estrechamientos",
             "_preguntas": 13
           },
           {
             "codigo": "1.5.5.3",
-            "titulo": "",
+            "titulo": "Prioridad en pasos estrechos",
             "_preguntas": 1
           },
           {
             "codigo": "1.5.5.4",
-            "titulo": "",
+            "titulo": "Prioridad en estrechamientos",
             "_preguntas": 2
           }
         ]
@@ -283,17 +283,17 @@
         "subBloques": [
           {
             "codigo": "2.1.2.1",
-            "titulo": "",
+            "titulo": "Espejos y visibilidad",
             "_preguntas": 25
           },
           {
             "codigo": "2.1.2.2",
-            "titulo": "",
+            "titulo": "Señalización de maniobras",
             "_preguntas": 29
           },
           {
             "codigo": "2.1.2.2.1",
-            "titulo": "",
+            "titulo": "Uso de señales de advertencia",
             "_preguntas": 12
           }
         ]
@@ -339,42 +339,42 @@
           },
           {
             "codigo": "2.4.3.1",
-            "titulo": "",
+            "titulo": "Preparación del adelantamiento",
             "_preguntas": 14
           },
           {
             "codigo": "2.4.3.2",
-            "titulo": "",
+            "titulo": "Señalesizaciones para adelantar",
             "_preguntas": 6
           },
           {
             "codigo": "2.4.3.3",
-            "titulo": "",
+            "titulo": "Condiciones del adelantamiento",
             "_preguntas": 18
           },
           {
             "codigo": "2.4.3.4",
-            "titulo": "",
+            "titulo": "Separación lateral al adelantar",
             "_preguntas": 16
           },
           {
             "codigo": "2.4.3.5",
-            "titulo": "",
+            "titulo": "Reincorporación al carril derecho",
             "_preguntas": 4
           },
           {
             "codigo": "2.4.4.1",
-            "titulo": "",
+            "titulo": "Facilitar el adelantamiento",
             "_preguntas": 6
           },
           {
             "codigo": "2.4.4.2",
-            "titulo": "",
+            "titulo": "Conducta en situaciones de riesgo",
             "_preguntas": 6
           },
           {
             "codigo": "2.4.4.3",
-            "titulo": "",
+            "titulo": "Señales de adelantamiento",
             "_preguntas": 4
           },
           {
@@ -462,22 +462,22 @@
         "subBloques": [
           {
             "codigo": "2.8.1.1",
-            "titulo": "",
+            "titulo": "Procedimientos de inmovilización",
             "_preguntas": 14
           },
           {
             "codigo": "2.8.1.2",
-            "titulo": "",
+            "titulo": "Inmovilización en túneles y pasos inferiores",
             "_preguntas": 7
           },
           {
             "codigo": "2.8.1.3",
-            "titulo": "",
+            "titulo": "Detención en túneles y pasos inferiores",
             "_preguntas": 4
           },
           {
             "codigo": "2.8.1.4",
-            "titulo": "",
+            "titulo": "Averías en pasos a nivel",
             "_preguntas": 1
           },
           {
@@ -487,12 +487,12 @@
           },
           {
             "codigo": "2.8.2.1",
-            "titulo": "",
+            "titulo": "Lugar de parada y estacionamiento",
             "_preguntas": 14
           },
           {
             "codigo": "2.8.2.2",
-            "titulo": "",
+            "titulo": "Parada en vías urbanas",
             "_preguntas": 2
           },
           {
@@ -502,7 +502,7 @@
           },
           {
             "codigo": "2.8.2.4",
-            "titulo": "",
+            "titulo": "Medidas de seguridad al estacionar",
             "_preguntas": 10
           }
         ]
@@ -526,7 +526,7 @@
           },
           {
             "codigo": "3.1.1.1",
-            "titulo": "",
+            "titulo": "Prioridad de señalesizaciones",
             "_preguntas": 9
           },
           {
@@ -580,12 +580,12 @@
         "subBloques": [
           {
             "codigo": "3.3.2.1",
-            "titulo": "",
+            "titulo": "Señales de cierre y barrera",
             "_preguntas": 7
           },
           {
             "codigo": "3.3.2.2",
-            "titulo": "",
+            "titulo": "Señales de curvas",
             "_preguntas": 1
           }
         ]
@@ -602,17 +602,17 @@
           },
           {
             "codigo": "3.4.2.1",
-            "titulo": "",
+            "titulo": "Normas de paso en semáforos",
             "_preguntas": 10
           },
           {
             "codigo": "3.4.2.2",
-            "titulo": "",
+            "titulo": "Semáforos especiales y advertencias",
             "_preguntas": 4
           },
           {
             "codigo": "3.4.2.3",
-            "titulo": "",
+            "titulo": "Prioridad en intersecciones semaforizadas",
             "_preguntas": 3
           },
           {
@@ -708,17 +708,17 @@
           },
           {
             "codigo": "3.7.4.1",
-            "titulo": "",
+            "titulo": "Señales de glorietas",
             "_preguntas": 1
           },
           {
             "codigo": "3.7.4.2",
-            "titulo": "",
+            "titulo": "Señales de salidas inmediatas",
             "_preguntas": 1
           },
           {
             "codigo": "3.7.4.4",
-            "titulo": "",
+            "titulo": "Señales de inicio y fin de poblado",
             "_preguntas": 3
           },
           {
@@ -735,37 +735,37 @@
         "subBloques": [
           {
             "codigo": "3.8.1.1",
-            "titulo": "",
+            "titulo": "Marcas viales de advertencia",
             "_preguntas": 15
           },
           {
             "codigo": "3.8.1.2",
-            "titulo": "",
+            "titulo": "Marcas de detención obligatoria",
             "_preguntas": 10
           },
           {
             "codigo": "3.8.1.3",
-            "titulo": "",
+            "titulo": "Marcas viales de dirección",
             "_preguntas": 18
           },
           {
             "codigo": "3.8.1.4",
-            "titulo": "",
+            "titulo": "Marcas viales de prohibición",
             "_preguntas": 10
           },
           {
             "codigo": "3.8.2.1",
-            "titulo": "",
+            "titulo": "Prohibiciones de parada y estacionamiento",
             "_preguntas": 6
           },
           {
             "codigo": "3.8.2.2",
-            "titulo": "",
+            "titulo": "Estacionamiento con limitaciones",
             "_preguntas": 3
           },
           {
             "codigo": "3.8.2.3",
-            "titulo": "",
+            "titulo": "Zonas de prohibición total",
             "_preguntas": 2
           }
         ]
@@ -779,7 +779,7 @@
     "bloques": [
       {
         "codigo": "4.0",
-        "titulo": "",
+        "titulo": "Funcionamiento y ajuste de luces",
         "_preguntas": 3,
         "subBloques": []
       },
@@ -790,22 +790,22 @@
         "subBloques": [
           {
             "codigo": "4.1.1",
-            "titulo": "",
+            "titulo": "Funcionamiento de las luces de posición",
             "_preguntas": 1
           },
           {
             "codigo": "4.1.1.1",
-            "titulo": "",
+            "titulo": "Alumbrado de posición y estacionamiento",
             "_preguntas": 11
           },
           {
             "codigo": "4.1.3",
-            "titulo": "",
+            "titulo": "Dispositivos reflectantes",
             "_preguntas": 2
           },
           {
             "codigo": "4.1.4",
-            "titulo": "",
+            "titulo": "Luces de gálibo en vehículos anchos",
             "_preguntas": 3
           }
         ]
@@ -817,22 +817,22 @@
         "subBloques": [
           {
             "codigo": "4.2.1",
-            "titulo": "",
+            "titulo": "Luces de corto alcance",
             "_preguntas": 1
           },
           {
             "codigo": "4.2.1.1",
-            "titulo": "",
+            "titulo": "Uso de luces en diferentes situaciones",
             "_preguntas": 18
           },
           {
             "codigo": "4.2.2",
-            "titulo": "",
+            "titulo": "Uso de luces de carretera",
             "_preguntas": 2
           },
           {
             "codigo": "4.2.2.1",
-            "titulo": "",
+            "titulo": "Uso de luces de largo alcance",
             "_preguntas": 15
           },
           {
@@ -842,37 +842,37 @@
           },
           {
             "codigo": "4.2.3.1",
-            "titulo": "",
+            "titulo": "Luces antiniebla y visibilidad",
             "_preguntas": 14
           },
           {
             "codigo": "4.2.3.2",
-            "titulo": "",
+            "titulo": "Luces en condiciones adversas",
             "_preguntas": 9
           },
           {
             "codigo": "4.2.3.3",
-            "titulo": "",
+            "titulo": "Luces en condiciones adversas",
             "_preguntas": 3
           },
           {
             "codigo": "4.2.4",
-            "titulo": "",
+            "titulo": "Uso de luces en carriles especiales",
             "_preguntas": 2
           },
           {
             "codigo": "4.2.5.1",
-            "titulo": "",
+            "titulo": "Uso de luces para no deslumbrar",
             "_preguntas": 8
           },
           {
             "codigo": "4.2.5.3",
-            "titulo": "",
+            "titulo": "Conducción con deslumbramiento",
             "_preguntas": 1
           },
           {
             "codigo": "4.2.6",
-            "titulo": "",
+            "titulo": "Conducción con luces de cruce",
             "_preguntas": 1
           }
         ]
@@ -884,22 +884,22 @@
         "subBloques": [
           {
             "codigo": "4.3.1",
-            "titulo": "",
+            "titulo": "Señalización de intención",
             "_preguntas": 1
           },
           {
             "codigo": "4.3.2",
-            "titulo": "",
+            "titulo": "Señal de emergencia del vehículo",
             "_preguntas": 4
           },
           {
             "codigo": "4.3.3",
-            "titulo": "",
+            "titulo": "Luces de freno y advertencia",
             "_preguntas": 2
           },
           {
             "codigo": "4.3.4",
-            "titulo": "",
+            "titulo": "Luces de marcha atrás",
             "_preguntas": 1
           }
         ]
@@ -911,12 +911,12 @@
         "subBloques": [
           {
             "codigo": "4.4.1",
-            "titulo": "",
+            "titulo": "Alumbrado interior nocturno",
             "_preguntas": 1
           },
           {
             "codigo": "4.4.2",
-            "titulo": "",
+            "titulo": "Iluminación de matrícula",
             "_preguntas": 2
           }
         ]
@@ -935,17 +935,17 @@
         "subBloques": [
           {
             "codigo": "5.1.1.1",
-            "titulo": "",
+            "titulo": "Seguridad de ocupantes",
             "_preguntas": 24
           },
           {
             "codigo": "5.1.1.2",
-            "titulo": "",
+            "titulo": "Uso del cinturón de seguridad",
             "_preguntas": 11
           },
           {
             "codigo": "5.1.1.3",
-            "titulo": "",
+            "titulo": "Seguridad en motocicletas",
             "_preguntas": 31
           }
         ]
@@ -957,37 +957,37 @@
         "subBloques": [
           {
             "codigo": "5.2.1",
-            "titulo": "",
+            "titulo": "Normas de carga y descarga",
             "_preguntas": 8
           },
           {
             "codigo": "5.2.2",
-            "titulo": "",
+            "titulo": "Colocación de la carga",
             "_preguntas": 9
           },
           {
             "codigo": "5.2.3",
-            "titulo": "",
+            "titulo": "Altura máxima permitida",
             "_preguntas": 1
           },
           {
             "codigo": "5.2.4",
-            "titulo": "",
+            "titulo": "Dimensiones y sobresalimiento de cargas",
             "_preguntas": 16
           },
           {
             "codigo": "5.2.5",
-            "titulo": "",
+            "titulo": "Carga sobresaliente y seguridad",
             "_preguntas": 2
           },
           {
             "codigo": "5.2.5.1",
-            "titulo": "",
+            "titulo": "Señalización de cargas sobresalientes",
             "_preguntas": 7
           },
           {
             "codigo": "5.2.6",
-            "titulo": "",
+            "titulo": "Remolques y vehículos especiales",
             "_preguntas": 6
           }
         ]
@@ -1018,27 +1018,27 @@
         "subBloques": [
           {
             "codigo": "6.1.2",
-            "titulo": "",
+            "titulo": "Vehículos autorizados",
             "_preguntas": 18
           },
           {
             "codigo": "6.1.4",
-            "titulo": "",
+            "titulo": "Vigencia del permiso",
             "_preguntas": 4
           },
           {
             "codigo": "6.1.5",
-            "titulo": "",
+            "titulo": "Actualización de datos personales",
             "_preguntas": 3
           },
           {
             "codigo": "6.1.6",
-            "titulo": "",
+            "titulo": "Conductor novel señalización",
             "_preguntas": 5
           },
           {
             "codigo": "6.1.7",
-            "titulo": "",
+            "titulo": "Pérdida de vigencia del permiso",
             "_preguntas": 2
           }
         ]
@@ -1050,47 +1050,47 @@
         "subBloques": [
           {
             "codigo": "6.2.1",
-            "titulo": "",
+            "titulo": "Permiso de circulación del vehículo",
             "_preguntas": 6
           },
           {
             "codigo": "6.2.1.1",
-            "titulo": "",
+            "titulo": "Placas de matrícula en motocicletas",
             "_preguntas": 2
           },
           {
             "codigo": "6.2.2",
-            "titulo": "",
+            "titulo": "Tarjeta de inspección técnica",
             "_preguntas": 3
           },
           {
             "codigo": "6.2.2.1",
-            "titulo": "",
+            "titulo": "Inspección técnica de vehículos",
             "_preguntas": 18
           },
           {
             "codigo": "6.2.2.2",
-            "titulo": "",
+            "titulo": "Inspección técnica del vehículo",
             "_preguntas": 3
           },
           {
             "codigo": "6.2.3.1",
-            "titulo": "",
+            "titulo": "Seguro obligatorio del vehiculo",
             "_preguntas": 3
           },
           {
             "codigo": "6.2.3.2",
-            "titulo": "",
+            "titulo": "Cobertura del seguro obligatorio",
             "_preguntas": 6
           },
           {
             "codigo": "6.2.3.3",
-            "titulo": "",
+            "titulo": "Documentos obligatorios del vehículo",
             "_preguntas": 1
           },
           {
             "codigo": "6.2.3.4",
-            "titulo": "",
+            "titulo": "Seguro obligatorio del vehículo",
             "_preguntas": 1
           }
         ]
@@ -1102,17 +1102,17 @@
         "subBloques": [
           {
             "codigo": "6.3.1",
-            "titulo": "",
+            "titulo": "Asignación de puntos iniciales",
             "_preguntas": 5
           },
           {
             "codigo": "6.3.1.1",
-            "titulo": "",
+            "titulo": "Pérdida de puntos",
             "_preguntas": 2
           },
           {
             "codigo": "6.3.2",
-            "titulo": "",
+            "titulo": "Infracciones graves al volante",
             "_preguntas": 8
           }
         ]
@@ -1157,47 +1157,47 @@
           },
           {
             "codigo": "7.1.4.1",
-            "titulo": "",
+            "titulo": "Factores de riesgo en jóvenes conductores",
             "_preguntas": 19
           },
           {
             "codigo": "7.1.4.2",
-            "titulo": "",
+            "titulo": "Conducción y envejecimiento",
             "_preguntas": 7
           },
           {
             "codigo": "7.1.4.3",
-            "titulo": "",
+            "titulo": "Riesgos de las motocicletas",
             "_preguntas": 15
           },
           {
             "codigo": "7.1.4.4",
-            "titulo": "",
+            "titulo": "Conducción con ciclistas",
             "_preguntas": 21
           },
           {
             "codigo": "7.1.4.5",
-            "titulo": "",
+            "titulo": "Atropellos y factores de riesgo",
             "_preguntas": 14
           },
           {
             "codigo": "7.1.4.5.1",
-            "titulo": "",
+            "titulo": "Vulnerabilidad de los peatones mayores",
             "_preguntas": 6
           },
           {
             "codigo": "7.1.4.5.2",
-            "titulo": "",
+            "titulo": "Vulnerabilidad de los niños",
             "_preguntas": 9
           },
           {
             "codigo": "7.1.4.5.3",
-            "titulo": "",
+            "titulo": "Precauciones para evitar atropellos",
             "_preguntas": 10
           },
           {
             "codigo": "7.1.4.6",
-            "titulo": "",
+            "titulo": "Circulación de vehículos personales",
             "_preguntas": 3
           },
           {
@@ -1219,27 +1219,27 @@
           },
           {
             "codigo": "7.2.1.1",
-            "titulo": "",
+            "titulo": "Influencia de la velocidad",
             "_preguntas": 13
           },
           {
             "codigo": "7.2.1.2",
-            "titulo": "",
+            "titulo": "Velocidad y gravedad de lesiones",
             "_preguntas": 2
           },
           {
             "codigo": "7.2.1.3.1",
-            "titulo": "",
+            "titulo": "Tiempo de reacción del conductor",
             "_preguntas": 17
           },
           {
             "codigo": "7.2.1.3.2",
-            "titulo": "",
+            "titulo": "Influencia del vehículo en la frenada",
             "_preguntas": 13
           },
           {
             "codigo": "7.2.1.3.3",
-            "titulo": "",
+            "titulo": "Distancia de detención",
             "_preguntas": 6
           },
           {
@@ -1249,22 +1249,22 @@
           },
           {
             "codigo": "7.2.2.1",
-            "titulo": "",
+            "titulo": "Fatiga al volante",
             "_preguntas": 32
           },
           {
             "codigo": "7.2.2.2",
-            "titulo": "",
+            "titulo": "Sueño y somnolencia al volante",
             "_preguntas": 27
           },
           {
             "codigo": "7.2.2.3",
-            "titulo": "",
+            "titulo": "Evitar la fatiga al volante",
             "_preguntas": 7
           },
           {
             "codigo": "7.2.2.3.1",
-            "titulo": "",
+            "titulo": "Seguridad vial contra distracciones",
             "_preguntas": 2
           },
           {
@@ -1274,12 +1274,12 @@
           },
           {
             "codigo": "7.2.3.1",
-            "titulo": "",
+            "titulo": "Efectos de la salud mental",
             "_preguntas": 32
           },
           {
             "codigo": "7.2.3.2",
-            "titulo": "",
+            "titulo": "Medicamentos y conducción",
             "_preguntas": 23
           },
           {
@@ -1294,7 +1294,7 @@
           },
           {
             "codigo": "7.2.5.1",
-            "titulo": "",
+            "titulo": "Conducción y distracciones",
             "_preguntas": 57
           },
           {
@@ -1341,67 +1341,67 @@
           },
           {
             "codigo": "7.3.3.1",
-            "titulo": "",
+            "titulo": "Seguridad del vehículo",
             "_preguntas": 7
           },
           {
             "codigo": "7.3.3.1.1",
-            "titulo": "",
+            "titulo": "Mantenimiento de neumáticos",
             "_preguntas": 34
           },
           {
             "codigo": "7.3.3.1.2",
-            "titulo": "",
+            "titulo": "Sistema de frenos del vehículo",
             "_preguntas": 26
           },
           {
             "codigo": "7.3.3.1.3",
-            "titulo": "",
+            "titulo": "Sistema de suspensión y amortiguación",
             "_preguntas": 6
           },
           {
             "codigo": "7.3.3.1.4",
-            "titulo": "",
+            "titulo": "Alineación de las ruedas",
             "_preguntas": 4
           },
           {
             "codigo": "7.3.3.1.5",
-            "titulo": "",
+            "titulo": "Reglaje de los faros",
             "_preguntas": 7
           },
           {
             "codigo": "7.3.3.2",
-            "titulo": "",
+            "titulo": "Sistemas de seguridad pasiva",
             "_preguntas": 2
           },
           {
             "codigo": "7.3.3.2.1",
-            "titulo": "",
+            "titulo": "Carrocería y seguridad pasiva",
             "_preguntas": 3
           },
           {
             "codigo": "7.3.3.2.2",
-            "titulo": "",
+            "titulo": "Seguridad del parabrisas",
             "_preguntas": 2
           },
           {
             "codigo": "7.3.3.2.3",
-            "titulo": "",
+            "titulo": "Uso correcto del cinturón de seguridad",
             "_preguntas": 28
           },
           {
             "codigo": "7.3.3.2.4",
-            "titulo": "",
+            "titulo": "Sistemas de retención infantil",
             "_preguntas": 2
           },
           {
             "codigo": "7.3.3.2.5",
-            "titulo": "",
+            "titulo": "Funcionamiento del airbag",
             "_preguntas": 14
           },
           {
             "codigo": "7.3.3.2.6",
-            "titulo": "",
+            "titulo": "Prevención del latigazo cervical",
             "_preguntas": 15
           },
           {
@@ -1416,7 +1416,7 @@
           },
           {
             "codigo": "7.3.3.4",
-            "titulo": "",
+            "titulo": "Sistemas de ayuda a la conducción",
             "_preguntas": 47
           }
         ]
@@ -1463,7 +1463,7 @@
           },
           {
             "codigo": "7.4.4.5",
-            "titulo": "",
+            "titulo": "Conducción en condiciones invernales",
             "_preguntas": 13
           },
           {
@@ -1504,7 +1504,7 @@
         "subBloques": [
           {
             "codigo": "8.2.1",
-            "titulo": "",
+            "titulo": "Protección en caso de accidente",
             "_preguntas": 2
           },
           {

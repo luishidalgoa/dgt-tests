@@ -11,6 +11,14 @@ vi.mock("nodemailer", () => ({
   },
 }))
 
+// Mock de getEffectiveSecret para que LEA SOLO de process.env durante
+// los tests, ignorando la BBDD. Sin esto, si el dev tiene
+// GMAIL_APP_PASSWORD configurado en /admin/secrets, el test ve ese
+// valor en lugar del que controla con `delete process.env.*`.
+vi.mock("@/lib/secretCatalog", () => ({
+  getEffectiveSecret: vi.fn(async (key: string) => process.env[key] ?? null),
+}))
+
 import { sendMail, _resetMailerForTests } from "./mailer"
 import nodemailer from "nodemailer"
 
