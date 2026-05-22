@@ -24,8 +24,9 @@
  * que ya tiene título, bórralo a mano antes de ejecutar.
  */
 
-import { readFileSync, writeFileSync } from "node:fs"
+import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
+import { writeJsonAtomic } from "./_writeJsonAtomic"
 import { db } from "@/lib/db"
 import { classifyCodigoTema } from "@/lib/temas"
 import { AIProviderError, type AICompleteOptions } from "@/lib/ai"
@@ -138,7 +139,7 @@ process.on("SIGINT", () => {
   if (!DRY_RUN && _state.results && _state.data && _state.jsonPath && _state.results.size > 0) {
     try {
       const updated = applyTitles(_state.data as Tema[], _state.results)
-      writeFileSync(_state.jsonPath, JSON.stringify(updated, null, 2) + "\n", "utf8")
+      writeJsonAtomic(_state.jsonPath, JSON.stringify(updated, null, 2) + "\n")
       console.log(`💾 Emergency-save: ${_state.results.size} títulos en ${_state.jsonPath}`)
     } catch (e) {
       console.error("❌ Falló emergency-save:", (e as Error).message)
@@ -266,7 +267,7 @@ async function main() {
 
       if (!DRY_RUN && okCount > 0 && okCount % AUTOSAVE_EVERY === 0) {
         const partial = applyTitles(data, results)
-        writeFileSync(jsonPath, JSON.stringify(partial, null, 2) + "\n", "utf8")
+        writeJsonAtomic(jsonPath, JSON.stringify(partial, null, 2) + "\n")
         console.log(`   💾 auto-save (${okCount} títulos)`)
       }
     } catch (e) {
@@ -285,7 +286,7 @@ async function main() {
 
   if (!DRY_RUN && results.size > 0) {
     const updated = applyTitles(data, results)
-    writeFileSync(jsonPath, JSON.stringify(updated, null, 2) + "\n", "utf8")
+    writeJsonAtomic(jsonPath, JSON.stringify(updated, null, 2) + "\n")
     console.log(`✅ ${results.size} títulos escritos en ${jsonPath}`)
   } else if (DRY_RUN) {
     console.log(`📋 Dry-run: ${results.size} sugerencias generadas (NO escritas)`)

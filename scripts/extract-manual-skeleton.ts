@@ -23,7 +23,8 @@
  * hayan aparecido en BBDD y se actualizan los conteos.
  */
 
-import { writeFileSync, existsSync, mkdirSync, readFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync } from "node:fs"
+import { writeJsonAtomic } from "./_writeJsonAtomic"
 import { resolve, dirname } from "node:path"
 import { db } from "@/lib/db"
 import {
@@ -381,7 +382,7 @@ async function main() {
     }))
 
   if (!existsSync(dirname(outputPath))) mkdirSync(dirname(outputPath), { recursive: true })
-  writeFileSync(outputPath, JSON.stringify(output, null, 2) + "\n", "utf8")
+  writeJsonAtomic(outputPath, JSON.stringify(output, null, 2) + "\n")
 
   // Resumen
   const nTemas = output.length
