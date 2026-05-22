@@ -19,11 +19,12 @@ export default async function SettingsPage() {
 
   // ── Estado de la suscripción para el panel ────────────────────────────
   // Calculamos un "variant" único que decide texto, color y comportamiento:
-  //   - "renewing"  → activa, se va a renovar el día indicado
-  //   - "ending"    → activa pero cancelada al final del periodo
-  //   - "expired"   → ya terminó (cancelada o pasada de fecha)
-  //   - null        → nunca tuvo suscripción (no mostramos panel de fechas)
-  type SubVariant = "renewing" | "ending" | "expired"
+  //   - "renewing"      → activa, se va a renovar el día indicado
+  //   - "ending"        → activa pero cancelada al final del periodo
+  //   - "paymentFailed" → past_due, Stripe reintenta cobrar (grace period)
+  //   - "expired"       → ya terminó (cancelada / unpaid / pasada de fecha)
+  //   - null            → nunca tuvo suscripción (no mostramos panel de fechas)
+  type SubVariant = "renewing" | "ending" | "paymentFailed" | "expired"
   const periodEndDate = user.subscriptionCurrentPeriodEnd
     ? new Date(user.subscriptionCurrentPeriodEnd)
     : null
@@ -40,9 +41,15 @@ export default async function SettingsPage() {
       user.subscriptionStatus === "canceled" ||
       user.subscriptionStatus === "incomplete_expired" ||
       user.subscriptionStatus === "unpaid"
+    // Date.now() en server component es ok (cada render = nueva request).
+    // react-hooks/purity lo marca igual por seguridad; lo silenciamos aquí.
+    // eslint-disable-next-line react-hooks/purity
     const isPastDate = periodEndDate.getTime() < Date.now()
     if (isCanceledStatus || isPastDate) {
       subVariant = "expired"
+    } else if (user.subscriptionStatus === "past_due") {
+      // Stripe está reintentando el cobro. Mantenemos acceso pero avisamos.
+      subVariant = "paymentFailed"
     } else if (user.subscriptionCancelAtPeriodEnd) {
       subVariant = "ending"
     } else {
@@ -173,6 +180,12 @@ export default async function SettingsPage() {
               border: "rgba(245, 158, 11, 0.25)",
               dateLabel: "Termina",
             },
+            paymentFailed: {
+              accent: "var(--red-600)",
+              bg:     "rgba(239, 68, 68, 0.08)",
+              border: "rgba(239, 68, 68, 0.30)",
+              dateLabel: "Próximo reintento",
+            },
             expired: {
               accent: "var(--slate-500)",
               bg:     "var(--slate-100)",
@@ -227,6 +240,21 @@ export default async function SettingsPage() {
                   Has cancelado la suscripción. Mantienes el acceso PRO hasta la fecha
                   indicada. Si cambias de opinión, puedes reactivarla desde el portal
                   de gestión sin perder nada.
+                </div>
+              )}
+              {subVariant === "paymentFailed" && (
+                <div
+                  style={{
+                    marginTop: 4,
+                    fontSize: 12.5,
+                    color: "var(--red-600)",
+                    fontWeight: 600,
+                  }}
+                >
+                  ⚠ El último cobro de tu suscripción falló. Stripe va a reintentar
+                  durante las próximas semanas. Mantienes el acceso PRO mientras tanto,
+                  pero <b>actualiza tu método de pago</b> desde el portal de gestión
+                  para evitar que se cancele.
                 </div>
               )}
               {subVariant === "expired" && (

@@ -3,6 +3,7 @@ import {
   hasFullAccess,
   isAdmin,
   isActiveSubscription,
+  isInGracePeriod,
   planLabel,
   canAccessTest,
   getEffectiveTokenQuota,
@@ -45,9 +46,20 @@ describe("hasFullAccess", () => {
     expect(hasFullAccess(u("SUBSCRIBER", "trialing"))).toBe(true)
   })
 
-  it("SUBSCRIBER + canceled = NO acceso", () => {
+  it("Fase 86: SUBSCRIBER + past_due = SIGUE con acceso (grace period)", () => {
+    // Cuando un cobro de renovación falla, Stripe deja el sub en past_due
+    // durante ~3 semanas mientras reintenta. Le damos al usuario acceso
+    // durante ese tiempo para que pueda actualizar su tarjeta sin perder
+    // el servicio bruscamente.
+    expect(hasFullAccess(u("SUBSCRIBER", "past_due"))).toBe(true)
+  })
+
+  it("SUBSCRIBER + canceled = NO acceso (Stripe se rindió tras los reintentos)", () => {
     expect(hasFullAccess(u("SUBSCRIBER", "canceled"))).toBe(false)
-    expect(hasFullAccess(u("SUBSCRIBER", "past_due"))).toBe(false)
+  })
+
+  it("SUBSCRIBER + unpaid = NO acceso (Stripe agotó reintentos sin pagar)", () => {
+    expect(hasFullAccess(u("SUBSCRIBER", "unpaid"))).toBe(false)
   })
 
   it("USER no tiene acceso aunque tenga status='active' (raro pero defensivo)", () => {
@@ -56,6 +68,21 @@ describe("hasFullAccess", () => {
 
   it("null user → no acceso", () => {
     expect(hasFullAccess(null)).toBe(false)
+  })
+})
+
+describe("isInGracePeriod (Fase 86)", () => {
+  it("true cuando status es past_due", () => {
+    expect(isInGracePeriod(u("SUBSCRIBER", "past_due"))).toBe(true)
+  })
+
+  it("false cuando status es active, canceled, unpaid o null", () => {
+    expect(isInGracePeriod(u("SUBSCRIBER", "active"))).toBe(false)
+    expect(isInGracePeriod(u("SUBSCRIBER", "canceled"))).toBe(false)
+    expect(isInGracePeriod(u("SUBSCRIBER", "unpaid"))).toBe(false)
+    expect(isInGracePeriod(u("SUBSCRIBER", null))).toBe(false)
+    expect(isInGracePeriod(u("USER"))).toBe(false)
+    expect(isInGracePeriod(null)).toBe(false)
   })
 })
 
@@ -69,8 +96,15 @@ describe("planLabel", () => {
     expect(planLabel(u("SUBSCRIBER", "active"))).toBe("PRO")
   })
 
-  it("SUBSCRIBER con status inactivo → FREE (acceso ya degradado)", () => {
+  it("SUBSCRIBER con status canceled/unpaid → FREE (acceso ya degradado)", () => {
     expect(planLabel(u("SUBSCRIBER", "canceled"))).toBe("FREE")
+    expect(planLabel(u("SUBSCRIBER", "unpaid"))).toBe("FREE")
+  })
+
+  it("Fase 86: SUBSCRIBER + past_due → PRO (sigue en grace period)", () => {
+    // El navbar no debe mostrar 'Plan gratuito' a un user que todavía
+    // tiene acceso. La explicación del fallo va en /settings.
+    expect(planLabel(u("SUBSCRIBER", "past_due"))).toBe("PRO")
   })
 
   it("USER → FREE", () => {

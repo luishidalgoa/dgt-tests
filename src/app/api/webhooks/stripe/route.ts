@@ -63,6 +63,11 @@ export async function POST(req: NextRequest) {
         await onSubscriptionDeleted(sub)
         break
       }
+      case "invoice.payment_failed": {
+        const invoice = event.data.object as Stripe.Invoice
+        await onInvoicePaymentFailed(invoice)
+        break
+      }
       default:
         // ignoramos otros eventos
         break
@@ -167,6 +172,36 @@ async function onSubscriptionUpdated(sub: Stripe.Subscription) {
       ...(isAdmin ? {} : { role: isActive ? "SUBSCRIBER" : "USER" }),
     },
   })
+}
+
+/**
+ * Cobro automático fallido (renovación o reintento).
+ *
+ * Stripe seguirá reintentando ~3 semanas. Durante ese tiempo:
+ *   - `customer.subscription.updated` llegará con status="past_due"
+ *   - Nuestro `hasFullAccess` permite past_due como grace period
+ *   - El user mantiene acceso PRO
+ *
+ * Aquí solo logueamos para tener trazabilidad. El email al user lo
+ * implementaremos en Fase 89 (Resend, igual que las alertas Turso).
+ */
+async function onInvoicePaymentFailed(invoice: Stripe.Invoice) {
+  const inv = invoice as Stripe.Invoice & {
+    subscription?: string | { id: string } | null
+  }
+  const subId = typeof inv.subscription === "string"
+    ? inv.subscription
+    : inv.subscription?.id ?? null
+  console.warn("[stripe webhook] invoice.payment_failed", {
+    invoiceId:        invoice.id,
+    subscriptionId:   subId,
+    customerId:       typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id,
+    amountDue:        invoice.amount_due,
+    attemptCount:     invoice.attempt_count,
+    nextPaymentAttempt: invoice.next_payment_attempt,
+  })
+  // El customer.subscription.updated que viene poco después se
+  // encarga de actualizar status="past_due" en BBDD.
 }
 
 async function onSubscriptionDeleted(sub: Stripe.Subscription) {

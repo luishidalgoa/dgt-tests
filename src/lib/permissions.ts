@@ -27,12 +27,33 @@ export const AI_TOKENS_PRO  = 60
 
 export type UserForGate = Pick<User, "role" | "subscriptionStatus"> | null
 
-/** El usuario tiene acceso completo (rol ADMIN, o SUBSCRIBER con suscripción activa). */
+/**
+ * El usuario tiene acceso completo (rol ADMIN, o SUBSCRIBER con sub viva).
+ *
+ * "Viva" incluye:
+ *   - active / trialing → cobros OK
+ *   - past_due → Stripe está reintentando el cobro. Le damos al user un
+ *     grace period (~3 semanas, lo que Stripe reintenta por defecto)
+ *     para que pueda actualizar su tarjeta sin perder el servicio.
+ *     Cuando Stripe se rinde, mueve a canceled/unpaid → acceso fuera.
+ */
 export function hasFullAccess(user: UserForGate): boolean {
   if (!user) return false
   if (user.role === "ADMIN") return true
-  if (user.role === "SUBSCRIBER" && isActiveSubscription(user.subscriptionStatus)) return true
-  return false
+  if (user.role !== "SUBSCRIBER") return false
+  return isActiveSubscription(user.subscriptionStatus) || isInGracePeriod(user)
+}
+
+/**
+ * ¿La suscripción del user está en grace period (Stripe reintenta cobros)?
+ *
+ * Solo aplica al status past_due. Stripe NO usa past_due para subs
+ * pagadas correctamente; solo aparece cuando un cobro automático falló.
+ */
+export function isInGracePeriod(user: UserForGate): boolean {
+  if (!user) return false
+  if (user.role !== "SUBSCRIBER") return false
+  return user.subscriptionStatus === "past_due"
 }
 
 /** El usuario es admin (acceso total sin facturación). */
@@ -91,6 +112,8 @@ export function getEffectiveTokenQuota(user: UserForGate): number {
 export function planLabel(user: UserForGate): "ADMIN" | "PRO" | "FREE" | null {
   if (!user) return null
   if (user.role === "ADMIN") return "ADMIN"
-  if (user.role === "SUBSCRIBER" && isActiveSubscription(user.subscriptionStatus)) return "PRO"
+  // SUBSCRIBER con acceso PRO efectivo (active, trialing o grace period) → PRO.
+  // Consistencia con hasFullAccess: si tiene acceso, el badge lo refleja.
+  if (user.role === "SUBSCRIBER" && (isActiveSubscription(user.subscriptionStatus) || isInGracePeriod(user))) return "PRO"
   return "FREE"
 }
