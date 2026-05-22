@@ -1,8 +1,9 @@
 import { db } from "@/lib/db"
 import { SECRET_CATALOG, maskSecret } from "@/lib/secretCatalog"
 import { decryptSecret } from "@/lib/crypto"
+import { detectRuntimeEnv, detectStripeMode } from "@/lib/runtimeEnv"
 import { SecretForm } from "./SecretForm"
-import { KeyRound, ExternalLink } from "lucide-react"
+import { KeyRound, ExternalLink, Cloud, Laptop } from "lucide-react"
 
 export const dynamic = "force-dynamic"
 
@@ -26,29 +27,57 @@ export default async function AdminSecretsPage() {
   })
   const rowsByKey = new Map(rows.map(r => [r.key, r]))
 
+  const runtime = detectRuntimeEnv()
+
   return (
     <div>
       <h2 style={{ fontSize: 22, fontWeight: 800, marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
         <KeyRound className="h-5 w-5" />
         API keys y secretos
       </h2>
-      <p style={{ color: "var(--slate-500)", fontSize: 13.5, marginBottom: 22, marginTop: 0 }}>
+      <p style={{ color: "var(--slate-500)", fontSize: 13.5, marginBottom: 12, marginTop: 0 }}>
         Se guardan cifrados con AES-256-GCM (APP_MASTER_KEY). Si dejas un campo vacío
-        y borras la entrada, el runtime cae al env var del mismo nombre.
+        y borras la entrada, el runtime cae al valor del entorno actual.
       </p>
+
+      {/* Banner de entorno actual */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 8,
+        padding: "8px 12px",
+        borderRadius: 10,
+        background: runtime.isLocal ? "rgba(168, 85, 247, 0.08)" : "rgba(34, 197, 94, 0.08)",
+        border: `1px solid ${runtime.isLocal ? "rgba(168, 85, 247, 0.25)" : "rgba(34, 197, 94, 0.30)"}`,
+        marginBottom: 22,
+        fontSize: 12.5,
+        color: "var(--slate-700)",
+      }}>
+        {runtime.isLocal ? (
+          <Laptop className="h-4 w-4" style={{ color: "rgb(126, 34, 206)" }} />
+        ) : (
+          <Cloud className="h-4 w-4" style={{ color: "var(--green-d)" }} />
+        )}
+        Entorno detectado: <b>{runtime.label}</b>
+      </div>
 
       <div className="space-y-5">
         {SECRET_CATALOG.map(entry => {
           const row = rowsByKey.get(entry.key)
           let preview: string | null = null
+          let effectiveValue: string | null = null
           if (row) {
             try {
-              preview = maskSecret(decryptSecret(row.value))
+              effectiveValue = decryptSecret(row.value)
+              preview        = maskSecret(effectiveValue)
             } catch {
               preview = "•••••••• (corrupto / key cambiada)"
             }
           }
-          const envFallback = process.env[entry.key]
+          const envFallback = process.env[entry.key] ?? null
+          // Si no hay override en BBDD, el valor efectivo es el del env
+          if (!effectiveValue && envFallback) effectiveValue = envFallback
+          // Detectar live/test SOLO para keys Stripe (incluyendo el price_id)
+          const isStripeKey = entry.key.startsWith("STRIPE_") || entry.key.includes("STRIPE")
+          const stripeMode  = isStripeKey ? detectStripeMode(effectiveValue) : "unknown"
           return (
             <div key={entry.key} className="card-soft" style={{ padding: 18 }}>
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 8, gap: 12 }}>
@@ -68,7 +97,12 @@ export default async function AdminSecretsPage() {
                     </p>
                   )}
                 </div>
-                <StatusBadge inDb={Boolean(row)} inEnv={Boolean(envFallback)} />
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
+                  <StatusBadge inDb={Boolean(row)} inEnv={Boolean(envFallback)} runtimeLabel={runtime.label} />
+                  {isStripeKey && stripeMode !== "unknown" && (
+                    <StripeModeBadge mode={stripeMode} />
+                  )}
+                </div>
               </div>
 
               {row && (
@@ -82,13 +116,15 @@ export default async function AdminSecretsPage() {
 
               {!row && envFallback && (
                 <div style={{ fontSize: 12, color: "var(--slate-500)", marginBottom: 8 }}>
-                  Usando el valor del archivo <code>.env</code> de prod.
+                  Usando el valor del entorno actual ({runtime.isLocal
+                    ? <code>.env</code>
+                    : <code>Vercel Environment Variables</code>}).
                 </div>
               )}
 
               {!row && !envFallback && (
                 <div style={{ fontSize: 12, color: "var(--red-600)", marginBottom: 8, fontWeight: 600 }}>
-                  ⚠ No hay valor configurado — la integración correspondiente no funcionará.
+                  ⚠ No hay valor configurado en {runtime.label} — la integración correspondiente no funcionará.
                 </div>
               )}
 
@@ -120,25 +156,55 @@ export default async function AdminSecretsPage() {
   )
 }
 
-function StatusBadge({ inDb, inEnv }: { inDb: boolean; inEnv: boolean }) {
-  const config: { label: string; bg: string; color: string } = inDb
-    ? { label: "BBDD (override)", bg: "rgba(34, 197, 94, 0.12)", color: "var(--green-d)" }
+function StatusBadge({ inDb, inEnv, runtimeLabel }: { inDb: boolean; inEnv: boolean; runtimeLabel: string }) {
+  const config: { label: string; bg: string; color: string; title?: string } = inDb
+    ? { label: "BBDD (override)", bg: "rgba(34, 197, 94, 0.12)", color: "var(--green-d)",
+        title: `Valor guardado cifrado en BBDD (gana sobre el entorno: ${runtimeLabel})` }
     : inEnv
-    ? { label: ".env",            bg: "rgba(148, 163, 184, 0.15)", color: "var(--slate-600)" }
-    : { label: "no configurado",  bg: "rgba(239, 68, 68, 0.12)",   color: "var(--red-600)" }
+    ? { label: "entorno",         bg: "rgba(148, 163, 184, 0.15)", color: "var(--slate-600)",
+        title: `Leyendo del entorno: ${runtimeLabel}` }
+    : { label: "no configurado",  bg: "rgba(239, 68, 68, 0.12)",   color: "var(--red-600)",
+        title: `No hay valor ni en BBDD ni en el entorno (${runtimeLabel})` }
   return (
-    <span style={{
-      flexShrink: 0,
-      padding: "3px 10px",
-      borderRadius: 999,
-      fontSize: 11,
-      fontWeight: 800,
-      letterSpacing: "0.04em",
-      textTransform: "uppercase",
-      background: config.bg,
-      color: config.color,
-    }}>
+    <span
+      title={config.title}
+      style={{
+        flexShrink: 0,
+        padding: "3px 10px",
+        borderRadius: 999,
+        fontSize: 11,
+        fontWeight: 800,
+        letterSpacing: "0.04em",
+        textTransform: "uppercase",
+        background: config.bg,
+        color: config.color,
+        cursor: "help",
+      }}
+    >
       {config.label}
+    </span>
+  )
+}
+
+function StripeModeBadge({ mode }: { mode: "live" | "test" }) {
+  const isLive = mode === "live"
+  return (
+    <span
+      title={isLive ? "Stripe LIVE: pagos reales" : "Stripe TEST: pagos ficticios con tarjetas de prueba"}
+      style={{
+        flexShrink: 0,
+        padding: "2px 8px",
+        borderRadius: 999,
+        fontSize: 10,
+        fontWeight: 800,
+        letterSpacing: "0.04em",
+        textTransform: "uppercase",
+        background: isLive ? "rgba(239, 68, 68, 0.12)" : "rgba(34, 197, 94, 0.12)",
+        color:      isLive ? "var(--red-600)" : "var(--green-d)",
+        cursor:     "help",
+      }}
+    >
+      {isLive ? "🔴 LIVE" : "🟢 TEST"}
     </span>
   )
 }
