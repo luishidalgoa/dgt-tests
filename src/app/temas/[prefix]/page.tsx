@@ -8,7 +8,9 @@ import {
   extractTemaInner,
   compareTemaCodes,
 } from "@/lib/temas"
+import { Prisma } from "@prisma/client"
 import { shuffle } from "@/lib/shuffle"
+import { QUESTION_VISIBLE_WHERE, SQL_QUESTION_VISIBLE_AND } from "@/lib/questions"
 import { ExamRunner } from "@/components/ExamRunner"
 import { getEffectiveTokenQuota, hasFullAccess } from "@/lib/permissions"
 import { getQuotaStatus } from "@/lib/aiQuota"
@@ -49,7 +51,7 @@ export default async function TemaPage({ params, searchParams }: PageProps) {
   // preguntas con codigoTema sin guion estructural (p.ej. "TC 2.8 (2-8.1)"
   // que el LIKE 'TC 2.8-%' anterior se perdía).
   const all = await db.$queryRaw<{ id: number; codigoTema: string }[]>`
-    SELECT id, codigoTema FROM questions WHERE codigoTema IS NOT NULL
+    SELECT id, codigoTema FROM questions q WHERE codigoTema IS NOT NULL ${Prisma.raw(SQL_QUESTION_VISIBLE_AND)}
   `
   const matched = all.filter((q) => extractTemaPrefix(q.codigoTema) === prefix)
   const allQuestionIds = matched.map((q) => ({ id: q.id }))
@@ -267,7 +269,7 @@ export default async function TemaPage({ params, searchParams }: PageProps) {
   const selectedIds = shuffled.slice(0, requested).map((q) => q.id)
 
   const questions = await db.question.findMany({
-    where:   { id: { in: selectedIds } },
+    where:   { id: { in: selectedIds }, ...QUESTION_VISIBLE_WHERE },
     include: { options: { orderBy: { letra: "asc" } } },
   })
 

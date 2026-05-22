@@ -100,12 +100,24 @@ enum ContentTier {
 // ── Pregunta (única por externalId, compartida entre tests) ─────────────
 model Question {
   id            Int            @id @default(autoincrement())
-  externalId    String         @unique       // id_pregunta de AEOL (ej. "320671")
+  externalId    String         @unique       // id_pregunta de AEOL (ej. "320671") o "ai-{uuid}" para generadas
   codigoTema    String?                       // "TC 7.3-3.1.3 (7-3.3.1)"
   enunciado     String
   explicacion   String
   imagen        String?                       // "320671.png"
   tier          ContentTier    @default(PRO)  // marcadas FREE solo las de los 7 primeros tests permiso-b
+
+  // ── Preguntas generadas por IA (Fase 107) ──────────────────────────
+  //  - aiGenerated=false  → pregunta humana original (de AEOL).
+  //  - aiGenerated=true   → generada por LLM; requiere review.
+  //  - aiApproved=null    → pendiente de review (NO visible a usuarios).
+  //  - aiApproved=true    → revisada y aprobada (visible).
+  //  - aiApproved=false   → descartada (NO visible, se mantiene en BBDD por auditoría).
+  aiGenerated   Boolean        @default(false)
+  aiModel       String?                        // p.ej. "gemini-2.5-flash" — para auditoría/debug
+  aiReviewedAt  DateTime?
+  aiApproved    Boolean?                       // null = pendiente
+
   options       Option[]
   testQuestions TestQuestion[]
   answers       Answer[]
@@ -113,6 +125,8 @@ model Question {
   aiPaid        UserAiPaid[]
 
   @@index([tier])
+  // Acelera el filtro "preguntas visibles a usuario" en /temas, /test-errores, etc.
+  @@index([aiGenerated, aiApproved])
   @@map("questions")
 }
 

@@ -3,6 +3,8 @@ import { redirect } from "next/navigation"
 import { db } from "@/lib/db"
 import { requireUser } from "@/lib/auth"
 import { getPendingErrorQuestionIds } from "@/lib/errors"
+import { QUESTION_VISIBLE_WHERE } from "@/lib/questions"
+import { shuffle } from "@/lib/shuffle"
 import { ExamRunner } from "@/components/ExamRunner"
 import { hasFullAccess, getEffectiveTokenQuota } from "@/lib/permissions"
 import { getQuotaStatus } from "@/lib/aiQuota"
@@ -122,11 +124,11 @@ export default async function TestErroresPage({ searchParams }: PageProps) {
   }
 
   // Mezclar y tomar las primeras N
-  const shuffled = [...errorIds].sort(() => Math.random() - 0.5)
+  const shuffled = shuffle(errorIds)
   const selectedIds = shuffled.slice(0, Math.min(requested, total))
 
   const questions = await db.question.findMany({
-    where: { id: { in: selectedIds } },
+    where:   { id: { in: selectedIds }, ...QUESTION_VISIBLE_WHERE },
     include: { options: { orderBy: { letra: "asc" } } },
   })
 

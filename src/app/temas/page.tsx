@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
 import { hasFullAccess } from "@/lib/permissions"
+import { Prisma } from "@prisma/client"
 import {
   extractTemaPrefix,
   extractTemaPadre,
@@ -10,6 +11,7 @@ import {
   getTemaPadreName,
   compareTemaCodes,
 } from "@/lib/temas"
+import { SQL_QUESTION_VISIBLE_AND } from "@/lib/questions"
 import { ChevronLeft, BookMarked, ArrowRight, BookOpen } from "lucide-react"
 
 export const dynamic = "force-dynamic"
@@ -55,6 +57,7 @@ export default async function TemasPage() {
     LEFT JOIN answers a ON a.questionId = q.id
     LEFT JOIN exam_attempts ea ON ea.id = a.attemptId AND ea.userId = ${user.id}
     WHERE q.codigoTema IS NOT NULL
+      ${Prisma.raw(SQL_QUESTION_VISIBLE_AND)}
       AND (a.id IS NULL OR ea.id IS NOT NULL)
     GROUP BY q.codigoTema
   `

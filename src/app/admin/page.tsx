@@ -1,7 +1,10 @@
+import Link from "next/link"
 import { getConfig } from "@/lib/appConfig"
 import { CONFIG_CATALOG, type ConfigEntry, type ConfigCategory } from "@/lib/configCatalog"
+import { db } from "@/lib/db"
+import { QUESTION_PENDING_REVIEW_WHERE } from "@/lib/questions"
 import { ConfigForm } from "./ConfigForm"
-import { Sliders, ToggleLeft, MessageSquareText, Sparkles } from "lucide-react"
+import { Sliders, ToggleLeft, MessageSquareText, Sparkles, KeyRound, ListChecks, ArrowRight } from "lucide-react"
 
 export const dynamic = "force-dynamic"
 
@@ -23,6 +26,9 @@ export default async function AdminPage() {
       currentByKey.set(entry.key, current)
     })
   )
+
+  // Métricas de paneles secundarios (badge counts)
+  const pendingReviewCount = await db.question.count({ where: QUESTION_PENDING_REVIEW_WHERE })
 
   const groups: { category: ConfigCategory; title: string; icon: React.ReactNode; entries: ConfigEntry[] }[] = [
     {
@@ -53,6 +59,29 @@ export default async function AdminPage() {
 
   return (
     <div className="space-y-8">
+      {/* Atajos a sub-paneles admin */}
+      <section>
+        <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
+          <ListChecks className="h-5 w-5" />
+          Paneles
+        </h2>
+        <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
+          <AdminLinkCard
+            href="/admin/secrets"
+            icon={<KeyRound className="h-5 w-5" />}
+            title="API keys y secretos"
+            description="Stripe, Gemini, Groq, Gmail. Cifrados en BBDD con AES-256-GCM."
+          />
+          <AdminLinkCard
+            href="/admin/review-questions"
+            icon={<Sparkles className="h-5 w-5" />}
+            title="Revisar preguntas IA"
+            description="Aprobar o descartar preguntas generadas por `npm run questions:generate`."
+            badge={pendingReviewCount > 0 ? `${pendingReviewCount} pendientes` : undefined}
+          />
+        </div>
+      </section>
+
       {groups.map((group) => (
         <section key={group.category}>
           <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
@@ -78,5 +107,62 @@ export default async function AdminPage() {
         si no ves el efecto, recarga (Ctrl+F5).
       </p>
     </div>
+  )
+}
+
+function AdminLinkCard({ href, icon, title, description, badge }: {
+  href:        string
+  icon:        React.ReactNode
+  title:       string
+  description: string
+  badge?:      string
+}) {
+  return (
+    <Link
+      href={href}
+      className="card-soft"
+      style={{
+        display:        "flex",
+        alignItems:     "flex-start",
+        gap:            12,
+        padding:        16,
+        textDecoration: "none",
+        color:          "inherit",
+      }}
+    >
+      <div style={{
+        flexShrink: 0,
+        width: 38, height: 38,
+        borderRadius: 10,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "rgba(168, 85, 247, 0.10)",
+        color: "rgb(126, 34, 206)",
+      }}>
+        {icon}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>{title}</div>
+          {badge && (
+            <span style={{
+              padding: "1px 8px",
+              borderRadius: 999,
+              background: "rgba(245, 158, 11, 0.15)",
+              color: "var(--amber-d)",
+              fontSize: 10,
+              fontWeight: 800,
+            }}>
+              {badge}
+            </span>
+          )}
+        </div>
+        <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--slate-500)", lineHeight: 1.4 }}>
+          {description}
+        </p>
+      </div>
+      <ArrowRight className="h-4 w-4" style={{ color: "var(--slate-400)", flexShrink: 0, marginTop: 4 }} />
+    </Link>
   )
 }

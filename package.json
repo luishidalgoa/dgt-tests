@@ -42,6 +42,7 @@
     "manual:import": "tsx --env-file=.env scripts/import-manual.ts",
     "manual:extract-skeleton": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/extract-manual-skeleton.ts",
     "manual:infer-titles": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/infer-subblock-titles.ts",
+    "questions:generate":  "tsx --env-file=.env --env-file-if-exists=.env.local scripts/generate-questions.ts",
     "ingest": "npm run db:seed && npm run images:copy && npm run manual:import"
   },
   "dependencies": {

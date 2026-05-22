@@ -153,6 +153,16 @@ const CATEGORIES: Category[] = [
           "npm run manual:infer-titles -- --provider groq --model mixtral-8x7b-32768",
         ],
       },
+      {
+        name:        "questions:generate",
+        description: "Genera preguntas tipo-DGT con IA en sub-bloques con pocas preguntas",
+        examples: [
+          "npm run questions:generate                                    # 60 preg, 3 por sub-bloque, Groq",
+          "npm run questions:generate -- --count 30 --per-block 3        # menos preguntas",
+          "npm run questions:generate -- --provider gemini --dry-run     # preview sin escribir",
+          "# Después: revísalas en http://localhost:4321/admin/review-questions",
+        ],
+      },
     ],
   },
   {

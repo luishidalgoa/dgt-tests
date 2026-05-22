@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto"
 import { db } from "@/lib/db"
+import { QUESTION_VISIBLE_WHERE } from "@/lib/questions"
 
 export const MAX_PLAYERS_PER_PARTY = 4
 export const PARTY_COOKIE_PREFIX   = "party_token_"
@@ -97,7 +98,9 @@ export async function pickRandomQuestionIds(
   // Limitar count
   const n = Math.max(5, Math.min(60, count))
 
-  const where: Record<string, unknown> = {}
+  // Inicializamos con el filtro de visibilidad (excluye preguntas IA
+  // sin aprobar). Ver src/lib/questions.ts.
+  const where: Record<string, unknown> = { ...QUESTION_VISIBLE_WHERE }
   if (categoryId) {
     where.testQuestions = { some: { test: { categoryId } } }
   }

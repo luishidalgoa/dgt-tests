@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import { requireUser } from "@/lib/auth"
 import { getTemaName, extractTemaPrefix, compareTemaCodes } from "@/lib/temas"
 import { ATTEMPT_STATS_WHERE, SQL_ATTEMPT_STATS_AND } from "@/lib/stats"
+import { SQL_QUESTION_VISIBLE_AND } from "@/lib/questions"
 import {
   ChevronLeft,
   ChartBar,
@@ -45,6 +46,7 @@ export default async function StatsPage() {
     LEFT JOIN answers a ON a.questionId = q.id
     LEFT JOIN exam_attempts ea ON ea.id = a.attemptId AND ea.userId = ${user.id} ${Prisma.raw(SQL_ATTEMPT_STATS_AND)}
     WHERE q.codigoTema IS NOT NULL
+      ${Prisma.raw(SQL_QUESTION_VISIBLE_AND)}
       AND (a.id IS NULL OR ea.id IS NOT NULL)
     GROUP BY q.codigoTema
   `
