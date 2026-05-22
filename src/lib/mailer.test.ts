@@ -19,6 +19,8 @@ describe("sendMail (nodemailer + Gmail)", () => {
     sendMailMock.mockReset()
     vi.mocked(nodemailer.createTransport).mockClear()
     _resetMailerForTests()
+    // Limpiamos primero por si .env local se hubiera filtrado al proceso
+    delete process.env.GMAIL_FROM
     process.env.GMAIL_USER = "test@gmail.com"
     process.env.GMAIL_APP_PASSWORD = "abcd efgh ijkl mnop"
   })

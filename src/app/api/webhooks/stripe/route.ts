@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import type Stripe from "stripe"
 import { db } from "@/lib/db"
-import { getStripe, STRIPE_WEBHOOK_SECRET, getSubscriptionPeriodEnd, willNotAutoRenew, getSubscriptionEndDate, appUrl } from "@/lib/stripe"
+import { getStripe, getStripeWebhookSecret, getSubscriptionPeriodEnd, willNotAutoRenew, getSubscriptionEndDate, appUrl } from "@/lib/stripe"
 import { handleChargeRefunded } from "@/lib/handleChargeRefunded"
 import { composePaymentFailedEmail, composeInvoiceUpcomingEmail, sendUserEmail } from "@/lib/userEmails"
 
@@ -24,7 +24,13 @@ export const runtime = "nodejs"  // ⚠ NO edge: necesitamos req.text()
 export const dynamic = "force-dynamic"
 
 export async function POST(req: NextRequest) {
-  if (!STRIPE_WEBHOOK_SECRET) {
+  let webhookSecret: string
+  try {
+    webhookSecret = await getStripeWebhookSecret()
+  } catch {
+    webhookSecret = ""
+  }
+  if (!webhookSecret) {
     return NextResponse.json(
       { error: "STRIPE_WEBHOOK_SECRET no configurado" },
       { status: 500 }
@@ -37,11 +43,11 @@ export async function POST(req: NextRequest) {
   }
 
   const rawBody = await req.text()
-  const stripe = getStripe()
+  const stripe = await getStripe()
 
   let event: Stripe.Event
   try {
-    event = stripe.webhooks.constructEvent(rawBody, sig, STRIPE_WEBHOOK_SECRET)
+    event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     return NextResponse.json({ error: `Firma inválida: ${msg}` }, { status: 400 })

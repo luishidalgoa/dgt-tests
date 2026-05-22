@@ -18,6 +18,10 @@ delete process.env.STRIPE_WEBHOOK_SECRET
 delete process.env.STRIPE_PRICE_ID
 delete process.env.GEMINI_API_KEY
 delete process.env.RESEND_API_KEY
+delete process.env.GMAIL_USER
+delete process.env.GMAIL_APP_PASSWORD
+delete process.env.GMAIL_FROM
+delete process.env.APP_MASTER_KEY
 
 // SESSION_SECRET es necesario para que iron-session no se queje al
 // importarse (aunque los tests mockeen la sesión).

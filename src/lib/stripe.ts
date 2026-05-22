@@ -13,26 +13,33 @@
  */
 
 import Stripe from "stripe"
+import { getEffectiveSecret } from "@/lib/secretCatalog"
 
-function getEnv(name: string): string {
-  const v = process.env[name]
-  if (!v) throw new Error(`Falta ${name} en .env`)
+/**
+ * Cliente Stripe. Lee la STRIPE_SECRET_KEY del helper (BBDD admin
+ * override → fallback .env). Async porque AppConfig se consulta en
+ * BBDD; no cacheamos el cliente entre llamadas para que un cambio
+ * desde /admin/secrets aplique al instante.
+ */
+export async function getStripe(): Promise<Stripe> {
+  const key = await getEffectiveSecret("STRIPE_SECRET_KEY")
+  if (!key) throw new Error("No hay STRIPE_SECRET_KEY configurada (ni .env ni /admin/secrets)")
+  return new Stripe(key, { typescript: true })
+}
+
+/** Igual: lee desde el helper. Async. */
+export async function getStripeWebhookSecret(): Promise<string> {
+  const v = await getEffectiveSecret("STRIPE_WEBHOOK_SECRET")
+  if (!v) throw new Error("No hay STRIPE_WEBHOOK_SECRET configurada")
   return v
 }
 
-let _stripe: Stripe | null = null
+// STRIPE_PRICE_ID NO es secret (es público y configurable, no sensible).
+// Se queda como env var directo, sin pasar por el helper de cifrado.
+export const STRIPE_PRICE_ID = process.env.STRIPE_PRICE_ID ?? ""
 
-export function getStripe(): Stripe {
-  if (!_stripe) {
-    _stripe = new Stripe(getEnv("STRIPE_SECRET_KEY"), {
-      // Dejamos la última API version por defecto del SDK.
-      typescript: true,
-    })
-  }
-  return _stripe
-}
-
-export const STRIPE_PRICE_ID    = process.env.STRIPE_PRICE_ID ?? ""
+// Compat: re-export síncrono del webhook secret. SOLO úsalo en código
+// legacy; lo nuevo debería usar getStripeWebhookSecret().
 export const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? ""
 
 export function appUrl(path: string = "/"): string {

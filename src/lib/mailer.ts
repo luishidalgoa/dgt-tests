@@ -23,13 +23,15 @@
  */
 import nodemailer from "nodemailer"
 import type { Transporter } from "nodemailer"
+import { getEffectiveSecret } from "@/lib/secretCatalog"
 
 let _transporter: Transporter | null = null
 
-function getTransporter(): Transporter | null {
+async function getTransporter(): Promise<Transporter | null> {
   if (_transporter) return _transporter
   const user = process.env.GMAIL_USER
-  const pass = process.env.GMAIL_APP_PASSWORD
+  // GMAIL_APP_PASSWORD pasa por el helper: BBDD (cifrado) gana, fallback env.
+  const pass = await getEffectiveSecret("GMAIL_APP_PASSWORD")
   if (!user || !pass) return null
   _transporter = nodemailer.createTransport({
     service: "gmail",
@@ -59,7 +61,7 @@ export interface SendMailOpts {
  * resultado tranquilamente.
  */
 export async function sendMail(opts: SendMailOpts): Promise<boolean> {
-  const transporter = getTransporter()
+  const transporter = await getTransporter()
   if (!transporter) {
     console.warn(
       "[mailer] GMAIL_USER/GMAIL_APP_PASSWORD no configurados — email omitido:",

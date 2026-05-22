@@ -38,9 +38,11 @@ export interface AIExplanationResult {
   highlightLetras: string[]
 }
 
-function getEnv() {
-  const apiKey = process.env.GEMINI_API_KEY
-  if (!apiKey) throw new Error("Falta GEMINI_API_KEY en .env")
+async function getEnv() {
+  // GEMINI_API_KEY pasa por el helper: BBDD cifrada gana, fallback env.
+  const { getEffectiveSecret } = await import("@/lib/secretCatalog")
+  const apiKey = await getEffectiveSecret("GEMINI_API_KEY")
+  if (!apiKey) throw new Error("Falta GEMINI_API_KEY (ni .env ni /admin/secrets)")
   const model = process.env.GEMINI_MODEL || "gemini-flash-latest"
   return { apiKey, model }
 }
@@ -106,7 +108,7 @@ function stripJsonFences(text: string): string {
 }
 
 export async function explainQuestion(payload: AIQuestionPayload): Promise<AIExplanationResult> {
-  const { apiKey, model } = getEnv()
+  const { apiKey, model } = await getEnv()
   const url = `${ENDPOINT}/${encodeURIComponent(model)}:generateContent`
 
   const parts: unknown[] = [{ text: buildPrompt(payload) }]

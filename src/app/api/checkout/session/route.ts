@@ -26,7 +26,7 @@ export async function POST() {
     )
   }
 
-  const stripe = getStripe()
+  const stripe = await getStripe()
 
   // 1. Crear/recuperar Customer
   //    Lógica en 3 pasos:

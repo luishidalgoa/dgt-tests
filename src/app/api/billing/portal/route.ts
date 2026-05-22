@@ -25,7 +25,7 @@ export async function POST() {
     )
   }
 
-  const stripe = getStripe()
+  const stripe = await getStripe()
 
   // Verificar que el customer existe en el ambiente actual de Stripe.
   // Si el id se generó en otro ambiente (LIVE↔TEST), no lo encontrará.
