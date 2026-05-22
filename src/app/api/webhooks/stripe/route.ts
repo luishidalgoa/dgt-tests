@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server"
 import type Stripe from "stripe"
 import { db } from "@/lib/db"
 import { getStripe, STRIPE_WEBHOOK_SECRET, getSubscriptionPeriodEnd, willNotAutoRenew, getSubscriptionEndDate } from "@/lib/stripe"
+import { handleChargeRefunded } from "@/lib/handleChargeRefunded"
 
 /**
  * Stripe webhook handler.
@@ -66,6 +67,12 @@ export async function POST(req: NextRequest) {
       case "invoice.payment_failed": {
         const invoice = event.data.object as Stripe.Invoice
         await onInvoicePaymentFailed(invoice)
+        break
+      }
+      case "charge.refunded": {
+        const charge = event.data.object as Stripe.Charge
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await handleChargeRefunded(charge, { db: db as any, stripe })
         break
       }
       default:
