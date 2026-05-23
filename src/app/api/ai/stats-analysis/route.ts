@@ -5,6 +5,8 @@ import { ATTEMPT_STATS_WHERE } from "@/lib/stats"
 import { consumeTokens, getQuotaStatus } from "@/lib/aiQuota"
 import { getActiveProvider } from "@/lib/ai"
 import { AIProviderError } from "@/lib/aiProviders/types"
+import { captureAppException } from "@/lib/sentryUser"
+import { getAIProvider } from "@/lib/configCatalog"
 import {
   analyzeStats,
   buildStatsContext,
@@ -150,6 +152,23 @@ export async function POST() {
   } catch (err) {
     await refund()
     console.error("[ai/stats-analysis] error del provider:", err)
+    // Sentry: tragamos a 5xx amigable → captureRequestError no lo verá.
+    // Capturamos con tags para correlacionar fallos por provider/modelo.
+    const provider = await getAIProvider().catch(() => "unknown")
+    captureAppException(err, {
+      category: "ai",
+      tags: {
+        provider,
+        kind:        err instanceof AIProviderError ? err.kind : "unknown",
+        operation:   "stats-analysis",
+        refunded:    "true",
+      },
+      extra: {
+        totalAnswers,
+        totalAttempts,
+        correctAnswers,
+      },
+    })
     if (err instanceof AIProviderError) {
       switch (err.kind) {
         case "rate_limit":
@@ -221,6 +240,19 @@ export async function POST() {
     // el análisis igual; el siguiente click volverá a cobrar al no encontrar
     // cacheado, lo cual es un coste aceptable frente a romper la UX ahora.
     console.error("[ai/stats-analysis] falló persistir el análisis:", e)
+    // Sentry: silenciamos el error a nivel HTTP pero queremos saberlo —
+    // si pasa en muchos users seguidos, hay un problema serio con la
+    // tabla user_ai_stats_analysis (schema drift, FK, etc.).
+    captureAppException(e, {
+      category: "ai",
+      tags: {
+        operation: "stats-analysis-persist",
+      },
+      extra: {
+        totalAnswers,
+        totalAttempts,
+      },
+    })
   }
 
   const quota = await getQuotaStatus(user.id)

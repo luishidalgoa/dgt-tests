@@ -22,6 +22,7 @@
  */
 
 import type Stripe from "stripe"
+import { captureAppException } from "@/lib/sentryUser"
 
 /** Mínimo del cliente Prisma que necesitamos. */
 export interface RefundDb {
@@ -89,6 +90,22 @@ export async function handleChargeRefunded(
       console.warn(
         `[stripe webhook] charge.refunded: stripe.subscriptions.cancel falló para '${user.stripeSubscriptionId}': ${err instanceof Error ? err.message : err}`
       )
+      // Importante: aunque la cancel falle, seguimos abajo y degradamos
+      // al user a USER en BBDD. Pero Stripe quedará desincronizado (sub
+      // sigue "activa" su lado, la nuestra dice canceled). Hay que ir
+      // al dashboard de Stripe y cancelar a mano.
+      captureAppException(err, {
+        category: "stripe",
+        tags: {
+          operation:      "subscription.cancel-on-refund",
+          subscriptionId: user.stripeSubscriptionId,
+          userId:         String(user.id),
+        },
+        extra: {
+          chargeId:       charge.id,
+          username:       user.username,
+        },
+      })
     }
   }
 

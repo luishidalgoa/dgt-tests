@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import { getStripe, getStripeWebhookSecret, getSubscriptionPeriodEnd, willNotAutoRenew, getSubscriptionEndDate, appUrl } from "@/lib/stripe"
 import { handleChargeRefunded } from "@/lib/handleChargeRefunded"
 import { composePaymentFailedEmail, composeInvoiceUpcomingEmail, sendUserEmail } from "@/lib/userEmails"
+import { captureAppException } from "@/lib/sentryUser"
 
 /**
  * Stripe webhook handler.
@@ -93,6 +94,23 @@ export async function POST(req: NextRequest) {
     }
   } catch (err) {
     console.error("[stripe webhook] error handling", event.type, err)
+    // Sentry: este catch traga el error y devuelve 500 a Stripe, que
+    // reintentará. Pero si el problema es lógica nuestra (no transitorio),
+    // los reintentos seguirán fallando y el user queda en estado raro
+    // (pagó, no es PRO). Capturamos para enterarnos en el momento.
+    captureAppException(err, {
+      category: "stripe",
+      tags: {
+        eventType: event.type,
+        eventId:   event.id,
+      },
+      extra: {
+        livemode: event.livemode,
+        // No metemos event.data.object — puede tener PII (email, dirección
+        // de facturación). El eventId basta para abrirlo en el dashboard
+        // de Stripe y ver el payload completo.
+      },
+    })
     return NextResponse.json({ error: "Error procesando evento" }, { status: 500 })
   }
 
@@ -138,6 +156,24 @@ async function onCheckoutCompleted(session: Stripe.Checkout.Session) {
   })
   if (!userId) {
     console.error("[stripe webhook] checkout.session.completed sin usuario", session.id)
+    // Crítico: el user pagó pero no podemos asociar el customerId a su
+    // cuenta. El admin necesita intervenir manualmente (lookup en Stripe
+    // por client_reference_id o metadata.appUserId).
+    captureAppException(
+      new Error(`checkout.session.completed sin usuario resolvible: ${session.id}`),
+      {
+        category: "stripe",
+        tags: {
+          eventType:         "checkout.session.completed",
+          sessionId:         session.id,
+          stripeCustomerId:  customerId ?? "null",
+        },
+        extra: {
+          clientReferenceId: session.client_reference_id,
+          appUserIdMetadata: session.metadata?.appUserId,
+        },
+      }
+    )
     return
   }
   await db.user.update({
@@ -158,6 +194,20 @@ async function onSubscriptionUpdated(sub: Stripe.Subscription) {
   })
   if (!userId) {
     console.error("[stripe webhook] subscription.updated sin usuario", sub.id)
+    // Igual que en checkout.completed: pagó/se renovó pero no podemos
+    // marcar al user. Necesita intervención manual.
+    captureAppException(
+      new Error(`subscription.updated sin usuario resolvible: ${sub.id}`),
+      {
+        category: "stripe",
+        tags: {
+          eventType:        "customer.subscription.updated",
+          subscriptionId:   sub.id,
+          stripeCustomerId: customerId,
+          status:           sub.status,
+        },
+      }
+    )
     return
   }
 

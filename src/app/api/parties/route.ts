@@ -7,6 +7,7 @@ import {
   generateUniquePartyCode,
   pickRandomQuestionIds,
 } from "@/lib/party"
+import { captureAppException } from "@/lib/sentryUser"
 
 const schema = z.object({
   categoryId:     z.number().int().nullable(),
@@ -35,6 +36,21 @@ export async function POST(req: Request) {
       onlyTier
     )
   } catch (e) {
+    // Capturamos: si pickRandomQuestionIds peta, indica problema de
+    // data integrity (categoría sin preguntas suficientes, FREE tier
+    // vacío, BBDD timeout). El user ve un 400 amigable, nosotros nos
+    // enteramos por Sentry para arreglar el catálogo / hacer seed.
+    captureAppException(e, {
+      category: "party",
+      tags: {
+        operation: "create",
+        onlyTier:  onlyTier ?? "all",
+      },
+      extra: {
+        categoryId:     parsed.data.categoryId,
+        totalQuestions: parsed.data.totalQuestions,
+      },
+    })
     return NextResponse.json({ error: (e as Error).message }, { status: 400 })
   }
 

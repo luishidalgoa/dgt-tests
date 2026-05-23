@@ -24,6 +24,7 @@
 import nodemailer from "nodemailer"
 import type { Transporter } from "nodemailer"
 import { getEffectiveSecret } from "@/lib/secretCatalog"
+import { captureAppException } from "@/lib/sentryUser"
 
 let _transporter: Transporter | null = null
 
@@ -86,6 +87,36 @@ export async function sendMail(opts: SendMailOpts): Promise<boolean> {
     return true
   } catch (err) {
     console.error("[mailer] error enviando email:", err)
+    // Sentry: el caller (webhook de payment_failed, recovery email, etc.)
+    // hace fire-and-forget e ignora el `false` que devolvemos. Sin Sentry
+    // los emails fallidos serían silenciosos. Capturamos con tags útiles:
+    // subject suele decir el template (no PII), to lo hasheamos para no
+    // mandar el email plano a Sentry (RGPD).
+    const recipientHash = await hashEmailForLog(opts.to)
+    captureAppException(err, {
+      category: "email",
+      tags: {
+        provider:  "gmail-smtp",
+        // err.code típico de nodemailer: EAUTH, ECONNECTION, EENVELOPE,
+        // EMESSAGE, ESTREAM, ETIMEDOUT
+        errorCode: (err as { code?: string })?.code ?? "unknown",
+      },
+      extra: {
+        subject:       opts.subject,
+        recipientHash, // sha256 del email destinatario, suficiente para
+                       // correlacionar quejas sin filtrar el email plano
+      },
+    })
     return false
+  }
+}
+
+/** sha256 del email para correlación sin enviar el email plano a Sentry. */
+async function hashEmailForLog(email: string): Promise<string> {
+  try {
+    const crypto = await import("node:crypto")
+    return crypto.createHash("sha256").update(email.toLowerCase().trim()).digest("hex").slice(0, 16)
+  } catch {
+    return "unknown"
   }
 }
