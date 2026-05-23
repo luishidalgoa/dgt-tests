@@ -652,6 +652,38 @@ function GuestDashboard({ category }: { category: GuestCategoryData }) {
           </li>
         </ul>
       </section>
+
+      {/* CTA al /faq. Dos motivos:
+           1. UX: visitante con dudas residuales tras leer las 4 secciones
+              SEO ya tiene un sitio claro a donde ir antes de irse a Google.
+           2. SEO: el internal linking desde la home (la página con más
+              autoridad) hacia /faq le pasa "link juice" y acelera la
+              indexación de las 12 preguntas. */}
+      <section
+        className="card-soft warm"
+        style={{
+          marginTop:      32,
+          padding:        18,
+          display:        "flex",
+          alignItems:     "center",
+          justifyContent: "space-between",
+          gap:            14,
+          flexWrap:       "wrap",
+        }}
+      >
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <p style={{ margin: 0, fontWeight: 800, fontSize: 15 }}>
+            ¿Te queda alguna duda sobre el examen?
+          </p>
+          <p style={{ margin: "4px 0 0", fontSize: 13.5, color: "var(--slate-600)" }}>
+            Cuántos fallos puedes tener, qué es ADAS, cuánto cuesta el carné,
+            plazos y trámites — todo resuelto en una página.
+          </p>
+        </div>
+        <Link href="/faq" className="btn-secondary" style={{ whiteSpace: "nowrap" }}>
+          Preguntas frecuentes →
+        </Link>
+      </section>
     </div>
   )
 }

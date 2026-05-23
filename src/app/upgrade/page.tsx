@@ -315,6 +315,35 @@ export default async function UpgradePage() {
           <BookOpen className="h-4 w-4" /> Manual completo del temario
         </span>
       </div>
+
+      {/* Microcopy de salida hacia /faq — a un click del CTA de pago. La
+          mayoría de la fricción de checkout viene de dudas no resueltas
+          (plazos, política de cancelación, cuántos fallos, etc.); el FAQ
+          las cubre y mantiene al user dentro del funnel en vez de abrir
+          Google. */}
+      <p
+        style={{
+          marginTop:  20,
+          marginBottom: 0,
+          textAlign:  "center",
+          fontSize:   12.5,
+          color:      "var(--slate-500)",
+        }}
+      >
+        ¿Dudas antes de empezar?{" "}
+        <Link
+          href="/faq"
+          style={{
+            color:          "var(--slate-700)",
+            fontWeight:     700,
+            textDecoration: "underline",
+            textDecorationColor: "rgba(168, 85, 247, 0.45)",
+            textUnderlineOffset: 3,
+          }}
+        >
+          Mira las preguntas frecuentes →
+        </Link>
+      </p>
     </div>
   )
 }
