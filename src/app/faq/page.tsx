@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import { ChevronLeft, HelpCircle } from "lucide-react"
+import { StructuredDataBreadcrumb } from "@/components/StructuredData"
 
 export const metadata: Metadata = {
   title:       "Preguntas frecuentes sobre el examen teórico DGT",
@@ -120,6 +121,15 @@ export default function FAQPage() {
 
   return (
     <div style={{ maxWidth: 820, margin: "0 auto" }}>
+      {/* Breadcrumb JSON-LD para la miga en SERPs. */}
+      <StructuredDataBreadcrumb
+        appUrl={APP_URL}
+        items={[
+          { name: "Inicio",               url: "/" },
+          { name: "Preguntas frecuentes", url: "/faq" },
+        ]}
+      />
+
       <Link href="/" className="back-link">
         <ChevronLeft className="h-4 w-4" />
         Inicio

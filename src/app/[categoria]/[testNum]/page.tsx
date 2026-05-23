@@ -18,9 +18,12 @@ import {
   RotateCw,
   Lock,
 } from "lucide-react"
+import { StructuredDataBreadcrumb } from "@/components/StructuredData"
 import type { TestRunnerData } from "@/types/exam"
 
 export const dynamic = "force-dynamic"
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app"
 
 const PASS_THRESHOLD = 0.9
 
@@ -119,6 +122,17 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
 
     return (
       <div>
+        {/* Breadcrumb JSON-LD: rich result en SERPs muestra
+            "dgt-tests.vercel.app › Permiso B › Test 3" en vez de la URL. */}
+        <StructuredDataBreadcrumb
+          appUrl={APP_URL}
+          items={[
+            { name: "Inicio",              url: "/" },
+            { name: test.category.name,    url: `/${categoria}` },
+            { name: `Test ${testNumber}`,  url: `/${categoria}/${testNumber}` },
+          ]}
+        />
+
         <Link href={`/${categoria}`} className="back-link">
           <ChevronLeft className="h-4 w-4" />
           Volver a {test.category.name}

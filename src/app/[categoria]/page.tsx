@@ -11,8 +11,11 @@ import {
 } from "@/lib/permissions"
 import { PRO_PRICE_PER_MONTH } from "@/lib/pricing"
 import { ChevronLeft, CheckCircle2, Lock } from "lucide-react"
+import { StructuredDataBreadcrumb } from "@/components/StructuredData"
 
 export const dynamic = "force-dynamic"
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app"
 
 interface PageProps {
   params: Promise<{ categoria: string }>
@@ -144,6 +147,16 @@ export default async function CategoryPage({ params }: PageProps) {
 
   return (
     <div>
+      {/* Breadcrumb JSON-LD: rich result en SERPs muestra
+          "dgt-tests.vercel.app › Permiso B" en vez de la URL cruda. */}
+      <StructuredDataBreadcrumb
+        appUrl={APP_URL}
+        items={[
+          { name: "Inicio",       url: "/" },
+          { name: category.name,  url: `/${category.slug}` },
+        ]}
+      />
+
       <Link href="/" className="back-link">
         <ChevronLeft className="h-4 w-4" />
         Inicio

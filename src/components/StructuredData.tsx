@@ -161,3 +161,59 @@ export function StructuredDataHome({ appUrl }: StructuredDataProps) {
     </>
   )
 }
+
+/**
+ * BreadcrumbList schema para páginas internas. Google lo usa para mostrar
+ * la "miga de pan" debajo del título en SERPs:
+ *
+ *   dgt-tests.vercel.app › Permiso B › Test 3
+ *
+ * en vez de la URL cruda. Mejora CTR notablemente — la miga es más legible
+ * que la URL y orienta al usuario sobre dónde aterriza al hacer click.
+ *
+ * Uso:
+ *   <StructuredDataBreadcrumb items={[
+ *     { name: "Inicio",    url: "/" },
+ *     { name: "Permiso B", url: "/permiso-b" },
+ *     { name: "Test 3",    url: "/permiso-b/3" },
+ *   ]} appUrl={APP_URL} />
+ *
+ * Las URLs pueden ser relativas (empezando con "/") o absolutas — el
+ * componente las normaliza a absolutas con appUrl.
+ */
+interface BreadcrumbItem {
+  /** Texto visible (ej. "Permiso B", "Test 3") */
+  name: string
+  /** URL absoluta o relativa (ej. "/permiso-b/3") */
+  url:  string
+}
+
+interface BreadcrumbProps {
+  /** Lista ORDENADA de migas desde la raíz hasta la página actual. */
+  items:  BreadcrumbItem[]
+  /** URL absoluta del sitio para normalizar items relativos. */
+  appUrl: string
+}
+
+export function StructuredDataBreadcrumb({ items, appUrl }: BreadcrumbProps) {
+  // Normaliza URLs relativas a absolutas. Google EXIGE URLs absolutas en
+  // BreadcrumbList → si pones una relativa, ignora el schema entero.
+  const baseUrl = appUrl.replace(/\/$/, "")
+  const breadcrumbSchema = {
+    "@context":      "https://schema.org",
+    "@type":         "BreadcrumbList",
+    itemListElement: items.map((item, i) => ({
+      "@type":   "ListItem",
+      position:  i + 1,
+      name:      item.name,
+      item:      item.url.startsWith("http") ? item.url : `${baseUrl}${item.url}`,
+    })),
+  }
+
+  return (
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
+    />
+  )
+}
