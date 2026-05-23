@@ -191,28 +191,28 @@ export default async function RootLayout({
             href="https://luishidalgoa.vercel.app/"
             target="_blank"
             rel="noopener noreferrer"
-            style={{ color: "var(--slate-500)", textDecoration: "none" }}
+            style={{ color: "var(--slate-500)", textDecoration: "underline", textDecorationColor: "var(--slate-300)", textUnderlineOffset: 3 }}
           >
             portfolio →
           </a>
           {" · "}
           <Link
             href="/faq"
-            style={{ color: "var(--slate-500)", textDecoration: "none" }}
+            style={{ color: "var(--slate-500)", textDecoration: "underline", textDecorationColor: "var(--slate-300)", textUnderlineOffset: 3 }}
           >
             Preguntas frecuentes
           </Link>
           {" · "}
           <Link
             href="/privacidad"
-            style={{ color: "var(--slate-500)", textDecoration: "none" }}
+            style={{ color: "var(--slate-500)", textDecoration: "underline", textDecorationColor: "var(--slate-300)", textUnderlineOffset: 3 }}
           >
             Privacidad y cookies
           </Link>
           {" · "}
           <Link
             href="/return-policy"
-            style={{ color: "var(--slate-500)", textDecoration: "none" }}
+            style={{ color: "var(--slate-500)", textDecoration: "underline", textDecorationColor: "var(--slate-300)", textUnderlineOffset: 3 }}
           >
             Devoluciones
           </Link>
