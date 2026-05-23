@@ -1854,7 +1854,9 @@ body {
   }
 }
 
-/* Secret group collapsible (admin/secrets) — rotación del chevron al abrir */
+/* Secret group collapsible (admin/secrets) — rotación del chevron al abrir.
+   `!important` porque las clases h-4/w-4 de Tailwind v4 pueden meter su
+   propio transform reset que gana en cascada. */
 details[open] > summary .secret-group-chevron {
-  transform: rotate(90deg);
+  transform: rotate(90deg) !important;
 }
