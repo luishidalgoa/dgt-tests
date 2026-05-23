@@ -197,6 +197,13 @@ export default async function RootLayout({
           </a>
           {" · "}
           <Link
+            href="/faq"
+            style={{ color: "var(--slate-500)", textDecoration: "none" }}
+          >
+            Preguntas frecuentes
+          </Link>
+          {" · "}
+          <Link
             href="/privacidad"
             style={{ color: "var(--slate-500)", textDecoration: "none" }}
           >

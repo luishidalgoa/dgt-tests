@@ -47,6 +47,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority:      0.6,
     },
     {
+      // FAQ con FAQPage schema → potencial alto en long-tail queries
+      // tipo "cuántos fallos puedo tener" / "cuánto cuesta el carné".
+      url:           `${APP_URL}/faq`,
+      lastModified:  today,
+      changeFrequency: "monthly",
+      priority:      0.7,
+    },
+    {
       url:           `${APP_URL}/sobre-mi`,
       lastModified:  today,
       changeFrequency: "monthly",
