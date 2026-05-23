@@ -41,24 +41,44 @@ const nextConfig: NextConfig = {
    */
   outputFileTracingExcludes: {
     "*": [
-      // Source maps no se usan en runtime (Sentry ya los tiene tras upload)
+      // ── Source maps / debug info (Sentry los tiene tras upload) ────────
       "**/*.map",
+      "**/*.d.ts",
+      "**/*.md",
+      "**/LICENSE",
+      "**/CHANGELOG*",
       // Cache de Next build, NO debe ir al lambda
       ".next/cache/**",
-      // Duplicación common: Sentry trae cjs + esm, con uno basta runtime
-      "node_modules/@sentry/profiling-node/**",
+      // ── Sentry: cosas BUILD-TIME (no necesarias runtime en lambda) ─────
+      "node_modules/@sentry/cli/**",                  // CLI para subir maps
+      "node_modules/@sentry/webpack-plugin/**",       // plugin del build
+      "node_modules/@sentry/bundler-plugin-core/**",  // shared del build
+      "node_modules/@sentry/profiling-node/**",       // profiling opcional
       "node_modules/@sentry-internal/browser-utils/**",
-      // PDF libs si por algún edge case el trace las arrastró
+      "node_modules/@vercel/otel/**",                 // monitor optional
+      // ── PDF libs (sólo client) ──────────────────────────────────────────
       "node_modules/pdfjs-dist/**",
       "node_modules/react-pdf/**",
       "node_modules/react-pageflip/**",
-      // Locale data de moment/date-fns (no usamos)
+      "node_modules/canvas/**",
+      // ── Public assets: imágenes ya se sirven desde CDN (no fs.readFile) ─
+      "public/images/**",
+      // ── Locale data de moment/date-fns (no usamos i18n) ────────────────
       "node_modules/moment/locale/**",
-      // Prisma engines de plataformas que NO son Vercel (Linux x64)
+      "node_modules/date-fns/locale/**",
+      // ── Prisma engines de plataformas que NO son Vercel Linux x64 ──────
       "node_modules/@prisma/engines/*windows*",
       "node_modules/@prisma/engines/*darwin*",
+      "node_modules/@prisma/engines/*debian*",
       "node_modules/.prisma/client/*windows*",
       "node_modules/.prisma/client/*darwin*",
+      "node_modules/.prisma/client/*debian*",
+      // ── Tests / fixtures / examples de cualquier dep ───────────────────
+      "node_modules/**/test/**",
+      "node_modules/**/tests/**",
+      "node_modules/**/__tests__/**",
+      "node_modules/**/examples/**",
+      "node_modules/**/example/**",
     ],
   },
 
