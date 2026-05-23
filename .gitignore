@@ -55,3 +55,8 @@ next-env.d.ts
 # Carpetas con los datos fuente del scraper (ya importados a la DB)
 /Preguntas tipo test
 /banco_*
+
+# Imágenes de preguntas DGT: ahora se sirven desde Cloudflare R2 (CDN).
+# Si vuelves a generarlas con scripts/copy-images.ts (poco probable),
+# las dejará aquí y git las ignora. Para subirlas a R2 usa images:setup-r2.
+/public/images/
