@@ -6,6 +6,7 @@ import { ChevronLeft, CheckCircle2, XCircle, Lightbulb, BookOpen, ArrowRight } f
 import { db } from "@/lib/db"
 import { imageUrl } from "@/lib/imageUrl"
 import { questionToSlug, questionIdFromSlug } from "@/lib/questionUrl"
+import { isSeoExposeProQuestions } from "@/lib/configCatalog"
 import { StructuredDataBreadcrumb } from "@/components/StructuredData"
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app"
@@ -31,10 +32,12 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const id = questionIdFromSlug(slug)
   if (!id) return {}
 
+  // Si el toggle SEO está ON, sirve cualquier tier; si está OFF, solo FREE.
+  const exposePro = await isSeoExposeProQuestions()
   const q = await db.question.findFirst({
     where: {
       id,
-      tier:       "FREE",
+      ...(exposePro ? {} : { tier: "FREE" }),
       // Excluimos solo las AI descartadas. null=humana, true=AI aprobada,
       // false=AI descartada (no se muestra).
       OR: [{ aiApproved: { not: false } }, { aiApproved: null }],
@@ -82,10 +85,14 @@ export default async function QuestionPage({ params }: PageProps) {
   const id = questionIdFromSlug(slug)
   if (!id) notFound()
 
+  // Mismo filtro que generateMetadata: toggle ON → cualquier tier, OFF → solo FREE.
+  // Importante: si llegan aquí con el toggle OFF a una URL PRO, queremos 404
+  // (notFound al no encontrar la pregunta) para que Google des-indexe.
+  const exposePro = await isSeoExposeProQuestions()
   const question = await db.question.findFirst({
     where: {
       id,
-      tier:       "FREE",
+      ...(exposePro ? {} : { tier: "FREE" }),
       OR: [{ aiApproved: { not: false } }, { aiApproved: null }],
     },
     include: {

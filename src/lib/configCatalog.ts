@@ -117,6 +117,14 @@ export const CONFIG_CATALOG: ConfigEntry[] = [
     description: "Si está OFF, /register devuelve 'Registros cerrados temporalmente'.",
     category:    "features",
   },
+  {
+    key:         "SEO_EXPOSE_PRO_QUESTIONS",
+    type:        "boolean",
+    default:     false,
+    label:       "Exponer preguntas PRO en URLs públicas (SEO)",
+    description: "Si está ON, las páginas /preguntas/[cat]/[slug] sirven cualquier pregunta del banco (FREE + PRO) y el sitemap.xml las incluye todas — Google las indexa y rankean para queries long-tail. El ÍNDICE /preguntas y la sección 'otras preguntas relacionadas' siguen mostrando solo las FREE, así el usuario casual no descubre las PRO navegando por el app. Si está OFF, solo se publican las ~210 FREE (las de los 7 primeros tests de Permiso B) y las PRO devuelven 404. Default OFF — flipea cuando estés listo para regalar visibilidad SEO de las ~2.500 PRO.",
+    category:    "features",
+  },
 
   // ── Messages ───────────────────────────────────────────────────
   {
@@ -232,6 +240,21 @@ export async function getFreeTestLimit(): Promise<number> {
 
 export async function isMaintenanceMode(): Promise<boolean> {
   return getConfig("MAINTENANCE_MODE", false)
+}
+
+/**
+ * ¿Están las preguntas PRO accesibles públicamente por URL individual?
+ *
+ * - true  → /preguntas/[cat]/[slug] sirve cualquier pregunta (FREE+PRO)
+ *           y el sitemap.xml las incluye todas (~2.500 URLs).
+ * - false → solo las ~210 FREE de permiso-b se sirven públicamente;
+ *           el resto devuelve 404 y no aparece en sitemap.
+ *
+ * El índice /preguntas y las "preguntas relacionadas" SIEMPRE muestran
+ * solo FREE — el flag solo controla acceso directo por URL y sitemap.
+ */
+export async function isSeoExposeProQuestions(): Promise<boolean> {
+  return getConfig("SEO_EXPOSE_PRO_QUESTIONS", false)
 }
 
 export type FeatureName = "competir" | "ai" | "registration"

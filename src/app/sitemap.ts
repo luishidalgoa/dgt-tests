@@ -3,6 +3,7 @@ import { db } from "@/lib/db"
 import { FREE_CATEGORY_SLUG, FREE_TEST_LIMIT } from "@/lib/permissions"
 import { RECURSOS } from "@/content/recursos/_registry"
 import { questionToSlug } from "@/lib/questionUrl"
+import { isSeoExposeProQuestions } from "@/lib/configCatalog"
 
 /**
  * /sitemap.xml — Next.js lo genera de este export al build.
@@ -146,11 +147,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority:        0.7,
   }))
 
-  // ── Preguntas individuales (~210 URLs) ────────────────────────────
-  // Solo las FREE — son las accesibles para guests sin login y por
-  // tanto las que Google puede indexar. Cada una es candidata a
-  // rankear por una query textual long-tail tipo "puede un coche
-  // llevar solamente el espejo exterior izquierdo".
+  // ── Preguntas individuales ────────────────────────────────────────
+  // El número de URLs depende del toggle SEO_EXPOSE_PRO_QUESTIONS:
+  //   - OFF (default): solo las ~210 FREE de permiso-b.
+  //   - ON: TODAS las preguntas (FREE + PRO de cualquier categoría),
+  //         ~2.500 URLs. Cada una candidata a rankear por su query
+  //         textual long-tail.
   //
   // Priority 0.5: importantes pero no más que las pilares y home.
   // changeFrequency yearly: las preguntas DGT no se editan casi nunca.
@@ -159,22 +161,44 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // las preguntas (no rompemos el sitemap entero por un timeout).
   let questionRoutes: MetadataRoute.Sitemap = []
   try {
+    const exposePro = await isSeoExposeProQuestions()
     const questions = await db.question.findMany({
-      where: {
-        tier: "FREE",
+      where: exposePro
+        ? {
+            // ON: cualquier pregunta visible (cualquier tier, cualquier
+            // categoría), aprobada por review IA (o humana original).
+            OR: [{ aiApproved: { not: false } }, { aiApproved: null }],
+          }
+        : {
+            // OFF: solo FREE de permiso-b.
+            tier: "FREE",
+            testQuestions: {
+              some: { test: { category: { slug: FREE_CATEGORY_SLUG } } },
+            },
+            OR: [{ aiApproved: { not: false } }, { aiApproved: null }],
+          },
+      select: {
+        id:        true,
+        enunciado: true,
+        // Necesitamos la categoría real (vía testQuestions) cuando el
+        // toggle está ON para construir URLs como /preguntas/adas/X
+        // o /preguntas/repaso-final/X — no todas son permiso-b.
         testQuestions: {
-          some: { test: { category: { slug: FREE_CATEGORY_SLUG } } },
+          take: 1,
+          orderBy: { test: { testNumber: "asc" } },
+          select: { test: { select: { category: { select: { slug: true } } } } },
         },
-        OR: [{ aiApproved: { not: false } }, { aiApproved: null }],
       },
-      select: { id: true, enunciado: true },
     })
-    questionRoutes = questions.map((q) => ({
-      url:             `${APP_URL}/preguntas/${FREE_CATEGORY_SLUG}/${questionToSlug(q)}`,
-      lastModified:    today,
-      changeFrequency: "yearly" as const,
-      priority:        0.5,
-    }))
+    questionRoutes = questions.flatMap((q) => {
+      const catSlug = q.testQuestions[0]?.test.category.slug ?? FREE_CATEGORY_SLUG
+      return [{
+        url:             `${APP_URL}/preguntas/${catSlug}/${questionToSlug(q)}`,
+        lastModified:    today,
+        changeFrequency: "yearly" as const,
+        priority:        0.5,
+      }]
+    })
   } catch (err) {
     console.warn("[sitemap] no pude cargar preguntas individuales:", err)
   }
