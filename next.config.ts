@@ -64,8 +64,8 @@ export default async (): Promise<NextConfig> => {
     // Desactiva el logger interno de Sentry (los console.log del SDK
     // ensucian la consola del navegador en prod).
     disableLogger: true,
-    // Auto-instrumenta @vercel/otel si está. No nos afecta hoy pero
-    // es la recomendación oficial.
-    automaticVercelMonitors: true,
+    // Auto-instrumenta @vercel/otel si está. Movido a webpack.* en el
+    // SDK reciente (el flag top-level emite DEPRECATION WARNING al boot).
+    webpack: { automaticVercelMonitors: true },
   })
 }
