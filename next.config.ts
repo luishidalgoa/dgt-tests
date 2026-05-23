@@ -9,6 +9,60 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ["192.168.0.19"],
 
   /**
+   * serverExternalPackages: deps pesadas que NO queremos bundleadas en cada
+   * lambda — Next las trata como `require()` runtime, las carga desde
+   * node_modules en Vercel. Reduce drásticamente el tamaño del lambda
+   * unzipped (límite Vercel = 250MB).
+   *
+   * Por qué cada una:
+   *  - @prisma/client      ~60MB con engine binary, cada API route lo usa
+   *  - pdfjs-dist          ~30MB, sólo client (FlipbookViewer) pero el trace
+   *                        lo arrastraba a algunos lambdas por imports
+   *                        transitivos vía types
+   *  - react-pdf           ~10MB, mismo motivo que pdfjs-dist
+   *  - react-pageflip      ~5MB, idem
+   *  - sharp               nativo grande si lo añadimos en futuro
+   *  - nodemailer          ~5MB, solo se usa en mailer.ts (no en cada lambda)
+   *
+   * @sentry/nextjs NO lo metemos aquí — su SDK necesita ser bundleado para
+   * que su instrumentación auto-mágica funcione (recomendación oficial).
+   */
+  serverExternalPackages: [
+    "@prisma/client",
+    "pdfjs-dist",
+    "react-pdf",
+    "react-pageflip",
+    "nodemailer",
+  ],
+
+  /**
+   * outputFileTracingExcludes: archivos que el trace de Next "arrastra" al
+   * lambda sin ser necesarios runtime. Cada glob ahorra unos MB.
+   */
+  outputFileTracingExcludes: {
+    "*": [
+      // Source maps no se usan en runtime (Sentry ya los tiene tras upload)
+      "**/*.map",
+      // Cache de Next build, NO debe ir al lambda
+      ".next/cache/**",
+      // Duplicación common: Sentry trae cjs + esm, con uno basta runtime
+      "node_modules/@sentry/profiling-node/**",
+      "node_modules/@sentry-internal/browser-utils/**",
+      // PDF libs si por algún edge case el trace las arrastró
+      "node_modules/pdfjs-dist/**",
+      "node_modules/react-pdf/**",
+      "node_modules/react-pageflip/**",
+      // Locale data de moment/date-fns (no usamos)
+      "node_modules/moment/locale/**",
+      // Prisma engines de plataformas que NO son Vercel (Linux x64)
+      "node_modules/@prisma/engines/*windows*",
+      "node_modules/@prisma/engines/*darwin*",
+      "node_modules/.prisma/client/*windows*",
+      "node_modules/.prisma/client/*darwin*",
+    ],
+  },
+
+  /**
    * Redirects 301 permanentes.
    *
    * /sobre → /sobre-mi  (renombrado el 2026-05-22; mantenemos el redirect
