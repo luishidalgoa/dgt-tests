@@ -2,12 +2,13 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import Image from "next/image"
 import { notFound, redirect } from "next/navigation"
-import { ChevronLeft, CheckCircle2, XCircle, Lightbulb, BookOpen, ArrowRight } from "lucide-react"
+import { ChevronLeft, BookOpen, ArrowRight } from "lucide-react"
 import { db } from "@/lib/db"
 import { imageUrl } from "@/lib/imageUrl"
 import { questionToSlug, questionIdFromSlug } from "@/lib/questionUrl"
 import { isSeoExposeProQuestions } from "@/lib/configCatalog"
 import { StructuredDataBreadcrumb } from "@/components/StructuredData"
+import { InteractiveQuestion } from "@/components/InteractiveQuestion"
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app"
 
@@ -264,99 +265,21 @@ export default async function QuestionPage({ params }: PageProps) {
         </div>
       )}
 
-      {/* Opciones — todas visibles, la correcta marcada */}
-      <section style={{ marginBottom: 22 }}>
-        <h2
-          style={{
-            fontSize:      11,
-            fontWeight:    800,
-            color:         "var(--slate-500)",
-            textTransform: "uppercase",
-            letterSpacing: "0.08em",
-            margin:        "0 0 10px",
-          }}
-        >
-          Opciones de respuesta
-        </h2>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {question.options.map((opt) => {
-            const isCorrect = opt.isCorrect
-            return (
-              <div
-                key={opt.id}
-                style={{
-                  display:    "flex",
-                  alignItems: "flex-start",
-                  gap:        12,
-                  padding:    "12px 14px",
-                  borderRadius: 12,
-                  border:     isCorrect
-                    ? "2px solid var(--green)"
-                    : "1.5px solid var(--slate-200)",
-                  background: isCorrect ? "rgba(34, 197, 94, 0.06)" : "#fff",
-                }}
-              >
-                <span
-                  style={{
-                    flexShrink:   0,
-                    width:        30,
-                    height:       30,
-                    borderRadius: "50%",
-                    background:   isCorrect ? "var(--green)" : "var(--slate-100)",
-                    color:        isCorrect ? "#fff" : "var(--slate-600)",
-                    fontWeight:   800,
-                    fontSize:     13,
-                    display:      "inline-flex",
-                    alignItems:   "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  {opt.letra}
-                </span>
-                <span style={{ flex: 1, fontSize: 14.5, lineHeight: 1.55 }}>
-                  {opt.texto}
-                </span>
-                {isCorrect ? (
-                  <CheckCircle2 className="h-5 w-5 flex-shrink-0" style={{ color: "var(--green)", marginTop: 2 }} />
-                ) : (
-                  <XCircle className="h-5 w-5 flex-shrink-0" style={{ color: "var(--slate-300)", marginTop: 2 }} />
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </section>
-
-      {/* Explicación */}
-      <section
-        className="card-soft"
-        style={{
-          padding:    16,
-          marginBottom: 22,
-          background: "rgba(245, 158, 11, 0.06)",
-          borderColor: "rgba(245, 158, 11, 0.25)",
-        }}
-      >
-        <div
-          style={{
-            display:    "inline-flex",
-            alignItems: "center",
-            gap:        8,
-            fontSize:   12.5,
-            fontWeight: 800,
-            color:      "var(--amber-d, #92400e)",
-            textTransform: "uppercase",
-            letterSpacing: "0.06em",
-            marginBottom: 8,
-          }}
-        >
-          <Lightbulb className="h-4 w-4" />
-          Explicación
-        </div>
-        <p style={{ margin: 0, fontSize: 14.5, lineHeight: 1.65, color: "var(--slate-700)" }}>
-          {question.explicacion}
-        </p>
-      </section>
+      {/* Opciones + explicación: bloque interactivo cliente.
+          El usuario tiene que clicar una opción para revelar correctos
+          + explicación. Antes esto salía "a fuego" SSR y no había
+          incentivo para responder. SEO sigue cubierto por el JSON-LD
+          Question schema más abajo (Google ve la respuesta vía schema
+          sin necesidad de interactuar). */}
+      <InteractiveQuestion
+        options={question.options.map((o) => ({
+          id:        o.id,
+          letra:     o.letra,
+          texto:     o.texto,
+          isCorrect: o.isCorrect,
+        }))}
+        explicacion={question.explicacion}
+      />
 
       {/* CTA al test completo donde aparece esta pregunta */}
       {testInfo && (
