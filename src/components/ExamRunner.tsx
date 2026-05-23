@@ -354,7 +354,12 @@ export function ExamRunner({
     <div className="space-y-6">
       {/* Header con progreso y timer */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between text-sm text-slate-600 gap-4">
+        {/*
+          Stack vertical en mobile (nombre arriba, progreso abajo) para
+          evitar que el otro flex-shrink-0 colapse el nombre del examen
+          a 3px. En sm+ vuelve a fila como antes (desktop intacto).
+        */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-4 text-sm text-slate-600">
           <span className="truncate">
             {test.category.name}
             {test.testNumber > 0 && ` · Test ${test.testNumber}`}
@@ -677,9 +682,12 @@ export function ExamRunner({
           variant="outline"
           onClick={() => goTo(current - 1)}
           disabled={current === 0 || isPending}
+          aria-label="Anterior"
         >
           <ArrowLeft className="h-4 w-4" />
-          Anterior
+          {/* En mobile sólo el icono — el texto se sale del flex y desborda
+              la página entera. En sm+ vuelve a verse "Anterior". */}
+          <span className="hidden sm:inline">Anterior</span>
           <kbd className="hidden md:inline-block text-[10px] text-slate-400 ml-1">←</kbd>
         </Button>
 
@@ -699,7 +707,9 @@ export function ExamRunner({
                   Cuadrícula con todas las preguntas del test para saltar entre ellas.
                 </DialogDescription>
               </DialogHeader>
-              <div className="grid grid-cols-6 gap-2 mt-2">
+              {/* 5 columnas en pantallas <380px (30 preguntas en 6 filas);
+                  6 columnas en sm+ (igual que antes en desktop). */}
+              <div className="grid grid-cols-5 sm:grid-cols-6 gap-1.5 sm:gap-2 mt-2">
                 {questions.map((qu, i) => {
                   const isAnswered = (answers[qu.id] ?? null) !== null
                   const isCurrent = i === current
@@ -762,9 +772,11 @@ export function ExamRunner({
           variant="outline"
           onClick={() => goTo(current + 1)}
           disabled={current === total - 1 || isPending}
+          aria-label="Siguiente"
         >
           <kbd className="hidden md:inline-block text-[10px] text-slate-400 mr-1">→</kbd>
-          Siguiente
+          {/* En mobile sólo el icono — ídem que el "Anterior". */}
+          <span className="hidden sm:inline">Siguiente</span>
           <ArrowRight className="h-4 w-4" />
         </Button>
       </div>
