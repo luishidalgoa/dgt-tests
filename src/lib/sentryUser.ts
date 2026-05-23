@@ -88,6 +88,25 @@ export function captureAppException(
     category: "auth" | "ai" | "stripe" | "email" | "party" | "exam"
     tags?:    Record<string, string>
     extra?:   Record<string, unknown>
+    /**
+     * Fingerprint para agrupar eventos en una sola issue en el dashboard
+     * de Sentry. Si dos requests disparan capture con MISMO fingerprint,
+     * Sentry los muestra como una issue con "N events".
+     *
+     * Útil con shouldNotifyOnce() para errores sistémicos: si el throttle
+     * deja escapar 2 events por concurrencia entre lambdas, Sentry los
+     * agrupa visualmente igual.
+     *
+     * Ejemplo: ["ai-quota-exceeded", "gemini"] → todos los rate_limit de
+     * gemini son una sola issue, no una por cada user que lo gatilla.
+     */
+    fingerprint?: string[]
+    /**
+     * Severidad del evento en Sentry. Default "error".
+     * Usa "warning" para condiciones temporales (rate limit pasajero,
+     * provider down). Mantén "error" para fallos de configuración o bugs.
+     */
+    level?: "warning" | "error" | "info"
   },
 ): string {
   return Sentry.captureException(error, {
@@ -95,6 +114,8 @@ export function captureAppException(
       "app.category": opts.category,
       ...opts.tags,
     },
-    extra: opts.extra,
+    extra:       opts.extra,
+    fingerprint: opts.fingerprint,
+    level:       opts.level,
   })
 }

@@ -6,6 +6,7 @@ import { consumeTokens, getQuotaStatus } from "@/lib/aiQuota"
 import { getActiveProvider } from "@/lib/ai"
 import { AIProviderError } from "@/lib/aiProviders/types"
 import { captureAppException } from "@/lib/sentryUser"
+import { shouldNotifyOnce } from "@/lib/sentryThrottle"
 import { getAIProvider } from "@/lib/configCatalog"
 import {
   analyzeStats,
@@ -153,22 +154,33 @@ export async function POST() {
     await refund()
     console.error("[ai/stats-analysis] error del provider:", err)
     // Sentry: tragamos a 5xx amigable → captureRequestError no lo verá.
-    // Capturamos con tags para correlacionar fallos por provider/modelo.
+    // Throttle de errores sistémicos (rate_limit, misconfigured,
+    // server_error) — 1 evento por 30min por provider+kind. Ver el catch
+    // equivalente en /api/ai/explain para detalle del razonamiento.
     const provider = await getAIProvider().catch(() => "unknown")
-    captureAppException(err, {
-      category: "ai",
-      tags: {
-        provider,
-        kind:        err instanceof AIProviderError ? err.kind : "unknown",
-        operation:   "stats-analysis",
-        refunded:    "true",
-      },
-      extra: {
-        totalAnswers,
-        totalAttempts,
-        correctAnswers,
-      },
-    })
+    const kind     = err instanceof AIProviderError ? err.kind : "unknown"
+    const isSystemic    = kind === "rate_limit" || kind === "misconfigured" || kind === "server_error"
+    const throttleKey   = `ai:${provider}:${kind}`
+    const shouldCapture = !isSystemic || shouldNotifyOnce(throttleKey)
+    if (shouldCapture) {
+      captureAppException(err, {
+        category: "ai",
+        tags: {
+          provider,
+          kind,
+          operation: "stats-analysis",
+          refunded:  "true",
+        },
+        extra: {
+          totalAnswers,
+          totalAttempts,
+          correctAnswers,
+          throttled: isSystemic ? "first-in-30min" : "no",
+        },
+        level:       isSystemic ? "warning" : "error",
+        fingerprint: isSystemic ? ["ai-systemic", provider, kind] : undefined,
+      })
+    }
     if (err instanceof AIProviderError) {
       switch (err.kind) {
         case "rate_limit":

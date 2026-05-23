@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth"
 import { explainQuestion, AIProviderError, type AIExplanationResult } from "@/lib/ai"
 import { consumeToken, getQuotaStatus } from "@/lib/aiQuota"
 import { captureAppException } from "@/lib/sentryUser"
+import { shouldNotifyOnce } from "@/lib/sentryThrottle"
 import { getAIProvider } from "@/lib/configCatalog"
 
 const postSchema = z.object({
@@ -223,19 +224,39 @@ export async function POST(req: Request) {
     // con tags útiles (provider, kind, questionId). El user ya está
     // identificado en el scope por getCurrentUser arriba.
     const provider = await getAIProvider().catch(() => "unknown")
-    captureAppException(err, {
-      category: "ai",
-      tags: {
-        provider,
-        kind:       err instanceof AIProviderError ? err.kind : "unknown",
-        withImage:  String(withImage),
-        chargedNow: String(chargedNow),
-      },
-      extra: {
-        questionId,
-        attemptId,
-      },
-    })
+    const kind     = err instanceof AIProviderError ? err.kind : "unknown"
+    // Errores SISTÉMICOS (mismo fallo para todos los users): throttle
+    // a 1 evento por 30min por provider+kind. Si Gemini se queda sin
+    // cuota y 100 users dan a "Analizar" en la siguiente hora, queremos
+    // UN aviso, no 100.
+    // Errores PER-PREGUNTA (bad_request: la IA no pudo con ESTA pregunta
+    // concreta) sí los queremos cada vez — son señal específica.
+    const isSystemic    = kind === "rate_limit" || kind === "misconfigured" || kind === "server_error"
+    const throttleKey   = `ai:${provider}:${kind}`
+    const shouldCapture = !isSystemic || shouldNotifyOnce(throttleKey)
+    if (shouldCapture) {
+      captureAppException(err, {
+        category: "ai",
+        tags: {
+          provider,
+          kind,
+          withImage:  String(withImage),
+          chargedNow: String(chargedNow),
+        },
+        extra: {
+          questionId,
+          attemptId,
+          throttled: isSystemic ? "first-in-30min" : "no",
+        },
+        // Sistémicos: warning (es condición temporal del provider).
+        // Bug nuestro / pregunta rota: error.
+        level: isSystemic ? "warning" : "error",
+        // Fingerprint para que Sentry agrupe TODOS los eventos sistémicos
+        // de mismo provider+kind como UNA issue, aunque el throttle deje
+        // escapar varios por concurrencia entre lambdas.
+        fingerprint: isSystemic ? ["ai-systemic", provider, kind] : undefined,
+      })
+    }
 
     if (err instanceof AIProviderError) {
       switch (err.kind) {
