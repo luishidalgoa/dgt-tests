@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next"
 import { db } from "@/lib/db"
 import { FREE_CATEGORY_SLUG, FREE_TEST_LIMIT } from "@/lib/permissions"
+import { RECURSOS } from "@/content/recursos/_registry"
 
 /**
  * /sitemap.xml — Next.js lo genera de este export al build.
@@ -52,6 +53,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       url:           `${APP_URL}/faq`,
       lastModified:  today,
       changeFrequency: "monthly",
+      priority:      0.7,
+    },
+    {
+      // Índice de guías largas — bisagra hacia los artículos pilares.
+      url:           `${APP_URL}/recursos`,
+      lastModified:  today,
+      changeFrequency: "weekly",
       priority:      0.7,
     },
     {
@@ -118,5 +126,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     console.warn("[sitemap] no pude cargar categorías/tests, devolviendo solo estáticas:", err)
   }
 
-  return [...staticRoutes, ...categoryRoutes, ...testRoutes]
+  // ── Artículos de /recursos ─────────────────────────────────────────
+  // Cada artículo tiene priority alta (0.7) porque son content pages
+  // con potencial real de rankear long-tail. lastModified usa la fecha
+  // de la última edición del artículo concreto.
+  const recursoRoutes: MetadataRoute.Sitemap = RECURSOS.map((r) => ({
+    url:             `${APP_URL}/recursos/${r.meta.slug}`,
+    lastModified:    new Date(r.meta.updatedAt),
+    changeFrequency: "monthly" as const,
+    priority:        0.7,
+  }))
+
+  return [...staticRoutes, ...categoryRoutes, ...testRoutes, ...recursoRoutes]
 }
