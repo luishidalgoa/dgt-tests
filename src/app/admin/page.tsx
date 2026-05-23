@@ -4,7 +4,7 @@ import { CONFIG_CATALOG, type ConfigEntry, type ConfigCategory } from "@/lib/con
 import { db } from "@/lib/db"
 import { QUESTION_APPROVED_AI_WHERE, QUESTION_PENDING_REVIEW_WHERE } from "@/lib/questions"
 import { ConfigForm } from "./ConfigForm"
-import { Sliders, ToggleLeft, MessageSquareText, Sparkles, KeyRound, ListChecks, ArrowRight } from "lucide-react"
+import { Sliders, ToggleLeft, MessageSquareText, Sparkles, ListChecks, ArrowRight } from "lucide-react"
 
 export const dynamic = "force-dynamic"
 
@@ -67,12 +67,9 @@ export default async function AdminPage() {
           Paneles
         </h2>
         <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
-          <AdminLinkCard
-            href="/admin/secrets"
-            icon={<KeyRound className="h-5 w-5" />}
-            title="API keys y secretos"
-            description="Stripe, Gemini, Groq, Gmail. Cifrados en BBDD con AES-256-GCM."
-          />
+          {/* El acceso a /admin/secrets vive en el botón "API keys" del
+              nav superior (layout.tsx) — aquí lo eliminamos para no
+              duplicar el enlace. */}
           <AdminLinkCard
             href="/admin/review-questions"
             icon={<Sparkles className="h-5 w-5" />}
