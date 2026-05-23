@@ -25,7 +25,10 @@ export function PartyRunner({ code }: { code: string }) {
   const [finished, setFinished]   = useState(false)
   const [state, setState]         = useState<PartyState | null>(null)
   const [feedback, setFeedback]   = useState<"correct" | "wrong" | null>(null)
-  const questionStartRef = useRef<number>(Date.now())
+  // Inicializado a 0 (placeholder) — react-hooks/purity prohíbe llamar
+  // Date.now() en el initializer. El valor real se setea en el useEffect
+  // que carga las preguntas, antes de que submitAnswer pueda leerlo.
+  const questionStartRef = useRef<number>(0)
 
   // Cargar preguntas
   useEffect(() => {
@@ -133,7 +136,10 @@ export function PartyRunner({ code }: { code: string }) {
   const progress = ((current + 1) / questions.length) * 100
 
   return (
-    <div className="grid gap-4" style={{ gridTemplateColumns: "1fr 280px" }}>
+    // 1-col en mobile (pregunta arriba, leaderboard debajo); 2-col en lg+
+    // con el aside fijo de 280px. Antes era inline 1fr 280px sin breakpoint
+    // y desbordaba en mobile.
+    <div className="grid gap-4 grid-cols-1 lg:grid-cols-[1fr_280px]">
       <div>
         {/* Progreso */}
         <div className="card-soft" style={{ padding: 14, marginBottom: 14 }}>
@@ -258,7 +264,8 @@ export function PartyRunner({ code }: { code: string }) {
 function LiveLeaderboard({ state }: { state: PartyState }) {
   const sorted = [...state.players].sort((a, b) => b.score - a.score)
   return (
-    <aside className="card-soft" style={{ padding: 16, height: "fit-content", position: "sticky", top: 80 }}>
+    // sticky solo en lg+ — en mobile va en flow normal debajo de la pregunta
+    <aside className="card-soft lg:sticky lg:top-20" style={{ padding: 16, height: "fit-content" }}>
       <h3 style={{ fontSize: 13, fontWeight: 800, color: "var(--slate-500)", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: 0 }}>
         Marcador en vivo
       </h3>
