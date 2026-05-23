@@ -6,6 +6,7 @@ import { detectEnvFiles, getEnvFileForVar } from "@/lib/envFiles"
 import { SecretForm } from "./SecretForm"
 import { TestAIConnectionButton } from "@/components/TestAIConnectionButton"
 import { TestSentryConnectionButton } from "@/components/TestSentryConnectionButton"
+import { TestR2ConnectionButton } from "@/components/TestR2ConnectionButton"
 import { KeyRound, ExternalLink, Cloud, Laptop, ChevronRight } from "lucide-react"
 
 export const dynamic = "force-dynamic"
@@ -183,6 +184,14 @@ export default async function AdminSecretsPage() {
                   importan al build time, no en runtime. */}
               {entry.key === "NEXT_PUBLIC_SENTRY_DSN" && (
                 <TestSentryConnectionButton label="Sentry" />
+              )}
+
+              {/* R2 test: solo en la card del SECRET_ACCESS_KEY, la cred
+                  "última" del set. Una sola llamada verifica que las 5
+                  vars de R2 son consistentes entre sí (endpoint + bucket
+                  + access + secret + URL pública). */}
+              {entry.key === "R2_SECRET_ACCESS_KEY" && (
+                <TestR2ConnectionButton label="R2" />
               )}
 
               {entry.providerUrl && (

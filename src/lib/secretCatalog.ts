@@ -131,6 +131,65 @@ export const SECRET_CATALOG: SecretEntry[] = [
     group:        "Sentry",
     scope:        "build",
   },
+
+  // ── Cloudflare R2 · CDN de imágenes + storage server-side ───────────
+  // 6 entries en un grupo único. Las 2.646 PNG de preguntas DGT viven
+  // en este bucket (público en LECTURA via la URL CDN). Las creds
+  // access_key + secret se usan para ESCRIBIR (upload de imágenes
+  // generadas por IA en el futuro, scripts de re-upload, etc.).
+  //
+  // El botón "Probar conexión" se renderiza en la card de R2_SECRET_ACCESS_KEY
+  // (página /admin/secrets). Hace HeadBucket + ListObjects para verificar
+  // que las 5 vars son consistentes entre sí.
+  {
+    key:          "NEXT_PUBLIC_IMAGE_CDN_URL",
+    label:        "R2 · URL pública del CDN",
+    description:  "URL base del bucket público para servir las PNG de preguntas. NO es un secreto — sale en el HTML del cliente. El runtime client+server lo lee con imageUrl(). En producción ponlo TAMBIÉN como NEXT_PUBLIC_IMAGE_CDN_URL en Vercel env vars para que se bakedee al build del cliente.",
+    formatHint:   "https://pub-xxxxxxxx.r2.dev",
+    providerUrl:  "https://dash.cloudflare.com/?to=/:account/r2",
+    group:        "Cloudflare R2",
+    scope:        "client-build",
+  },
+  {
+    key:          "R2_ACCOUNT_ID",
+    label:        "R2 · Account ID",
+    description:  "ID de la cuenta de Cloudflare. Aparece en la URL del dashboard y se usa para construir el endpoint S3.",
+    formatHint:   "32 caracteres hex",
+    providerUrl:  "https://dash.cloudflare.com",
+    group:        "Cloudflare R2",
+  },
+  {
+    key:          "R2_BUCKET_NAME",
+    label:        "R2 · Bucket name",
+    description:  "Nombre del bucket donde viven las imágenes.",
+    formatHint:   "dgt-tests-images",
+    providerUrl:  "https://dash.cloudflare.com/?to=/:account/r2",
+    group:        "Cloudflare R2",
+  },
+  {
+    key:          "R2_ENDPOINT",
+    label:        "R2 · S3 endpoint",
+    description:  "URL del endpoint compatible con S3 que apunta a tu cuenta de R2.",
+    formatHint:   "https://<account_id>.r2.cloudflarestorage.com",
+    providerUrl:  "https://dash.cloudflare.com/?to=/:account/r2",
+    group:        "Cloudflare R2",
+  },
+  {
+    key:          "R2_ACCESS_KEY_ID",
+    label:        "R2 · Access Key ID",
+    description:  "Identificador de las credenciales R2. NO es secreto técnicamente, pero lo agrupamos aquí. Lo emite el dashboard de R2 → Manage API Tokens al crear un token 'Object Read & Write' con scope a tu bucket.",
+    formatHint:   "32 caracteres hex",
+    providerUrl:  "https://dash.cloudflare.com/?to=/:account/r2/api-tokens",
+    group:        "Cloudflare R2",
+  },
+  {
+    key:          "R2_SECRET_ACCESS_KEY",
+    label:        "R2 · Secret Access Key",
+    description:  "Clave secreta para firmar las peticiones S3 contra R2. SECRETO. Si la pierdes hay que generar un nuevo token desde el dashboard de R2 (el secret solo se muestra una vez al crear el token).",
+    formatHint:   "64 caracteres hex",
+    providerUrl:  "https://dash.cloudflare.com/?to=/:account/r2/api-tokens",
+    group:        "Cloudflare R2",
+  },
 ]
 
 /**
