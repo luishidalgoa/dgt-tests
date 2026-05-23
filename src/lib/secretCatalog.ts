@@ -54,6 +54,7 @@ export const SECRET_CATALOG: SecretEntry[] = [
     description:  "Clave secreta para crear sesiones de Checkout, gestionar suscripciones, etc.",
     formatHint:   "sk_live_... (LIVE) o sk_test_... / rk_live_... (Restricted)",
     providerUrl:  "https://dashboard.stripe.com/apikeys",
+    group:        "Stripe",
   },
   {
     key:          "STRIPE_WEBHOOK_SECRET",
@@ -61,6 +62,7 @@ export const SECRET_CATALOG: SecretEntry[] = [
     description:  "Para validar la firma de los webhooks que Stripe envía a /api/webhooks/stripe.",
     formatHint:   "whsec_...",
     providerUrl:  "https://dashboard.stripe.com/webhooks",
+    group:        "Stripe",
   },
   {
     key:          "GEMINI_API_KEY",
@@ -69,6 +71,7 @@ export const SECRET_CATALOG: SecretEntry[] = [
     formatHint:   "AIza...",
     providerUrl:  "https://aistudio.google.com/apikey",
     aiProvider:   "gemini",
+    group:        "IA",
   },
   {
     key:          "GROQ_API_KEY",
@@ -77,6 +80,7 @@ export const SECRET_CATALOG: SecretEntry[] = [
     formatHint:   "gsk_...",
     providerUrl:  "https://console.groq.com/keys",
     aiProvider:   "groq",
+    group:        "IA",
   },
   {
     key:          "GMAIL_APP_PASSWORD",
