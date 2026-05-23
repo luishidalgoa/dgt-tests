@@ -38,6 +38,11 @@ interface Options {
  * precedencia (el primero gana).
  */
 export function detectEnvFiles(opts: Options = {}): string[] {
+  // En Vercel no hay .env files físicos (las vars vienen del panel del
+  // proyecto). Early-return para que Turbopack no tracee `resolve(cwd,
+  // <dynamic>)` en cada lambda. Esa trace era inofensiva pero ensuciaba
+  // el bundle del lambda con el cwd entero.
+  if (process.env.VERCEL === "1") return []
   const cwd = opts.cwd ?? process.cwd()
   return ENV_FILE_PRECEDENCE.filter((name) => existsSync(resolve(cwd, name)))
 }
@@ -53,6 +58,8 @@ export function detectEnvFiles(opts: Options = {}): string[] {
  * interpreta interpolaciones, no resuelve `$VAR`.
  */
 export function getEnvFileForVar(varName: string, opts: Options = {}): string | null {
+  // En Vercel no hay .env files físicos — ver detectEnvFiles arriba.
+  if (process.env.VERCEL === "1") return null
   const cwd = opts.cwd ?? process.cwd()
   for (const name of ENV_FILE_PRECEDENCE) {
     const path = resolve(cwd, name)

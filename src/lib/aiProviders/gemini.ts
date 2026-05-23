@@ -9,7 +9,6 @@
  * traduzca a un 503 al front, donde sonner muestra un toast amigable.
  */
 
-import fs from "node:fs/promises"
 import path from "node:path"
 import {
   AIProviderError,
@@ -67,10 +66,26 @@ function buildPrompt(p: AIQuestionPayload): string {
   ].filter(Boolean).join("\n")
 }
 
+/**
+ * Lee la imagen vía HTTP fetch al CDN público de Vercel (o al dev server
+ * en local), no del filesystem. Por qué:
+ *  - El approach anterior con `path.resolve(process.cwd(), "public",
+ *    "images", imageFilename)` hacía que Turbopack traceara las 10.584
+ *    imágenes del catálogo como "potencialmente requeridas runtime" y
+ *    las bundleara en CADA lambda que importa gemini.ts → ~200MB de
+ *    bloat por lambda → superaba el límite Vercel de 250MB.
+ *  - Con fetch al CDN, el lambda no necesita las imágenes localmente.
+ *    Vercel sirve `/images/X.jpg` desde su CDN edge (rápido) y el
+ *    lambda solo hace una HTTP request.
+ *  - Trade-off: +50ms de latencia HTTP. Aceptable para un endpoint
+ *    que ya tarda 2-3s en respuesta de Gemini.
+ */
 async function readImageBase64(imageFilename: string): Promise<{ data: string; mime: string } | null> {
+  const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app"
   try {
-    const full = path.resolve(process.cwd(), "public", "images", imageFilename)
-    const buf = await fs.readFile(full)
+    const res = await fetch(`${APP_URL}/images/${imageFilename}`)
+    if (!res.ok) return null
+    const buf = Buffer.from(await res.arrayBuffer())
     const ext = path.extname(imageFilename).toLowerCase()
     const mime =
       ext === ".png"  ? "image/png"  :
