@@ -62,11 +62,20 @@ body {
   inset: 0;
   z-index: 60;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 48px 20px;
+  /* Padding consistente para que el card SIEMPRE tenga hueco visible
+     alrededor (top/right/bottom/left). En mobile reducido para no apretar. */
+  padding: 24px 16px;
+  gap: 18px;
   background: linear-gradient(135deg, #f97316 0%, #dc2626 100%);
   overflow-y: auto;
+}
+@media (min-width: 640px) {
+  .auth-page {
+    padding: 48px 20px;
+  }
 }
 .auth-page::before {
   content: "";
@@ -371,16 +380,27 @@ body {
 }
 
 .auth-footer-stripe {
-  position: fixed;
-  bottom: 16px;
-  left: 0;
-  right: 0;
+  /* En mobile el footer vive en flujo normal del auth-page (flex-col) —
+     queda debajo del card con `gap` separando. Esto evita que se solape
+     con el final del card (que se notaba mucho en /register con el
+     checkbox TOS añadido). En sm+ vuelve a flotar fijo al bottom como
+     antes. */
+  position: static;
   text-align: center;
   color: rgba(255, 255, 255, 0.7);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.06em;
   z-index: 1;
+  flex-shrink: 0;
+}
+@media (min-width: 640px) {
+  .auth-footer-stripe {
+    position: fixed;
+    bottom: 16px;
+    left: 0;
+    right: 0;
+  }
 }
 
 
@@ -440,26 +460,12 @@ body {
   display: flex;
   align-items: center;
   gap: 4px;
-  /* En mobile: scroll horizontal con momentum, sin scrollbar visible.
-     Esto permite ver "Inicio · Competir · Stats · Historial · Por temas · Test de errores"
-     deslizando lateralmente, sin que el navbar entero se desborde. */
-  margin-left: 0;
-  overflow-x: auto;
-  overflow-y: visible;
-  min-width: 0;
-  flex: 1 1 0;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-  -webkit-overflow-scrolling: touch;
-  scroll-snap-type: x proximity;
+  margin-left: 18px;
 }
-.links::-webkit-scrollbar { display: none; }
-@media (min-width: 640px) {
-  .links {
-    margin-left: 18px;
-    overflow-x: visible;
-    flex: 0 0 auto;
-  }
+/* En mobile los links del navbar superior se OCULTAN — viven en la
+   barra inferior (.bottom-tabs). En sm+ siguen visibles inline. */
+@media (max-width: 639px) {
+  .links { display: none; }
 }
 .links a {
   padding: 8px 14px;
@@ -525,6 +531,158 @@ body {
 }
 @media (min-width: 640px) {
   .pill-ghost { min-height: 0; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   BOTTOM TABS — patrón "app móvil" (Instagram / X / Notion)
+   Sólo visible en <sm, en desktop usa el navbar superior como hasta ahora.
+   ═══════════════════════════════════════════════════════════════════════ */
+.bottom-tabs {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  display: flex;
+  align-items: stretch;
+  background: rgb(254, 247, 237);
+  border-top: 1px solid rgba(180, 83, 9, 0.18);
+  box-shadow: 0 -8px 24px -8px rgba(0, 0, 0, 0.08);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+@media (min-width: 640px) {
+  .bottom-tabs { display: none; }
+}
+.bottom-tab {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 9px 4px 7px;
+  border: 0;
+  background: transparent;
+  color: var(--slate-500);
+  text-decoration: none;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  /* Min height 56 ≈ Material Design guideline para bottom navigation */
+  min-height: 56px;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.15s, background 0.15s;
+}
+.bottom-tab__icon { width: 22px; height: 22px; }
+.bottom-tab__label { letter-spacing: -0.01em; }
+.bottom-tab:hover {
+  background: rgba(249, 115, 22, 0.04);
+}
+.bottom-tab--active {
+  color: var(--orange-600);
+  /* Indicador visual: una pequeña barra arriba del tab activo */
+  position: relative;
+}
+.bottom-tab--active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px;
+  height: 3px;
+  background: var(--orange-600);
+  border-radius: 0 0 3px 3px;
+}
+
+/* Drawer "Más" — sale por abajo, encima del bottom-tabs */
+.bottom-more__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(15, 23, 42, 0.40);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: bottom-more-fade-in 180ms ease-out;
+}
+.bottom-more {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 61;
+  background: rgb(254, 247, 237);
+  border-top: 1px solid rgba(180, 83, 9, 0.20);
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -16px 40px -8px rgba(0, 0, 0, 0.25);
+  padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 0));
+  animation: bottom-more-slide-up 240ms cubic-bezier(0.2, 0.9, 0.3, 1.1);
+}
+@keyframes bottom-more-fade-in {
+  from { opacity: 0 }
+  to   { opacity: 1 }
+}
+@keyframes bottom-more-slide-up {
+  from { transform: translateY(100%); opacity: 0 }
+  to   { transform: translateY(0);    opacity: 1 }
+}
+.bottom-more__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 4px 14px;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--slate-500);
+}
+.bottom-more__close {
+  background: transparent;
+  border: 0;
+  color: var(--slate-500);
+  padding: 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  -webkit-tap-highlight-color: transparent;
+}
+.bottom-more__close:hover { background: rgba(15, 23, 42, 0.06); color: var(--ink); }
+.bottom-more__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bottom-more__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 12px;
+  min-height: 48px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid var(--slate-200);
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 14.5px;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.bottom-more__item--orange { color: var(--orange-600); border-color: rgba(249, 115, 22, 0.30); }
+.bottom-more__item--red    { color: var(--red-600);    border-color: rgba(239, 68, 68, 0.30); }
+.bottom-more__item--active {
+  background: rgba(249, 115, 22, 0.08);
+  border-color: var(--orange-600);
+}
+
+/* Padding-bottom global del body en mobile para que el contenido nunca
+   se solape con los bottom-tabs. 56px de tabs + ~10px de margen
+   visual + safe-area iOS. */
+@media (max-width: 639px) {
+  body.has-bottom-tabs {
+    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0) + 8px);
+  }
 }
 .pill-ghost:hover {
   border-color: var(--orange-500);

@@ -7,9 +7,11 @@ import { planLabel, isAdmin } from "@/lib/permissions"
 import { isMaintenanceMode } from "@/lib/configCatalog"
 import { firstPendingNotification } from "@/lib/notifications"
 import { Navbar } from "@/components/Navbar"
+import { BottomTabs } from "@/components/BottomTabs"
 import { UserNotifications } from "@/components/UserNotifications"
 import { CookieConsent } from "@/components/CookieConsent"
 import { MaintenancePage } from "@/components/MaintenancePage"
+import { hasFullAccess } from "@/lib/permissions"
 import { Toaster } from "sonner"
 import "./globals.css"
 
@@ -52,13 +54,20 @@ export default async function RootLayout({
   // Primera notificación one-time pendiente para este usuario (welcome, etc.)
   const pendingNotif = user ? firstPendingNotification(user) : null
 
+  // BottomTabs sólo cuando hay user logueado y no estamos en mantenimiento.
+  // El cliente añade `has-bottom-tabs` al <body> sólo cuando aplica para que
+  // el padding-bottom (necesario para no ocultar contenido en mobile) no se
+  // aplique a páginas anónimas (donde no hay tabs).
+  const showBottomTabs    = !!user && !showMaintenance
+  const userHasFullAccess = hasFullAccess(user)
+
   return (
     <html
       lang="es"
       className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">
+      <body className={`min-h-full flex flex-col ${showBottomTabs ? "has-bottom-tabs" : ""}`}>
         <Navbar
           user={
             user ? { username: user.username, displayName: user.displayName } : null
@@ -70,6 +79,7 @@ export default async function RootLayout({
         <main className="flex-1 mx-auto w-full max-w-[1200px] px-6 py-7">
           {showMaintenance ? <MaintenancePage /> : children}
         </main>
+        <BottomTabs visible={showBottomTabs} hasFullAccess={userHasFullAccess} />
         {user && (
           <UserNotifications
             pendingId={pendingNotif?.id ?? null}
