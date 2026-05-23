@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation"
 import Link from "next/link"
+import type { Metadata } from "next"
 import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
 import { ExamRunner } from "@/components/ExamRunner"
@@ -28,6 +29,29 @@ const EXAM_DURATION_SECONDS = 30 * 60   // 30 minutos como en la DGT real
 interface PageProps {
   params:       Promise<{ categoria: string; testNum: string }>
   searchParams: Promise<{ mode?: string }>
+}
+
+/**
+ * Metadata SEO por test: title único basado en categoría real + número.
+ * "Test 1 · Permiso B" indexa mejor que un genérico para long-tail queries
+ * tipo "test 1 carnet conducir".
+ */
+export async function generateMetadata({ params }: { params: PageProps["params"] }): Promise<Metadata> {
+  const { categoria, testNum } = await params
+  const testNumber = parseInt(testNum, 10)
+  if (!Number.isInteger(testNumber) || testNumber < 1) return {}
+
+  const cat = await db.category.findUnique({
+    where:  { slug: categoria },
+    select: { name: true },
+  })
+  if (!cat) return {}
+
+  return {
+    title:       `Test ${testNumber} · ${cat.name}`,
+    description: `Test ${testNumber} oficial de ${cat.name} para el examen teórico del carné de conducir. 30 preguntas con explicación detallada y feedback inmediato.`,
+    alternates:  { canonical: `/${categoria}/${testNumber}` },
+  }
 }
 
 export default async function ExamPage({ params, searchParams }: PageProps) {

@@ -1,9 +1,16 @@
 import Link from "next/link"
+import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 import { getCurrentUser } from "@/lib/auth"
 import { hasFullAccess, planLabel, AI_TOKENS_FREE, AI_TOKENS_PRO } from "@/lib/permissions"
 import { CheckoutButton } from "@/components/CheckoutButton"
 import { PRO_PRICE_LABEL } from "@/lib/pricing"
+
+export const metadata: Metadata = {
+  title:       `Plan PRO · ${PRO_PRICE_LABEL}`,
+  description: "Acceso completo a DGT Tests: todos los tests del Permiso B, ADAS, análisis IA ilimitados, modo competir y test personalizado. Sin permanencia.",
+  alternates:  { canonical: "/upgrade" },
+}
 import {
   ChevronLeft,
   Check,

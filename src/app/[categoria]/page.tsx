@@ -1,4 +1,5 @@
 import Link from "next/link"
+import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
@@ -15,6 +16,29 @@ export const dynamic = "force-dynamic"
 
 interface PageProps {
   params: Promise<{ categoria: string }>
+}
+
+/**
+ * Metadata dinámico para SEO: cada categoría tiene su title/description
+ * únicos basados en el nombre real desde la BBDD. Si la categoría no existe,
+ * dejamos que el page principal devuelva notFound y herede metadata
+ * genérica del layout.
+ */
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { categoria } = await params
+  const cat = await db.category.findUnique({
+    where:  { slug: categoria },
+    select: { name: true, description: true, _count: { select: { tests: true } } },
+  })
+  if (!cat) return {}
+  const testsLabel = cat._count.tests === 1 ? "test" : "tests"
+  return {
+    title:       `Tests ${cat.name}`,
+    description: cat.description
+      ? `${cat._count.tests} ${testsLabel} oficiales de ${cat.name}: ${cat.description}`
+      : `${cat._count.tests} ${testsLabel} oficiales de ${cat.name} con feedback y explicaciones. Practica para el examen teórico DGT.`,
+    alternates:  { canonical: `/${categoria}` },
+  }
 }
 
 export default async function CategoryPage({ params }: PageProps) {

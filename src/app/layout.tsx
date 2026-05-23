@@ -1,4 +1,4 @@
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import Link from "next/link"
 import { Inter, JetBrains_Mono } from "next/font/google"
 import { getCurrentUser } from "@/lib/auth"
@@ -27,15 +27,90 @@ const jetbrainsMono = JetBrains_Mono({
   weight: ["500", "600", "700"],
 })
 
+// metadataBase resuelve URLs relativas (OG image, canonical) a absolutas.
+// En prod = dominio público; en dev = localhost. Fallback hardcoded por si
+// arrancan el server sin .env (raro pero defensivo).
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app"
+
 export const metadata: Metadata = {
+  metadataBase: new URL(APP_URL),
+
   title: {
-    default:  "DGT Tests · Examen de conducir",
+    default:  "DGT Tests · Aprueba el examen teórico a la primera",
     template: "%s · DGT Tests",
   },
   description:
-    "Practica los tests del examen teórico del carné de conducir. Permiso B, repaso final, test ADAS, test de errores y manual del temario.",
+    "Practica los tests del examen teórico del carné de conducir (DGT). Permiso B, repaso final, test ADAS, test de errores y manual del temario — gratis para empezar.",
   applicationName: "DGT Tests",
-  authors: [{ name: "Luis Hidalgo" }],
+  authors:         [{ name: "Luis Hidalgo", url: "https://luishidalgoa.vercel.app/" }],
+  creator:         "Luis Hidalgo",
+  publisher:       "DGT Tests",
+  keywords: [
+    "tests dgt",
+    "examen teórico dgt",
+    "test permiso b",
+    "test conducir",
+    "carné de conducir",
+    "examen tráfico",
+    "test online dgt",
+    "preguntas examen conducir",
+  ],
+
+  // Canonical para el root. Por-página, cada page.tsx puede sobreescribir
+  // alternates.canonical si quiere (p.ej. cuando hay paginación).
+  alternates: {
+    canonical: "/",
+  },
+
+  // OpenGraph para previews al compartir (WhatsApp, Slack, Telegram, etc.).
+  // La imagen la AUTODETECTA Next.js desde src/app/opengraph-image.tsx,
+  // así que no la especificamos aquí — al cambiar el fichero, el OG se
+  // actualiza solo en el próximo build.
+  openGraph: {
+    type:        "website",
+    locale:      "es_ES",
+    url:         APP_URL,
+    siteName:    "DGT Tests",
+    title:       "DGT Tests · Aprueba el examen teórico a la primera",
+    description: "Practica los tests del examen teórico del carné de conducir. Permiso B, repaso final, test ADAS y test de errores.",
+  },
+
+  // Twitter Cards para previews en X/Twitter. summary_large_image = banner
+  // grande horizontal (1200×630). Igual que OG, imagen autodetectada.
+  twitter: {
+    card:        "summary_large_image",
+    title:       "DGT Tests · Aprueba el examen teórico a la primera",
+    description: "Practica los tests del examen teórico del carné de conducir (DGT).",
+  },
+
+  // Para que los crawlers serios (Google, Bing) entiendan que SÍ queremos
+  // que indexen todo lo público. /admin/* y /api/* se bloquean en robots.ts.
+  robots: {
+    index:    true,
+    follow:   true,
+    nocache:  false,
+    googleBot: {
+      index:             true,
+      follow:            true,
+      "max-image-preview": "large",
+      "max-snippet":       -1,
+    },
+  },
+
+  // Desactivar la auto-detección de teléfonos de iOS Safari — sin esto,
+  // números que aparecen en /privacidad o footer se convierten en links
+  // clicables con tinte azul que rompen el diseño.
+  formatDetection: {
+    telephone: false,
+  },
+}
+
+// Next 14+ separa viewport de metadata. Aquí ponemos el theme-color (color
+// de la barra del navegador en mobile) y el viewport estándar.
+export const viewport: Viewport = {
+  width:        "device-width",
+  initialScale: 1,
+  themeColor:   "#ea580c", // orange-600, color principal de marca
 }
 
 export default async function RootLayout({

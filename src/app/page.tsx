@@ -7,6 +7,9 @@ import { Play, Zap, AlertTriangle, LogIn, UserPlus, Sparkles } from "lucide-reac
 import { ContinueExamPill } from "@/components/ContinueExamPill"
 import { DashStatsAnalysis, type StatsAnalysisResult, type AnalysisHistoryItem } from "@/components/DashStatsAnalysis"
 import { MAX_HISTORY_ITEMS } from "@/lib/aiStatsAnalysis"
+import { StructuredDataHome } from "@/components/StructuredData"
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app"
 
 export const dynamic = "force-dynamic"
 
@@ -59,7 +62,12 @@ export default async function HomePage() {
         },
       },
     })
-    return <GuestDashboard category={permisoB} />
+    return (
+      <>
+        <StructuredDataHome appUrl={APP_URL} />
+        <GuestDashboard category={permisoB} />
+      </>
+    )
   }
 
   // Categorías + nº de tests (usuarios logueados)
@@ -194,8 +202,13 @@ export default async function HomePage() {
   }
 
   return (
-    <div className="dash-grid">
-      {/* WELCOME */}
+    <>
+      {/* JSON-LD también para usuarios logueados — Google no llega aquí
+          (auth-gated) pero si rastrea por algún cache antiguo, sigue
+          encontrando los schemas del sitio. */}
+      <StructuredDataHome appUrl={APP_URL} />
+      <div className="dash-grid">
+        {/* WELCOME */}
       <section className="dash-welcome">
         <div>
           <h2>
@@ -443,7 +456,8 @@ export default async function HomePage() {
           })
         )}
       </section>
-    </div>
+      </div>
+    </>
   )
 }
 
