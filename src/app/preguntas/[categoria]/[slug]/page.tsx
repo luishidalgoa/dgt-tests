@@ -158,17 +158,24 @@ export default async function QuestionPage({ params }: PageProps) {
 
   let related = sameTema
   if (related.length < 5) {
+    // Cuando exposePro=true, omitimos el filtro testQuestions del fill
+    // (Prisma 6.19.3 panic con `some: {}` vacío). Si OFF, restringimos
+    // a permiso-b porque es donde están las FREE.
+    const fillWhere = exposePro
+      ? {
+          id: { notIn: [question.id, ...related.map((r) => r.id)] },
+          ...relatedTierFilter,
+          OR: [{ aiApproved: { not: false } }, { aiApproved: null }],
+        }
+      : {
+          id: { notIn: [question.id, ...related.map((r) => r.id)] },
+          testQuestions: { some: { test: { category: { slug: categoria } } } },
+          ...relatedTierFilter,
+          OR: [{ aiApproved: { not: false } }, { aiApproved: null }],
+        }
+
     const fill = await db.question.findMany({
-      where: {
-        id: { notIn: [question.id, ...related.map((r) => r.id)] },
-        // Si exposePro, completamos con cualquier categoría — más variedad.
-        // Si OFF, solo permiso-b (es donde están las FREE).
-        testQuestions: exposePro
-          ? { some: {} }
-          : { some: { test: { category: { slug: categoria } } } },
-        ...relatedTierFilter,
-        OR: [{ aiApproved: { not: false } }, { aiApproved: null }],
-      },
+      where: fillWhere,
       take: 5 - related.length,
       select: {
         id:         true,

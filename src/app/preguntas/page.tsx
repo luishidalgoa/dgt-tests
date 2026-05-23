@@ -58,22 +58,27 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function PreguntasIndexPage() {
   // Si el toggle SEO está ON, listamos TODO. Si OFF, solo FREE de permiso-b.
   const expose = await isSeoExposeProQuestions()
-  const questions = await db.question.findMany({
-    where: expose
-      ? {
-          // ON: cualquier tier, cualquier categoría. Solo excluimos las
-          // AI descartadas y las que no estén asociadas a ningún test.
-          testQuestions: { some: {} },
-          OR: [{ aiApproved: { not: false } }, { aiApproved: null }],
-        }
-      : {
-          // OFF: solo FREE de permiso-b.
-          tier: "FREE",
-          testQuestions: {
-            some: { test: { category: { slug: FREE_CATEGORY_SLUG } } },
-          },
-          OR: [{ aiApproved: { not: false } }, { aiApproved: null }],
+
+  // Construimos el where como objeto plano para evitar un panic conocido
+  // del query engine de Prisma 6.19.3 con ciertos ternarios inline +
+  // filtros de relación vacíos como `testQuestions: { some: {} }`.
+  // Cuando ON, omitimos el filtro de relación: las orphans (preguntas
+  // sin TestQuestion) no deberían existir en BBDD; si existieran,
+  // les damos un slug fallback en el render.
+  const whereClause = expose
+    ? {
+        OR: [{ aiApproved: { not: false } }, { aiApproved: null }],
+      }
+    : {
+        tier: "FREE" as const,
+        testQuestions: {
+          some: { test: { category: { slug: FREE_CATEGORY_SLUG } } },
         },
+        OR: [{ aiApproved: { not: false } }, { aiApproved: null }],
+      }
+
+  const questions = await db.question.findMany({
+    where: whereClause,
     orderBy: [
       { codigoTema: "asc" },
       { id:         "asc" },
