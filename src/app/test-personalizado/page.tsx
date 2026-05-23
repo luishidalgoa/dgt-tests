@@ -25,8 +25,8 @@ interface PageProps {
   searchParams: Promise<{ analysisId?: string; n?: string }>
 }
 
-const DEFAULT_SIZES = [10, 20, 30] as const
-const RATIO_WEAK = 0.8
+const DEFAULT_SIZES = [10, 20, 30, 40] as const
+const RATIO_WEAK = 0.85
 
 /**
  * Test personalizado a partir de un análisis IA del usuario.
@@ -34,9 +34,9 @@ const RATIO_WEAK = 0.8
  * Flujo:
  *  - Sin ?n → selector de tamaño (10/20/30)
  *  - Con ?n → genera test:
- *      · 80% preguntas de los topWeakBlocks del análisis (distribuidas
+ *      · 85% preguntas de los topWeakBlocks del análisis (distribuidas
  *        proporcionalmente por cantidad ABSOLUTA de fallos)
- *      · 20% preguntas de sub-bloques que el usuario aún NO ha practicado
+ *      · 15% preguntas de sub-bloques que el usuario aún NO ha practicado
  *        (introducir contenido nuevo, evita repetir siempre lo mismo)
  *
  * Sin coste IA: usamos el contextJson guardado del análisis (que ya tiene
@@ -138,7 +138,7 @@ export default async function TestPersonalizadoPage({ searchParams }: PageProps)
               Composición del test
             </div>
             <p style={{ margin: 0, color: "var(--slate-700)", fontSize: 13.5, lineHeight: 1.55 }}>
-              80% preguntas de los <b>{topWeak.length} sub-bloques donde más fallas</b> (proporcional a la cantidad de fallos) + 20% preguntas de <b>sub-bloques que aún no has practicado</b>.
+              85% preguntas de los <b>{topWeak.length} sub-bloques donde más fallas</b> (proporcional a la cantidad de fallos) + 15% preguntas de <b>sub-bloques que aún no has practicado</b>.
             </p>
           </div>
 
@@ -151,7 +151,7 @@ export default async function TestPersonalizadoPage({ searchParams }: PageProps)
                 <Link
                   key={n}
                   href={`/test-personalizado?n=${n}${analysisId !== null ? `&analysisId=${analysisId}` : ""}`}
-                  className={n === 30 ? "btn-primary" : "btn-secondary"}
+                  className={n === DEFAULT_SIZES[DEFAULT_SIZES.length - 1] ? "btn-primary" : "btn-secondary"}
                 >
                   {n}
                 </Link>
@@ -278,11 +278,11 @@ async function loadOrRebuildContext(
 /**
  * Selecciona los questionIds del test personalizado.
  *
- * - 80% de los slots: distribuidos entre los topWeakBlocks según peso
+ * - 85% de los slots: distribuidos entre los topWeakBlocks según peso
  *   proporcional a `fallos` absolutos. Dentro de cada bloque, las
  *   preguntas se ordenan poniendo primero las que el user ha FALLADO
  *   más veces (subquery COUNT WHERE isCorrect=0), tie-break random.
- * - 20% de los slots: preguntas de sub-bloques (codigoTema) que el user
+ * - 15% de los slots: preguntas de sub-bloques (codigoTema) que el user
  *   nunca ha respondido. Random shuffle.
  *
  * Si alguna parte no llena su cupo (p.ej. bloques con pocas preguntas
@@ -342,7 +342,7 @@ async function pickQuestionIds(args: {
     for (const r of rows) weakIds.push(r.id)
   }
 
-  // 3) 20% de bloques no practicados (sub-bloques nuevos)
+  // 3) 15% de bloques no practicados (sub-bloques nuevos)
   //    Excluir explícitamente los IDs ya elegidos en (2) para no repetir.
   const newIds: number[] = []
   if (nNew > 0) {
