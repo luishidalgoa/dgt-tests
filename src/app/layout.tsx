@@ -197,6 +197,13 @@ export default async function RootLayout({
           </a>
           {" · "}
           <Link
+            href="/preguntas"
+            style={{ color: "var(--slate-500)", textDecoration: "underline", textDecorationColor: "var(--slate-300)", textUnderlineOffset: 3 }}
+          >
+            Preguntas
+          </Link>
+          {" · "}
+          <Link
             href="/recursos"
             style={{ color: "var(--slate-500)", textDecoration: "underline", textDecorationColor: "var(--slate-300)", textUnderlineOffset: 3 }}
           >

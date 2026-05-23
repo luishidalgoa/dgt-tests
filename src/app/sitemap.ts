@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next"
 import { db } from "@/lib/db"
 import { FREE_CATEGORY_SLUG, FREE_TEST_LIMIT } from "@/lib/permissions"
 import { RECURSOS } from "@/content/recursos/_registry"
+import { questionToSlug } from "@/lib/questionUrl"
 
 /**
  * /sitemap.xml — Next.js lo genera de este export al build.
@@ -58,6 +59,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     {
       // Índice de guías largas — bisagra hacia los artículos pilares.
       url:           `${APP_URL}/recursos`,
+      lastModified:  today,
+      changeFrequency: "weekly",
+      priority:      0.7,
+    },
+    {
+      // Índice de preguntas individuales — bisagra hacia las ~210
+      // URLs SEO long-tail de las preguntas FREE.
+      url:           `${APP_URL}/preguntas`,
       lastModified:  today,
       changeFrequency: "weekly",
       priority:      0.7,
@@ -137,5 +146,44 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority:        0.7,
   }))
 
-  return [...staticRoutes, ...categoryRoutes, ...testRoutes, ...recursoRoutes]
+  // ── Preguntas individuales (~210 URLs) ────────────────────────────
+  // Solo las FREE — son las accesibles para guests sin login y por
+  // tanto las que Google puede indexar. Cada una es candidata a
+  // rankear por una query textual long-tail tipo "puede un coche
+  // llevar solamente el espejo exterior izquierdo".
+  //
+  // Priority 0.5: importantes pero no más que las pilares y home.
+  // changeFrequency yearly: las preguntas DGT no se editan casi nunca.
+  //
+  // Defensivo: si falla la query, sitemap sigue funcionando sin
+  // las preguntas (no rompemos el sitemap entero por un timeout).
+  let questionRoutes: MetadataRoute.Sitemap = []
+  try {
+    const questions = await db.question.findMany({
+      where: {
+        tier: "FREE",
+        testQuestions: {
+          some: { test: { category: { slug: FREE_CATEGORY_SLUG } } },
+        },
+        OR: [{ aiApproved: { not: false } }, { aiApproved: null }],
+      },
+      select: { id: true, enunciado: true },
+    })
+    questionRoutes = questions.map((q) => ({
+      url:             `${APP_URL}/preguntas/${FREE_CATEGORY_SLUG}/${questionToSlug(q)}`,
+      lastModified:    today,
+      changeFrequency: "yearly" as const,
+      priority:        0.5,
+    }))
+  } catch (err) {
+    console.warn("[sitemap] no pude cargar preguntas individuales:", err)
+  }
+
+  return [
+    ...staticRoutes,
+    ...categoryRoutes,
+    ...testRoutes,
+    ...recursoRoutes,
+    ...questionRoutes,
+  ]
 }
