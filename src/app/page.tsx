@@ -471,21 +471,36 @@ type GuestCategoryData = {
   tests: { id: number; testNumber: number; _count: { testQuestions: number } }[]
 } | null
 
+/**
+ * Versión guest de la home con TRIPLE rol:
+ *   1. SEO: la única página totalmente indexable por Google. Necesita H1
+ *      con keyword principal + 300-500 palabras de texto real para que
+ *      Google entienda de qué va el sitio y rankee long-tail queries.
+ *      Sin esto Google la marca como "thin content" y la deja muerta.
+ *   2. Conversión: CTAs claras "Crear cuenta gratis" / "Iniciar sesión",
+ *      manteniendo el hero compacto que ya funcionaba.
+ *   3. Funcional: lista de los 7 tests free para que el guest pueda
+ *      probar inmediatamente sin convertir todavía.
+ */
 function GuestDashboard({ category }: { category: GuestCategoryData }) {
   const tests = category?.tests ?? []
 
   return (
-    <div style={{ maxWidth: 720, margin: "0 auto" }}>
-      {/* Hero compacto */}
-      <section className="card-soft" style={{ padding: 24, marginBottom: 22 }}>
-        <h2 style={{ display: "flex", alignItems: "center", gap: 10, margin: 0, fontSize: 22 }}>
-          <Sparkles className="h-6 w-6" style={{ color: "var(--amber)" }} />
-          Modo invitado
-        </h2>
-        <p style={{ fontSize: 14.5, lineHeight: 1.55, color: "var(--slate-600)", marginTop: 8, marginBottom: 14 }}>
-          <b>7 tests gratuitos</b> de Permiso B para que pruebes.{" "}
-          <Link href="/register" style={{ color: "var(--orange-600)", fontWeight: 700 }}>Crea una cuenta</Link>{" "}
-          para acceso completo (lista debajo).
+    <div style={{ maxWidth: 760, margin: "0 auto" }}>
+      {/* HERO + H1 SEO. Antes era <h2>Modo invitado</h2> — pero Google
+          necesita exactamente UN <h1> por página con la keyword principal
+          arriba. Esto pasa a ser el ancla SEO de toda la web. */}
+      <section className="card-soft" style={{ padding: 28, marginBottom: 22 }}>
+        <h1 style={{ margin: 0, fontSize: 28, lineHeight: 1.2, letterSpacing: "-0.02em" }}>
+          Tests del examen teórico DGT —{" "}
+          <span style={{ color: "var(--orange-600)" }}>gratis y online</span>
+        </h1>
+        <p style={{ fontSize: 15, lineHeight: 1.55, color: "var(--slate-600)", marginTop: 12, marginBottom: 16 }}>
+          Practica con preguntas reales del examen teórico del{" "}
+          <b>carné de conducir Permiso B</b>, sin registro y sin descargar nada.
+          Empieza ahora mismo con <b>7 tests gratuitos</b> y, si quieres más
+          (ADAS, Repaso final, manual completo, test de errores), créate
+          una cuenta — el plan gratis es para siempre.
         </p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Link href="/register" className="btn-primary">
@@ -499,8 +514,10 @@ function GuestDashboard({ category }: { category: GuestCategoryData }) {
         </div>
       </section>
 
-      {/* Tests permiso B */}
-      <h3
+      {/* Tests permiso B — bloque funcional, manteniendo el diseño que ya
+          existía. Lo subo a <h2> (en vez del eyebrow visual) porque para
+          el outline SEO importa que sea heading real. */}
+      <h2
         style={{
           margin: "0 4px 12px",
           fontSize: 13,
@@ -511,7 +528,7 @@ function GuestDashboard({ category }: { category: GuestCategoryData }) {
         }}
       >
         Tests disponibles · Permiso B
-      </h3>
+      </h2>
       <div className="tile-grid">
         {tests.map((t) => (
           <Link
@@ -526,11 +543,12 @@ function GuestDashboard({ category }: { category: GuestCategoryData }) {
         ))}
       </div>
 
-      {/* Features bloqueadas */}
+      {/* Features bloqueadas — mantengo el bloque visual, pero el heading
+          es ahora <h2> semántico (era <h3> de eyebrow). */}
       <section className="card-soft" style={{ padding: 18, marginTop: 22 }}>
-        <h3 style={{ margin: 0, marginBottom: 10, fontSize: 12.5, fontWeight: 800, color: "var(--slate-500)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+        <h2 style={{ margin: 0, marginBottom: 10, fontSize: 12.5, fontWeight: 800, color: "var(--slate-500)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
           🔒 Al iniciar sesión desbloqueas
-        </h3>
+        </h2>
         <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
           {[
             { icon: <Sparkles className="h-4 w-4" />, label: "Chatbot IA en práctica" },
@@ -543,6 +561,95 @@ function GuestDashboard({ category }: { category: GuestCategoryData }) {
               {it.label}
             </li>
           ))}
+        </ul>
+      </section>
+
+      {/* ── SECCIÓN SEO: contenido textual indexable ─────────────────────
+          Las 3 secciones siguientes son TEXTO REAL para que Google
+          entienda de qué va la web. Imprescindible para no caer en
+          "thin content" — la home pasa de ~50 a ~450 palabras. */}
+
+      <section style={{ marginTop: 36, padding: "0 4px" }}>
+        <h2 style={{ fontSize: 22, margin: "0 0 10px", letterSpacing: "-0.01em" }}>
+          Qué es DGT Tests
+        </h2>
+        <p style={{ fontSize: 14.5, lineHeight: 1.65, color: "var(--slate-700)", margin: 0 }}>
+          DGT Tests es una plataforma online para preparar el{" "}
+          <b>examen teórico del carné de conducir</b> en España. Reproducimos
+          fielmente las preguntas oficiales del banco de la Dirección General
+          de Tráfico, organizadas por categorías: <b>Permiso B</b> (turismos),
+          <b> Repaso final</b> (mix exigente para los últimos días antes del
+          examen) y <b>ADAS</b> (preguntas específicas sobre sistemas
+          avanzados de asistencia a la conducción, incluidas en el examen
+          desde 2022). Todas las preguntas llevan{" "}
+          <b>explicación detallada</b> y feedback inmediato, así no solo
+          aciertas: entiendes <em>por qué</em>.
+        </p>
+      </section>
+
+      <section style={{ marginTop: 28, padding: "0 4px" }}>
+        <h2 style={{ fontSize: 22, margin: "0 0 14px", letterSpacing: "-0.01em" }}>
+          Cómo funciona
+        </h2>
+        <ol style={{ margin: 0, paddingLeft: 22, fontSize: 14.5, lineHeight: 1.6, color: "var(--slate-700)" }}>
+          <li style={{ marginBottom: 8 }}>
+            <b>Elige modo</b> (práctica o examen real con cronómetro de 30 min)
+            y empieza el test sin instalar nada.
+          </li>
+          <li style={{ marginBottom: 8 }}>
+            <b>Responde 30 preguntas</b> — las mismas que verás el día del
+            examen. Como en la DGT real, el aprobado está en 27/30 (máximo 3
+            fallos).
+          </li>
+          <li style={{ marginBottom: 8 }}>
+            <b>Repasa con la IA</b>: si una pregunta no te queda clara, pide
+            al chatbot que te la explique con tus propias palabras.
+          </li>
+          <li>
+            <b>Revisa tus errores</b> en cualquier momento desde el historial
+            — los repites hasta que te los sepas.
+          </li>
+        </ol>
+      </section>
+
+      <section style={{ marginTop: 28, padding: "0 4px" }}>
+        <h2 style={{ fontSize: 22, margin: "0 0 12px", letterSpacing: "-0.01em" }}>
+          Sobre el examen teórico DGT
+        </h2>
+        <p style={{ fontSize: 14.5, lineHeight: 1.65, color: "var(--slate-700)", margin: 0 }}>
+          El examen teórico del Permiso B consta de <b>30 preguntas tipo test</b>{" "}
+          y se aprueba con <b>27 aciertos</b> (3 fallos máximo). La prueba se
+          hace en un ordenador en la Jefatura de Tráfico, dura{" "}
+          <b>30 minutos</b> y cubre el manual oficial completo: normativa,
+          señales, mecánica básica, conducción segura y, desde 2022, sistemas
+          ADAS. Si suspendes puedes volver a presentarte, pero el coste de
+          las tasas se suma. Nuestro objetivo: que apruebes a la primera
+          haciendo tests reales hasta que el patrón de respuestas se te
+          vuelva intuitivo.
+        </p>
+      </section>
+
+      <section style={{ marginTop: 28, marginBottom: 8, padding: "0 4px" }}>
+        <h2 style={{ fontSize: 22, margin: "0 0 12px", letterSpacing: "-0.01em" }}>
+          Por qué practicar online
+        </h2>
+        <ul style={{ margin: 0, paddingLeft: 22, fontSize: 14.5, lineHeight: 1.6, color: "var(--slate-700)" }}>
+          <li style={{ marginBottom: 6 }}>
+            <b>Gratis para empezar</b>: 7 tests sin tarjeta, sin trial limitado
+            y sin spam por email.
+          </li>
+          <li style={{ marginBottom: 6 }}>
+            <b>Sin descargas</b>: funciona desde el móvil, tablet u ordenador
+            con cualquier navegador.
+          </li>
+          <li style={{ marginBottom: 6 }}>
+            <b>Hecho en 2026</b>: preguntas actualizadas con las últimas
+            modificaciones del temario (incluido el bloque ADAS).
+          </li>
+          <li>
+            <b>Aprende razonando</b>: la IA explica el porqué de cada
+            respuesta, no solo te dice si está bien o mal.
+          </li>
         </ul>
       </section>
     </div>

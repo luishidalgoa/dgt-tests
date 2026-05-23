@@ -1,11 +1,16 @@
 /**
  * JSON-LD structured data (Schema.org) para rich results en Google.
  *
- * Renderizamos en el home dos schemas básicos:
+ * Renderizamos en el home 4 schemas:
  *  - WebSite: identifica el sitio + define la search action (rich result
  *    "Sitelinks Searchbox" en SERPs).
  *  - Organization: identidad de la org responsable (logo, sameAs links
  *    a redes sociales, contacto).
+ *  - WebApplication: la app como SaaS — habilita rich results de tipo
+ *    "Software" con pricing visible directamente en las SERPs.
+ *  - Course: el "curso" de tests DGT — Google muestra preview de cursos
+ *    con instructor, duración, modalidad. Encaja perfectamente con un
+ *    sitio de exámenes y diferencia de competidores que no lo declaran.
  *
  * Validar tras deploy:
  *   https://search.google.com/test/rich-results?url=https://dgt-tests.vercel.app
@@ -21,9 +26,9 @@ interface StructuredDataProps {
 }
 
 export function StructuredDataHome({ appUrl }: StructuredDataProps) {
-  // Schema.org permite combinar varios @types en un array. Lo enviamos
-  // como dos <script> separados — más fácil de debug en DevTools, y si
-  // uno tiene typo Google sigue parseando el otro.
+  // Schema.org permite combinar varios @types en un array. Los enviamos
+  // como <script> separados — más fácil de debug en DevTools, y si
+  // uno tiene typo Google sigue parseando los otros.
   const websiteSchema = {
     "@context":    "https://schema.org",
     "@type":       "WebSite",
@@ -64,6 +69,75 @@ export function StructuredDataHome({ appUrl }: StructuredDataProps) {
     ],
   }
 
+  // WebApplication: declara la naturaleza SaaS de la app. El offer va
+  // con el precio del plan FREE (0€) para que sea sincero — Stripe ya
+  // ofrece PRO desde Checkout, pero Google necesita un offer principal
+  // y el free tier es lo que se le ofrece al primer visitante.
+  const webAppSchema = {
+    "@context":          "https://schema.org",
+    "@type":             "WebApplication",
+    name:                "DGT Tests",
+    url:                 appUrl,
+    description:         "Plataforma web para practicar los tests del examen teórico del carné de conducir (DGT). 7 tests gratis sin registro, modo examen, IA explicativa y modo competición multijugador.",
+    applicationCategory: "EducationalApplication",
+    operatingSystem:     "Web Browser",
+    inLanguage:          "es-ES",
+    offers: {
+      "@type":         "Offer",
+      price:           "0",
+      priceCurrency:   "EUR",
+      description:     "7 tests del Permiso B gratis sin necesidad de cuenta",
+      availability:    "https://schema.org/InStock",
+    },
+    // Audiencia: futuros conductores (18+). En España la edad mínima
+    // para el carné B es 18 años exactos.
+    audience: {
+      "@type":    "EducationalAudience",
+      educationalRole: "student",
+    },
+  }
+
+  // Course schema: encaja con el contenido (tests/exámenes prácticos)
+  // y desbloquea rich result específico de cursos. provider apunta a
+  // la Organization ya declarada, hasCourseInstance describe la
+  // modalidad (online, self-paced, gratis).
+  const courseSchema = {
+    "@context":   "https://schema.org",
+    "@type":      "Course",
+    name:         "Preparación del examen teórico DGT — Permiso B",
+    description:  "Curso autoformativo online para preparar el examen teórico del carné de conducir Permiso B. Incluye preguntas oficiales del banco DGT con explicaciones, modo examen real (30 preguntas / 30 minutos), test de errores y bloque específico ADAS.",
+    url:          appUrl,
+    inLanguage:   "es-ES",
+    provider: {
+      "@type": "Organization",
+      name:    "DGT Tests",
+      url:     appUrl,
+    },
+    educationalLevel:    "Beginner",
+    teaches:             "Normativa de tráfico, señalización, conducción segura, mecánica básica y sistemas ADAS",
+    // hasCourseInstance es obligatorio en Google para que el Course
+    // genere rich result. Lo declaramos como sesión online autoformativa
+    // (self-paced) y gratuita para acceso de prueba.
+    hasCourseInstance: {
+      "@type":          "CourseInstance",
+      courseMode:       "online",
+      // courseWorkload en formato ISO 8601 duration. PT30M = 30 min
+      // por test, que es lo que dura cada sesión de examen real.
+      courseWorkload:   "PT30M",
+      inLanguage:       "es-ES",
+      // Curso ofrecido en modalidad self-paced, sin fecha fija — usamos
+      // un rango muy amplio para señalizar "disponible siempre".
+      startDate:        "2026-01-01",
+      endDate:          "2099-12-31",
+      offers: {
+        "@type":       "Offer",
+        category:      "Free",
+        price:         "0",
+        priceCurrency: "EUR",
+      },
+    },
+  }
+
   return (
     <>
       <script
@@ -75,6 +149,14 @@ export function StructuredDataHome({ appUrl }: StructuredDataProps) {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(webAppSchema) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(courseSchema) }}
       />
     </>
   )
