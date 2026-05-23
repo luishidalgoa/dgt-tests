@@ -3,12 +3,12 @@ import { db } from "@/lib/db"
 import { requireUser } from "@/lib/auth"
 import { isAdmin } from "@/lib/permissions"
 import { DeleteAttemptButton } from "@/components/DeleteAttemptButton"
+import { SwipeableHistoryRow } from "@/components/SwipeableHistoryRow"
 import {
   ChevronLeft,
   Trophy,
   Lightbulb,
   XCircle,
-  History as HistoryIcon,
 } from "lucide-react"
 
 export const dynamic = "force-dynamic"
@@ -77,10 +77,7 @@ export default async function HistorialPage() {
 
       <header className="page-header">
         <div>
-          <h1 style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <HistoryIcon className="h-7 w-7" />
-            Historial
-          </h1>
+          <h1>Historial</h1>
           <p className="lead">
             {totalAttempts} {totalAttempts === 1 ? "intento completado" : "intentos completados"}
           </p>
@@ -149,11 +146,11 @@ export default async function HistorialPage() {
               : `${a.test?.category.name ?? "Test"} · Test ${a.test?.testNumber ?? a.id}`
 
             return (
-              <div
+              <SwipeableHistoryRow
                 key={a.id}
-                style={{ display: "flex", alignItems: "stretch", gap: 4 }}
+                action={admin ? <DeleteAttemptButton attemptId={a.id} label={deleteLabel} /> : undefined}
               >
-                <Link href={href} className="dash-row-item" style={{ flex: 1 }}>
+                <Link href={href} className="dash-row-item">
                   <span className={`dash-light ${light}`} aria-hidden="true" />
                   <div className="dash-row-title">
                     {isErrors ? (
@@ -181,12 +178,7 @@ export default async function HistorialPage() {
                   <div className="dash-score">{score}/{a.total}</div>
                   <div className="dash-ts">{Math.round(ratio * 100)}%</div>
                 </Link>
-                {admin && (
-                  <div style={{ display: "flex", alignItems: "center", paddingRight: 6 }}>
-                    <DeleteAttemptButton attemptId={a.id} label={deleteLabel} />
-                  </div>
-                )}
-              </div>
+              </SwipeableHistoryRow>
             )
           })}
         </div>

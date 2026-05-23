@@ -25,28 +25,28 @@ import {
 export const dynamic = "force-dynamic"
 
 const FREE_FEATURES = [
-  { label: "7 primeros tests de Permiso B",     included: true },
+  { label: "7 primeros tests de Permiso B",      included: true },
   { label: "Modo práctica con feedback",         included: true },
-  { label: "Modo examen real (30 min)",         included: true },
-  { label: "Historial y estadísticas",            included: true },
-  { label: `${AI_TOKENS_FREE} análisis IA al mes`,        included: true },
+  { label: "Modo competición con tests gratuitos", included: true },
+  { label: "Historial y estadísticas",           included: true },
+  { label: `${AI_TOKENS_FREE} análisis IA al mes`, included: true },
+  { label: "Modo examen real (30 min)",          included: false },
   { label: "Todas las categorías (+100 tests)",  included: false },
   { label: "Tests por temas",                    included: false },
   { label: "Test de errores (repite fallos)",    included: false },
   { label: "Manual completo (flipbook)",         included: false },
-  { label: "Modo competición multijugador",     included: false },
-  { label: `${AI_TOKENS_PRO} análisis IA al mes`,        included: false },
+  { label: `${AI_TOKENS_PRO} análisis IA al mes`, included: false },
 ] as const
 
 const PRO_FEATURES = [
-  { label: "Todo lo del plan gratuito",         included: true },
+  { label: "Todo lo del plan gratuito",          included: true },
+  { label: "Modo examen real (30 min)",          included: true },
   { label: "Todas las categorías (+100 tests)",  included: true },
   { label: "Tests por temas concretos",          included: true },
   { label: "Test de errores ilimitado",          included: true },
   { label: "Manual completo en flipbook",        included: true },
-  { label: "Modo competición hasta 4 jug.",      included: true },
-  { label: `${AI_TOKENS_PRO} análisis IA al mes`,        included: true },
-  { label: "Cancela cuando quieras",            included: true },
+  { label: `${AI_TOKENS_PRO} análisis IA al mes`, included: true },
+  { label: "Cancela cuando quieras",             included: true },
 ] as const
 
 export default async function UpgradePage() {
@@ -102,6 +102,8 @@ export default async function UpgradePage() {
             padding: 26,
             position: "relative",
             opacity: 0.92,
+            display: "flex",
+            flexDirection: "column",
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
@@ -120,7 +122,11 @@ export default async function UpgradePage() {
             </span>
             <span style={{ color: "var(--slate-500)", fontSize: 14, marginLeft: 6 }}>/ mes</span>
           </div>
-          <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 8 }}>
+          {/* flex:1 hace que la lista consuma el espacio disponible y el
+              bloque [botón + footer] quede pegado al fondo. Combinado con
+              el grid (que iguala alturas de hermanas en horizontal), el
+              botón cae exactamente a la misma altura que el de PRO. */}
+          <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 8, flex: 1 }}>
             {FREE_FEATURES.map((f, i) => (
               <li
                 key={i}
@@ -160,6 +166,20 @@ export default async function UpgradePage() {
           >
             Tu plan actual
           </button>
+          {/* Footer simétrico al "Pago seguro" de PRO — sin esta línea,
+              el botón de PRO quedaría más arriba que el de FREE porque
+              el p de PRO añade ~32px al fondo. */}
+          <p
+            style={{
+              fontSize: 11.5,
+              color: "var(--slate-500)",
+              marginTop: 12,
+              marginBottom: 0,
+              textAlign: "center",
+            }}
+          >
+            Sin tarjeta · Empieza sin compromiso
+          </p>
         </section>
 
         {/* PLAN PRO */}
@@ -171,6 +191,8 @@ export default async function UpgradePage() {
             background:
               "linear-gradient(135deg, rgba(168, 85, 247, 0.06), rgba(249, 115, 22, 0.05))",
             borderColor: "rgba(168, 85, 247, 0.35)",
+            display: "flex",
+            flexDirection: "column",
           }}
         >
           <div
@@ -217,7 +239,7 @@ export default async function UpgradePage() {
             </span>
             <span style={{ color: "var(--slate-500)", fontSize: 14, marginLeft: 6 }}>/ mes</span>
           </div>
-          <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 8 }}>
+          <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 8, flex: 1 }}>
             {PRO_FEATURES.map((f, i) => (
               <li
                 key={i}
