@@ -73,7 +73,12 @@ export function AuthForm({ mode }: AuthFormProps) {
             : "Crea tu cuenta y empieza a practicar"}
         </p>
 
-        <form onSubmit={handleSubmit} noValidate>
+        {/* suppressHydrationWarning en form e inputs porque Chrome Credential
+            Manager (Smart Lock / Autofill) inyecta atributos __gcruniqueid en
+            campos detectados como login antes de que React hidrate. Sin esto,
+            cada render de /login dispara "tree hydrated but some attributes...
+            didn't match" en Chrome móvil/desktop. */}
+        <form onSubmit={handleSubmit} noValidate suppressHydrationWarning>
           <label htmlFor="identifier" className="auth-label">
             {isLogin ? "Usuario o email" : "Usuario"}
           </label>
@@ -97,6 +102,7 @@ export function AuthForm({ mode }: AuthFormProps) {
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
               placeholder={isLogin ? "tu usuario o tu@email.com" : "tu_usuario"}
+              suppressHydrationWarning
               // En register solo letras minúsculas/números/_.-
               {...(isLogin ? {} : { pattern: "[a-zA-Z0-9_.\\-]+" })}
             />
@@ -132,6 +138,7 @@ export function AuthForm({ mode }: AuthFormProps) {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="tu@email.com"
+                  suppressHydrationWarning
                 />
               </div>
               <p
@@ -165,6 +172,7 @@ export function AuthForm({ mode }: AuthFormProps) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder={isLogin ? "••••••••••" : "Mínimo 6 caracteres"}
+              suppressHydrationWarning
             />
             <button
               type="button"

@@ -177,7 +177,10 @@ body {
   border: 1.5px solid var(--slate-200);
   background: #fff;
   font-family: inherit;
-  font-size: 15px;
+  /* 16px mínimo: iOS Safari y Chrome mobile auto-zoom el viewport si el
+     input tiene font-size < 16px en focus, generando scroll horizontal y
+     dejando la página zoomeada al cerrar el teclado. */
+  font-size: 16px;
   font-weight: 500;
   color: var(--slate-900);
   outline: none;

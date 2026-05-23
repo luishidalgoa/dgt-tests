@@ -67,7 +67,14 @@ export default async function RootLayout({
       className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <body className={`min-h-full flex flex-col ${showBottomTabs ? "has-bottom-tabs" : ""}`}>
+      <body
+        // translate="no" desactiva la traducción automática de Chrome / Google
+        // Translate, que inyecta atributos en nodos de texto antes de que React
+        // hidrate y dispara "A tree hydrated but some attributes of the server
+        // rendered HTML didn't match the client properties" en Chrome mobile.
+        translate="no"
+        className={`min-h-full flex flex-col ${showBottomTabs ? "has-bottom-tabs" : ""}`}
+      >
         <Navbar
           user={
             user ? { username: user.username, displayName: user.displayName } : null
