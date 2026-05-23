@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "help": "tsx scripts/help.ts",
-    "?":    "tsx scripts/help.ts",
+    "?": "tsx scripts/help.ts",
     "dev": "next dev -p 4321",
     "dev:reset": "prisma generate && echo \"\nPrisma client regenerado. AHORA reinicia 'npm run dev'.\"",
     "build": "prisma generate && next build",
@@ -43,13 +43,14 @@
     "manual:import": "tsx --env-file=.env scripts/import-manual.ts",
     "manual:extract-skeleton": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/extract-manual-skeleton.ts",
     "manual:infer-titles": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/infer-subblock-titles.ts",
-    "questions:generate":  "tsx --env-file=.env --env-file-if-exists=.env.local scripts/generate-questions.ts",
+    "questions:generate": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/generate-questions.ts",
     "ingest": "npm run db:seed && npm run images:copy && npm run manual:import"
   },
   "dependencies": {
     "@libsql/client": "^0.17.3",
     "@prisma/adapter-libsql": "^7.8.0",
     "@prisma/client": "^6.19.3",
+    "@sentry/nextjs": "^10.53.1",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
