@@ -125,19 +125,34 @@ export default async function QuestionPage({ params }: PageProps) {
     redirect(`/preguntas/${categoria}/${canonicalSlug}`)
   }
 
-  // Preguntas relacionadas: mismo tema, FREE, no descartadas, excluida
-  // la actual. Take 5. Si no hay codigoTema o no hay suficientes,
-  // rellenamos con random de la misma categoría.
+  // Preguntas relacionadas: mismo tema, no descartadas, excluida la
+  // actual. Take 5. Si no hay codigoTema o no hay suficientes, rellenamos
+  // con random de la misma categoría.
+  //
+  // El filtro tier respeta el mismo toggle SEO: si ON, las relacionadas
+  // pueden ser FREE o PRO (maximiza internal linking entre PRO); si OFF,
+  // solo FREE. Esto mantiene la coherencia con el resto del sistema.
+  const relatedTierFilter = exposePro ? {} : { tier: "FREE" as const }
+
   const sameTema = question.codigoTema
     ? await db.question.findMany({
         where: {
           codigoTema: question.codigoTema,
-          tier:       "FREE",
           id:         { not: question.id },
+          ...relatedTierFilter,
           OR: [{ aiApproved: { not: false } }, { aiApproved: null }],
         },
         take:   5,
-        select: { id: true, enunciado: true, codigoTema: true },
+        select: {
+          id:         true,
+          enunciado:  true,
+          codigoTema: true,
+          testQuestions: {
+            take:    1,
+            orderBy: { test: { testNumber: "asc" } },
+            select:  { test: { select: { category: { select: { slug: true } } } } },
+          },
+        },
       })
     : []
 
@@ -145,13 +160,26 @@ export default async function QuestionPage({ params }: PageProps) {
   if (related.length < 5) {
     const fill = await db.question.findMany({
       where: {
-        tier: "FREE",
-        id:   { notIn: [question.id, ...related.map((r) => r.id)] },
-        testQuestions: { some: { test: { category: { slug: categoria } } } },
+        id: { notIn: [question.id, ...related.map((r) => r.id)] },
+        // Si exposePro, completamos con cualquier categoría — más variedad.
+        // Si OFF, solo permiso-b (es donde están las FREE).
+        testQuestions: exposePro
+          ? { some: {} }
+          : { some: { test: { category: { slug: categoria } } } },
+        ...relatedTierFilter,
         OR: [{ aiApproved: { not: false } }, { aiApproved: null }],
       },
-      take:   5 - related.length,
-      select: { id: true, enunciado: true, codigoTema: true },
+      take: 5 - related.length,
+      select: {
+        id:         true,
+        enunciado:  true,
+        codigoTema: true,
+        testQuestions: {
+          take:    1,
+          orderBy: { test: { testNumber: "asc" } },
+          select:  { test: { select: { category: { select: { slug: true } } } } },
+        },
+      },
     })
     related = [...related, ...fill]
   }
@@ -319,10 +347,14 @@ export default async function QuestionPage({ params }: PageProps) {
           <div style={{ display: "grid", gap: 8 }}>
             {related.map((r) => {
               const rSlug = questionToSlug({ id: r.id, enunciado: r.enunciado })
+              // Categoría real de la pregunta relacionada — puede ser
+              // distinta de `categoria` (la actual) cuando el toggle
+              // mezcla tiers de distintas categorías.
+              const rCat = r.testQuestions[0]?.test.category.slug ?? categoria
               return (
                 <Link
                   key={r.id}
-                  href={`/preguntas/${categoria}/${rSlug}`}
+                  href={`/preguntas/${rCat}/${rSlug}`}
                   className="card-soft"
                   style={{
                     padding:        14,

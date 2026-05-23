@@ -4,6 +4,7 @@ import { ChevronLeft, FileQuestion, ArrowRight } from "lucide-react"
 import { db } from "@/lib/db"
 import { FREE_CATEGORY_SLUG } from "@/lib/permissions"
 import { questionToSlug } from "@/lib/questionUrl"
+import { isSeoExposeProQuestions } from "@/lib/configCatalog"
 import { StructuredDataBreadcrumb } from "@/components/StructuredData"
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app"
@@ -12,24 +13,40 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app
 // se regenera el listado al día siguiente sin redeploy.
 export const revalidate = 86400
 
-export const metadata: Metadata = {
-  title:       "Preguntas del examen DGT — Permiso B",
-  description: "Banco de preguntas oficiales del examen teórico del Permiso B, organizadas por tema. Cada pregunta con su respuesta correcta y explicación detallada, gratis y sin registro.",
-  alternates:  { canonical: "/preguntas" },
-  openGraph: {
-    type:        "website",
-    title:       "Preguntas del examen DGT — Permiso B",
-    description: "Banco de preguntas oficiales del examen teórico DGT con respuestas y explicaciones.",
-  },
+export async function generateMetadata(): Promise<Metadata> {
+  const expose = await isSeoExposeProQuestions()
+  const title = expose
+    ? "Preguntas del examen DGT — banco completo"
+    : "Preguntas del examen DGT — Permiso B"
+  const description = expose
+    ? "Banco completo de preguntas oficiales del examen teórico DGT (Permiso B, Repaso final y ADAS) organizadas por tema. Cada pregunta con su respuesta correcta y explicación detallada, gratis y sin registro."
+    : "Banco de preguntas oficiales del examen teórico del Permiso B, organizadas por tema. Cada pregunta con su respuesta correcta y explicación detallada, gratis y sin registro."
+  return {
+    title,
+    description,
+    alternates: { canonical: "/preguntas" },
+    openGraph: {
+      type:        "website",
+      title,
+      description: expose
+        ? "Banco completo de preguntas del examen teórico DGT con respuestas y explicaciones."
+        : "Banco de preguntas oficiales del examen teórico DGT con respuestas y explicaciones.",
+    },
+  }
 }
 
 /**
  * /preguntas — Índice maestro de preguntas indexables.
  *
- * Propósito SEO: que las ~210 preguntas FREE estén linkadas desde una
- * sola página, agrupadas por codigoTema. Google crawlea todos los
- * enlaces y descubre las URLs individuales sin depender exclusivamente
- * del sitemap.xml (internal linking pesa más que sitemap).
+ * Propósito SEO: que cada pregunta indexable esté linkada desde una
+ * sola página, agrupada por codigoTema. Google crawlea todos los
+ * enlaces y descubre las URLs individuales — esto pesa MUCHO más
+ * que el sitemap.xml (que solo discovery, sin pasar PageRank ni
+ * anchor text).
+ *
+ * Tamaño según el toggle SEO_EXPOSE_PRO_QUESTIONS:
+ *  - OFF: ~210 preguntas FREE de permiso-b
+ *  - ON:  ~2.500 (todas las categorías + todos los tiers)
  *
  * UX: las preguntas se muestran agrupadas por tema en <details>
  * colapsables. Por defecto desplegado el primer tema; los demás
@@ -39,16 +56,24 @@ export const metadata: Metadata = {
  * el enunciado entero — Google ve un sitemap interno claro.
  */
 export default async function PreguntasIndexPage() {
-  // Carga TODAS las FREE de permiso-b. La aprobación IA (aiApproved !=
-  // false) filtra las descartadas; null o true se muestran.
+  // Si el toggle SEO está ON, listamos TODO. Si OFF, solo FREE de permiso-b.
+  const expose = await isSeoExposeProQuestions()
   const questions = await db.question.findMany({
-    where: {
-      tier: "FREE",
-      testQuestions: {
-        some: { test: { category: { slug: FREE_CATEGORY_SLUG } } },
-      },
-      OR: [{ aiApproved: { not: false } }, { aiApproved: null }],
-    },
+    where: expose
+      ? {
+          // ON: cualquier tier, cualquier categoría. Solo excluimos las
+          // AI descartadas y las que no estén asociadas a ningún test.
+          testQuestions: { some: {} },
+          OR: [{ aiApproved: { not: false } }, { aiApproved: null }],
+        }
+      : {
+          // OFF: solo FREE de permiso-b.
+          tier: "FREE",
+          testQuestions: {
+            some: { test: { category: { slug: FREE_CATEGORY_SLUG } } },
+          },
+          OR: [{ aiApproved: { not: false } }, { aiApproved: null }],
+        },
     orderBy: [
       { codigoTema: "asc" },
       { id:         "asc" },
@@ -57,6 +82,13 @@ export default async function PreguntasIndexPage() {
       id:         true,
       enunciado:  true,
       codigoTema: true,
+      // Necesitamos la categoría real para construir la URL — no todas
+      // las preguntas son de permiso-b cuando el toggle está ON.
+      testQuestions: {
+        take:  1,
+        orderBy: { test: { testNumber: "asc" } },
+        select: { test: { select: { category: { select: { slug: true, name: true } } } } },
+      },
     },
   })
 
@@ -92,11 +124,25 @@ export default async function PreguntasIndexPage() {
             Preguntas del examen DGT
           </h1>
           <p className="lead" style={{ marginTop: 10 }}>
-            Banco de preguntas oficiales del examen teórico del{" "}
-            <b>Permiso B</b> organizadas por tema. Cada pregunta lleva
-            su respuesta correcta y explicación detallada — gratis y
-            sin registro. Si quieres practicar tests completos con
-            cronómetro, hazlo desde la <Link href="/">página de inicio</Link>.
+            {expose ? (
+              <>
+                Banco completo de preguntas oficiales del examen teórico
+                DGT — <b>Permiso B</b>, <b>Repaso final</b> y{" "}
+                <b>ADAS</b> — organizadas por tema. Cada pregunta lleva
+                su respuesta correcta y explicación detallada. Si quieres
+                practicar tests completos con cronómetro, hazlo desde la{" "}
+                <Link href="/">página de inicio</Link>.
+              </>
+            ) : (
+              <>
+                Banco de preguntas oficiales del examen teórico del{" "}
+                <b>Permiso B</b> organizadas por tema. Cada pregunta
+                lleva su respuesta correcta y explicación detallada —
+                gratis y sin registro. Si quieres practicar tests
+                completos con cronómetro, hazlo desde la{" "}
+                <Link href="/">página de inicio</Link>.
+              </>
+            )}
           </p>
         </div>
       </header>
@@ -152,10 +198,15 @@ export default async function PreguntasIndexPage() {
             <ul style={{ margin: 0, padding: "0 18px 18px", listStyle: "none" }}>
               {items.map((q) => {
                 const slug = questionToSlug({ id: q.id, enunciado: q.enunciado })
+                // Cogemos la categoría real (vía testQuestions). Fallback
+                // a permiso-b si por lo que sea no hay test asociado (no
+                // debería pasar — la query exige al menos un test).
+                const cat = q.testQuestions[0]?.test.category
+                const catSlug = cat?.slug ?? FREE_CATEGORY_SLUG
                 return (
                   <li key={q.id} style={{ borderTop: "1px solid var(--slate-100)" }}>
                     <Link
-                      href={`/preguntas/${FREE_CATEGORY_SLUG}/${slug}`}
+                      href={`/preguntas/${catSlug}/${slug}`}
                       style={{
                         display:        "flex",
                         alignItems:     "center",
@@ -168,7 +219,31 @@ export default async function PreguntasIndexPage() {
                         textDecoration: "none",
                       }}
                     >
-                      <span style={{ flex: 1 }}>{q.enunciado}</span>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        {/* Cuando el toggle ON mezcla categorías, mostramos
+                            un mini-badge con la categoría para que el user
+                            sepa de dónde viene cada pregunta. */}
+                        {expose && cat && cat.slug !== FREE_CATEGORY_SLUG && (
+                          <span
+                            style={{
+                              display:       "inline-block",
+                              fontSize:      10.5,
+                              fontWeight:    800,
+                              padding:       "1px 6px",
+                              borderRadius:  4,
+                              background:    "rgba(168, 85, 247, 0.10)",
+                              color:         "rgb(126, 34, 206)",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.04em",
+                              marginRight:   8,
+                              verticalAlign: "middle",
+                            }}
+                          >
+                            {cat.name}
+                          </span>
+                        )}
+                        {q.enunciado}
+                      </span>
                       <ArrowRight className="h-4 w-4 flex-shrink-0" style={{ color: "var(--orange-600)" }} />
                     </Link>
                   </li>
