@@ -1,64 +1,41 @@
 /**
  * Sentry SERVER init — corre en cada lambda / nodo de Next.
  *
- * Kill switch admin: FEATURE_SENTRY (en /admin). La lectura es async via
- * DB, así que la cacheamos con TTL 30s en módulo. Los primeros 30s tras
- * arrancar el server siempre van como `true` (optimista — preferimos
- * reportar eventos de más que perderlos durante el warmup).
+ * El DSN viene de getEffectiveSecret("NEXT_PUBLIC_SENTRY_DSN"):
+ *   1. Lo lee de AppConfig (encrypted) si está configurado desde /admin/secrets
+ *   2. Fallback a process.env.NEXT_PUBLIC_SENTRY_DSN si no hay row en DB
+ *   3. Si ambos vacíos → no init (no-op silent)
+ *
+ * Init es async (fire-and-forget). En la práctica añade ~10ms al primer
+ * request. Si un error ocurre durante esa ventana no se reportará — es
+ * trade-off aceptable para permitir configuración via /admin sin redeploy.
+ *
+ * Kill switch: vacía la entrada NEXT_PUBLIC_SENTRY_DSN en /admin/secrets
+ * y borra (o pon vacío) el env var fallback. Los nuevos requests dejarán
+ * de reportar después del próximo cold-start del lambda.
  */
 import * as Sentry from "@sentry/nextjs"
 import { scrubPII } from "@/lib/sentryScrub"
+import { getEffectiveSecret } from "@/lib/secretCatalog"
 
-const DSN = process.env.NEXT_PUBLIC_SENTRY_DSN
 const ENV = process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? "development"
 
-if (DSN) {
+void (async () => {
+  const dsn = await getEffectiveSecret("NEXT_PUBLIC_SENTRY_DSN")
+  if (!dsn) return
+
   Sentry.init({
-    dsn:              DSN,
+    dsn,
     environment:      ENV,
     tracesSampleRate: ENV === "production" ? 0.1 : 1.0,
-    beforeSend:       wrapWithKillSwitch(scrubPII),
-    // No queremos reportar 404s ni redirects normales — Next.js los lanza
-    // como excepciones internas (NEXT_NOT_FOUND, NEXT_REDIRECT) pero son
-    // flujo esperado, no errores reales.
+    beforeSend:       scrubPII,
+    // Errores que NO queremos reportar (flujo esperado de Next.js):
+    //   NEXT_NOT_FOUND, NEXT_REDIRECT son señales internas que se tiran
+    //   como excepciones pero son control flow normal.
     ignoreErrors: [
       "NEXT_NOT_FOUND",
       "NEXT_REDIRECT",
       "NEXT_HTTP_ERROR_FALLBACK",
     ],
   })
-}
-
-// ── Kill switch via /admin (FEATURE_SENTRY) ─────────────────────────────
-//
-// beforeSend es sync, pero getConfig es async. Solución: cacheamos el
-// valor en módulo con TTL 30s. En el primer evento desde el arranque,
-// disparamos un fetch async sin bloquear (default optimista = true).
-// Si /admin pone FEATURE_SENTRY=false, los eventos dejarán de subir en
-// ~30s sin redeploy.
-
-let _enabled       = true
-let _lastCheckAt   = 0
-const REFRESH_MS   = 30_000
-
-function refreshFlagIfStale(): void {
-  const now = Date.now()
-  if (now - _lastCheckAt < REFRESH_MS) return
-  _lastCheckAt = now
-  // No `await` — fire-and-forget para no bloquear beforeSend.
-  // Import dinámico para evitar ciclos al cargar el config en build.
-  import("@/lib/configCatalog")
-    .then((m) => m.isFeatureSentryEnabled())
-    .then((v) => { _enabled = v })
-    .catch(() => { /* mantenemos último valor conocido si falla la BBDD */ })
-}
-
-function wrapWithKillSwitch(
-  inner: (event: Sentry.ErrorEvent) => Sentry.ErrorEvent | null
-): (event: Sentry.ErrorEvent) => Sentry.ErrorEvent | null {
-  return (event) => {
-    refreshFlagIfStale()
-    if (!_enabled) return null
-    return inner(event)
-  }
-}
+})()

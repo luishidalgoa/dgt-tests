@@ -117,14 +117,6 @@ export const CONFIG_CATALOG: ConfigEntry[] = [
     description: "Si está OFF, /register devuelve 'Registros cerrados temporalmente'.",
     category:    "features",
   },
-  {
-    key:         "FEATURE_SENTRY",
-    type:        "boolean",
-    default:     true,
-    label:       "Sentry · reporting de errores en servidor",
-    description: "Kill switch del lado servidor para Sentry. Si está OFF, los eventos del backend se dejan de subir (TTL 30s, sin redeploy). El DSN/ORG/PROJECT/AUTH_TOKEN siguen siendo env vars en Vercel — no se pueden cambiar desde aquí porque van baked al build. Para apagar el reporting del cliente: vacía NEXT_PUBLIC_SENTRY_DSN en Vercel y redeploy.",
-    category:    "features",
-  },
 
   // ── Messages ───────────────────────────────────────────────────
   {
@@ -254,15 +246,6 @@ export async function isFeatureEnabled(name: FeatureName): Promise<boolean> {
   const key = FEATURE_KEY_MAP[name]
   if (!key) return false   // key desconocida → cerrada por defecto
   return getConfig(key, true)
-}
-
-/**
- * Sentry kill switch (lado servidor). Lo lee sentry.server.config.ts en
- * cada llamada a `beforeSend` (cacheado 30s). Default true: si la entrada
- * no existe en BBDD, asumimos que queremos reportar errores.
- */
-export async function isFeatureSentryEnabled(): Promise<boolean> {
-  return getConfig("FEATURE_SENTRY", true)
 }
 
 export async function getWelcomeMessage(): Promise<string> {

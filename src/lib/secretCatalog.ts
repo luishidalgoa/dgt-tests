@@ -28,6 +28,23 @@ export interface SecretEntry {
    * hacer un health check en vivo con la key + modelo configurados.
    */
   aiProvider?:  "gemini" | "groq"
+  /**
+   * Si se define, esta entry se agrupa con otras del mismo `group` en un
+   * <details> colapsable en /admin/secrets. Útil para integrarciones con
+   * varias variables (Sentry: DSN + org + project + auth_token).
+   */
+  group?:       string
+  /**
+   * "build" → solo se usa al `next build` (subir source maps, etc.).
+   *           Si lo guardas en /admin, el runtime NO lo lee — sirve como
+   *           registro centralizado para que también lo pongas en
+   *           Vercel env vars.
+   * "runtime" → el server lo lee en cada request (vía getEffectiveSecret).
+   * "client-build" → se baked en el bundle del cliente al build.
+   *           Igual que "build", el admin sirve como registro.
+   * Default (undefined): runtime.
+   */
+  scope?:       "build" | "runtime" | "client-build"
 }
 
 export const SECRET_CATALOG: SecretEntry[] = [
@@ -67,6 +84,48 @@ export const SECRET_CATALOG: SecretEntry[] = [
     description:  "Contraseña de aplicación (16 chars) para enviar emails vía SMTP de Gmail.",
     formatHint:   "xxxx xxxx xxxx xxxx (con o sin espacios)",
     providerUrl:  "https://myaccount.google.com/apppasswords",
+  },
+
+  // ── Sentry · Monitoreo de errores ────────────────────────────────────
+  // Grupo colapsable en /admin/secrets. El server lee el DSN runtime
+  // (sentry.server.config.ts). ORG/PROJECT/AUTH_TOKEN se usan al build
+  // (next.config.ts) — la app los lee de la DB si los pones aquí, o
+  // del env var como fallback.
+  {
+    key:          "NEXT_PUBLIC_SENTRY_DSN",
+    label:        "Sentry · DSN",
+    description:  "URL de ingest del proyecto. El server lo lee desde aquí en cada request (vía getEffectiveSecret). NOTA: el cliente lo necesita baked al build → también ponlo como NEXT_PUBLIC_SENTRY_DSN en Vercel env vars.",
+    formatHint:   "https://<key>@<org-id>.ingest.<region>.sentry.io/<project-id>",
+    providerUrl:  "https://luishidalgoa.sentry.io/projects/javascript-nextjs/getting-started/",
+    group:        "Sentry",
+    scope:        "runtime",
+  },
+  {
+    key:          "SENTRY_ORG",
+    label:        "Sentry · Org slug",
+    description:  "Slug de la organización en Sentry. Se usa al `next build` para subir source maps. Si lo guardas aquí + tienes DATABASE_URL durante el build, withSentryConfig lo lee de la DB; si no, cae al env var.",
+    formatHint:   "luishidalgoa",
+    providerUrl:  "https://luishidalgoa.sentry.io/settings/organization/",
+    group:        "Sentry",
+    scope:        "build",
+  },
+  {
+    key:          "SENTRY_PROJECT",
+    label:        "Sentry · Project slug",
+    description:  "Slug del proyecto en Sentry. Igual que ORG, se usa al build para subir source maps.",
+    formatHint:   "javascript-nextjs",
+    providerUrl:  "https://luishidalgoa.sentry.io/projects/",
+    group:        "Sentry",
+    scope:        "build",
+  },
+  {
+    key:          "SENTRY_AUTH_TOKEN",
+    label:        "Sentry · Auth token",
+    description:  "Token con scopes project:releases + project:read. SECRETO. Se usa al build para subir source maps. Generar en Sentry → Settings → Auth Tokens → Create token.",
+    formatHint:   "sntrys_... o sntryu_...",
+    providerUrl:  "https://luishidalgoa.sentry.io/settings/account/api/auth-tokens/",
+    group:        "Sentry",
+    scope:        "build",
   },
 ]
 

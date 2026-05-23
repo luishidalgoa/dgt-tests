@@ -1,11 +1,11 @@
 import { db } from "@/lib/db"
-import { SECRET_CATALOG, maskSecret } from "@/lib/secretCatalog"
+import { SECRET_CATALOG, type SecretEntry, maskSecret } from "@/lib/secretCatalog"
 import { decryptSecret } from "@/lib/crypto"
 import { detectRuntimeEnv, detectStripeMode } from "@/lib/runtimeEnv"
 import { detectEnvFiles, getEnvFileForVar } from "@/lib/envFiles"
 import { SecretForm } from "./SecretForm"
 import { TestAIConnectionButton } from "@/components/TestAIConnectionButton"
-import { KeyRound, ExternalLink, Cloud, Laptop } from "lucide-react"
+import { KeyRound, ExternalLink, Cloud, Laptop, ChevronRight } from "lucide-react"
 
 export const dynamic = "force-dynamic"
 
@@ -75,8 +75,23 @@ export default async function AdminSecretsPage() {
         </span>
       </div>
 
-      <div className="space-y-5">
-        {SECRET_CATALOG.map(entry => {
+      {(() => {
+        // Particionamos en (a) flat = entries sin group, (b) groups = Map de
+        // group→entries. Renderizamos primero las flat tal cual, después
+        // cada group como <details> colapsable.
+        const flat: SecretEntry[]                    = []
+        const groups: Map<string, SecretEntry[]>     = new Map()
+        for (const e of SECRET_CATALOG) {
+          if (e.group) {
+            const arr = groups.get(e.group) ?? []
+            arr.push(e)
+            groups.set(e.group, arr)
+          } else {
+            flat.push(e)
+          }
+        }
+
+        function renderCard(entry: SecretEntry) {
           const row = rowsByKey.get(entry.key)
           let preview: string | null = null
           let effectiveValue: string | null = null
@@ -89,9 +104,7 @@ export default async function AdminSecretsPage() {
             }
           }
           const envFallback = process.env[entry.key] ?? null
-          // Si no hay override en BBDD, el valor efectivo es el del env
           if (!effectiveValue && envFallback) effectiveValue = envFallback
-          // Detectar live/test SOLO para keys Stripe (incluyendo el price_id)
           const isStripeKey = entry.key.startsWith("STRIPE_") || entry.key.includes("STRIPE")
           const stripeMode  = isStripeKey ? detectStripeMode(effectiveValue) : "unknown"
           return (
@@ -103,6 +116,11 @@ export default async function AdminSecretsPage() {
                     <span className="font-mono-tabular" style={{ marginLeft: 8, fontSize: 11, color: "var(--slate-400)", fontWeight: 500 }}>
                       {entry.key}
                     </span>
+                    {entry.scope === "build" && (
+                      <span title="Solo se usa al `next build` (no en cada request)" style={{ marginLeft: 8, fontSize: 10, padding: "1px 6px", borderRadius: 999, background: "rgba(168, 85, 247, 0.12)", color: "rgb(126, 34, 206)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                        build-time
+                      </span>
+                    )}
                   </div>
                   <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "var(--slate-500)", lineHeight: 1.45 }}>
                     {entry.description}
@@ -131,11 +149,7 @@ export default async function AdminSecretsPage() {
               )}
 
               {!row && envFallback && (() => {
-                // Detectamos el ARCHIVO concreto que aporta el valor en local.
-                // En Vercel no hay archivos físicos → mostramos "Vercel Env Variables".
-                const sourceFile = runtime.isLocal
-                  ? getEnvFileForVar(entry.key)
-                  : null
+                const sourceFile = runtime.isLocal ? getEnvFileForVar(entry.key) : null
                 return (
                   <div style={{ fontSize: 12, color: "var(--slate-500)", marginBottom: 8 }}>
                     Usando el valor de{" "}
@@ -159,14 +173,8 @@ export default async function AdminSecretsPage() {
 
               <SecretForm secretKey={entry.key} hasValue={Boolean(row)} />
 
-              {/* Botón "Probar conexión" solo para API keys de proveedores
-                  de IA. Hace un ping real al modelo configurado y reporta
-                  latencia + ok/error vía toast. */}
               {entry.aiProvider && (
-                <TestAIConnectionButton
-                  provider={entry.aiProvider}
-                  label={entry.label}
-                />
+                <TestAIConnectionButton provider={entry.aiProvider} label={entry.label} />
               )}
 
               {entry.providerUrl && (
@@ -189,8 +197,61 @@ export default async function AdminSecretsPage() {
               )}
             </div>
           )
-        })}
-      </div>
+        }
+
+        return (
+          <div className="space-y-5">
+            {flat.map(renderCard)}
+            {Array.from(groups.entries()).map(([groupName, entries]) => {
+              // Cuenta entries con valor (en DB o env) para que el header
+              // muestre "3/4 configurados".
+              const configured = entries.filter((e) => {
+                return rowsByKey.has(e.key) || Boolean(process.env[e.key])
+              }).length
+              return (
+                <details key={groupName} className="card-soft" style={{ padding: 0, overflow: "hidden" }}>
+                  <summary style={{
+                    cursor: "pointer",
+                    padding: "14px 18px",
+                    listStyle: "none",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    fontWeight: 800,
+                    fontSize: 15,
+                    background: "rgba(148, 163, 184, 0.06)",
+                    userSelect: "none",
+                  }}>
+                    <ChevronRight className="h-4 w-4 secret-group-chevron" style={{ transition: "transform 0.15s", flexShrink: 0 }} />
+                    <span style={{ flex: 1 }}>{groupName}</span>
+                    <span style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      padding: "2px 8px",
+                      borderRadius: 999,
+                      background: configured === entries.length
+                        ? "rgba(34, 197, 94, 0.15)"
+                        : configured === 0
+                        ? "rgba(239, 68, 68, 0.12)"
+                        : "rgba(245, 158, 11, 0.15)",
+                      color: configured === entries.length
+                        ? "var(--green-d)"
+                        : configured === 0
+                        ? "var(--red-600)"
+                        : "var(--amber-d, #92400e)",
+                    }}>
+                      {configured}/{entries.length} configurados
+                    </span>
+                  </summary>
+                  <div style={{ padding: "12px 18px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
+                    {entries.map(renderCard)}
+                  </div>
+                </details>
+              )
+            })}
+          </div>
+        )
+      })()}
     </div>
   )
 }
