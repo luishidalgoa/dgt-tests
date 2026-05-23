@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
+import { imageUrl } from "@/lib/imageUrl"
 import {
   CheckCircle2,
   XCircle,
@@ -48,6 +49,11 @@ export default function PreviewResultsPage() {
   const [result, setResult] = useState<GuestResult | null>(null)
   const [loaded, setLoaded] = useState(false)
 
+  // Mount-once effect que lee sessionStorage para hidratar el resultado
+  // del invitado tras submit del test. Los setState aquí son intencionales
+  // (es el camino normal de hidratación SSR→client). Desactivamos
+  // react-hooks/set-state-in-effect para todo el bloque del effect.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem("dgt:guest-result")
@@ -63,6 +69,7 @@ export default function PreviewResultsPage() {
       setLoaded(true)
     }
   }, [])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   if (!loaded) {
     return (
@@ -237,7 +244,7 @@ function AnswerCard({ answer, index }: { answer: AnswerDetail; index: number }) 
           {answer.imagen ? (
             <div className="relative aspect-square rounded-xl overflow-hidden" style={{ background: "var(--slate-100)" }}>
               <Image
-                src={`/images/${answer.imagen}`}
+                src={imageUrl(answer.imagen)}
                 alt={`Pregunta ${index}`}
                 fill
                 className="object-contain"

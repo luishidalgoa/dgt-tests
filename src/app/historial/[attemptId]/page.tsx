@@ -3,6 +3,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { db } from "@/lib/db"
 import { requireUser } from "@/lib/auth"
+import { imageUrl } from "@/lib/imageUrl"
 import { findManualSectionsForCodes } from "@/lib/manual"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -135,7 +136,7 @@ export default async function HistoryDetailPage({ params }: PageProps) {
                     {a.question.imagen ? (
                       <div className="relative aspect-square bg-slate-100 rounded overflow-hidden">
                         <Image
-                          src={`/images/${a.question.imagen}`}
+                          src={imageUrl(a.question.imagen)}
                           alt={`Pregunta ${idx + 1}`}
                           fill
                           className="object-contain"

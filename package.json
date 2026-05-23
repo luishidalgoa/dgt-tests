@@ -40,6 +40,7 @@
     "stripe:audit": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/audit-stripe-customers.ts",
     "stripe:listen": "stripe listen --forward-to http://localhost:4321/api/webhooks/stripe",
     "images:copy": "tsx scripts/copy-images.ts",
+    "images:upload-r2": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/upload-images-to-r2.ts",
     "manual:import": "tsx --env-file=.env scripts/import-manual.ts",
     "manual:extract-skeleton": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/extract-manual-skeleton.ts",
     "manual:infer-titles": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/infer-subblock-titles.ts",
@@ -73,6 +74,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@aws-sdk/client-s3": "^3.1053.0",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",

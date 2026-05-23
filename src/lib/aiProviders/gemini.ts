@@ -81,9 +81,12 @@ function buildPrompt(p: AIQuestionPayload): string {
  *    que ya tarda 2-3s en respuesta de Gemini.
  */
 async function readImageBase64(imageFilename: string): Promise<{ data: string; mime: string } | null> {
-  const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app"
+  // Usa el helper imageUrl que respeta NEXT_PUBLIC_IMAGE_CDN_URL si está
+  // configurado (prod, CDN externo R2). Fallback a APP_URL/images/ en dev
+  // local sin CDN configurado.
+  const { absoluteImageUrl } = await import("@/lib/imageUrl")
   try {
-    const res = await fetch(`${APP_URL}/images/${imageFilename}`)
+    const res = await fetch(absoluteImageUrl(imageFilename))
     if (!res.ok) return null
     const buf = Buffer.from(await res.arrayBuffer())
     const ext = path.extname(imageFilename).toLowerCase()

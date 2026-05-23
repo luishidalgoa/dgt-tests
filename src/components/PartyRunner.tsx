@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import Image from "next/image"
 import { Loader2, Trophy, Zap } from "lucide-react"
 import type { PartyState } from "@/lib/party"
+import { imageUrl } from "@/lib/imageUrl"
 
 interface QuestionDTO {
   id:         number
@@ -168,7 +169,7 @@ export function PartyRunner({ code }: { code: string }) {
             <div>
               {q.imagen ? (
                 <div className="relative aspect-square rounded-xl overflow-hidden" style={{ background: "var(--slate-100)" }}>
-                  <Image src={`/images/${q.imagen}`} alt={`Pregunta ${current + 1}`} fill className="object-contain" sizes="260px" priority />
+                  <Image src={imageUrl(q.imagen)} alt={`Pregunta ${current + 1}`} fill className="object-contain" sizes="260px" priority />
                 </div>
               ) : (
                 <div className="aspect-square rounded-xl flex items-center justify-center" style={{ background: "var(--slate-100)", color: "var(--slate-300)" }}>

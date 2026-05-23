@@ -3,6 +3,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { db } from "@/lib/db"
 import { getPartyMembership } from "@/lib/party-me"
+import { imageUrl } from "@/lib/imageUrl"
 import { scoreForAnswer } from "@/lib/party"
 import { findManualSectionsForCodes } from "@/lib/manual"
 import { ManualButton } from "@/components/ManualButton"
@@ -201,7 +202,7 @@ export default async function PartyReviewPage({ params }: PageProps) {
                   {q.imagen ? (
                     <div className="relative aspect-square rounded-xl overflow-hidden" style={{ background: "var(--slate-100)" }}>
                       <Image
-                        src={`/images/${q.imagen}`}
+                        src={imageUrl(q.imagen)}
                         alt={`Pregunta ${idx + 1}`}
                         fill
                         className="object-contain"

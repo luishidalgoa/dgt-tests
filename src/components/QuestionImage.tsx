@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import Image from "next/image"
+import { imageUrl } from "@/lib/imageUrl"
 import {
   Dialog,
   DialogContent,
@@ -47,7 +48,7 @@ export function QuestionImage({ src, alt, title, size = 300 }: Props) {
           aria-label="Ampliar imagen"
         >
           <Image
-            src={`/images/${src}`}
+            src={imageUrl(src)}
             alt={alt}
             fill
             className="object-contain transition-transform group-hover:scale-[1.02]"
@@ -87,7 +88,7 @@ export function QuestionImage({ src, alt, title, size = 300 }: Props) {
           }}
         >
           <Image
-            src={`/images/${src}`}
+            src={imageUrl(src)}
             alt={`${alt} (ampliada)`}
             fill
             className="object-contain"

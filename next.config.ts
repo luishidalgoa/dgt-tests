@@ -83,6 +83,17 @@ const nextConfig: NextConfig = {
   },
 
   /**
+   * remotePatterns: el componente next/image bloquea por defecto URLs
+   * de dominios externos. Si NEXT_PUBLIC_IMAGE_CDN_URL apunta a un CDN
+   * externo (Cloudflare R2, etc.), su hostname se añade dinámicamente
+   * abajo en el bloque async. Aquí dejamos un patrón vacío que el
+   * wrapper sobreescribe.
+   */
+  images: {
+    remotePatterns: [],
+  },
+
+  /**
    * Redirects 301 permanentes.
    *
    * /sobre → /sobre-mi  (renombrado el 2026-05-22; mantenemos el redirect
@@ -111,6 +122,27 @@ export default async (): Promise<NextConfig> => {
   let sentryOrg       = process.env.SENTRY_ORG
   let sentryProject   = process.env.SENTRY_PROJECT
   let sentryAuthToken = process.env.SENTRY_AUTH_TOKEN
+
+  // Si hay CDN externo configurado para imágenes, añadimos su hostname
+  // a remotePatterns para que next/image lo acepte. Sin esto, next/image
+  // bloquea URLs de dominios no-Vercel por defecto (security feature).
+  const cdnUrl = process.env.NEXT_PUBLIC_IMAGE_CDN_URL
+  if (cdnUrl) {
+    try {
+      const { hostname, protocol } = new URL(cdnUrl)
+      nextConfig.images = {
+        remotePatterns: [
+          {
+            protocol: protocol.replace(":", "") as "https" | "http",
+            hostname,
+          },
+        ],
+      }
+    } catch {
+      // URL mal formada → no añadimos pattern; las imágenes fallarán pero
+      // el build no se rompe.
+    }
+  }
 
   try {
     const { getEffectiveSecret } = await import("./src/lib/secretCatalog")
