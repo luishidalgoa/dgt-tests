@@ -78,6 +78,14 @@ export default async function PreguntasIndexPage() {
         ...QUESTION_VISIBLE_WHERE,
       }
 
+  // Patrón pragmático para evitar el panic conocido del engine en
+  // Prisma 6.19.3 + libsql con `findMany + select-profundo + orderBy
+  // anidado + take` ("no entry found for key"). Hacemos 2 queries:
+  //   1) findMany simple de preguntas (sin relaciones).
+  //   2) raw SQL para mapear questionId → categorySlug/name vía joins.
+  // Es más rápido también: la deep-select hidrataba 2500 sub-objetos
+  // anidados.
+
   const questions = await db.question.findMany({
     where: whereClause,
     orderBy: [
@@ -88,15 +96,24 @@ export default async function PreguntasIndexPage() {
       id:         true,
       enunciado:  true,
       codigoTema: true,
-      // Necesitamos la categoría real para construir la URL — no todas
-      // las preguntas son de permiso-b cuando el toggle está ON.
-      testQuestions: {
-        take:  1,
-        orderBy: { test: { testNumber: "asc" } },
-        select: { test: { select: { category: { select: { slug: true, name: true } } } } },
-      },
     },
   })
+
+  // Mapa questionId → { slug, name }. SQL raw porque la chain
+  // testQuestion→test→category con take+orderBy nested rompe el
+  // engine. Un INNER JOIN plano va perfecto.
+  const catRows = questions.length > 0
+    ? await db.$queryRawUnsafe<{ questionId: number; slug: string; name: string }[]>(
+        `SELECT tq.questionId, c.slug, c.name
+         FROM test_questions tq
+         INNER JOIN tests t      ON t.id = tq.testId
+         INNER JOIN categories c ON c.id = t.categoryId
+         WHERE tq.questionId IN (${questions.map((q) => q.id).join(",")})
+         GROUP BY tq.questionId`,
+      )
+    : []
+  const catByQuestion = new Map<number, { slug: string; name: string }>()
+  for (const r of catRows) catByQuestion.set(r.questionId, { slug: r.slug, name: r.name })
 
   // Agrupa por codigoTema. Si el codigoTema es null → grupo "Otras".
   const byTema = new Map<string, typeof questions>()
@@ -204,10 +221,12 @@ export default async function PreguntasIndexPage() {
             <ul style={{ margin: 0, padding: "0 18px 18px", listStyle: "none" }}>
               {items.map((q) => {
                 const slug = questionToSlug({ id: q.id, enunciado: q.enunciado })
-                // Cogemos la categoría real (vía testQuestions). Fallback
-                // a permiso-b si por lo que sea no hay test asociado (no
-                // debería pasar — la query exige al menos un test).
-                const cat = q.testQuestions[0]?.test.category
+                // Cogemos la categoría real del Map construido vía SQL
+                // raw. Fallback a permiso-b si por lo que sea no se
+                // encontró (huérfana sin test → tampoco debería pasar
+                // por el filtro de testQuestions cuando OFF, y en ON
+                // simplemente la mostramos como permiso-b).
+                const cat = catByQuestion.get(q.id)
                 const catSlug = cat?.slug ?? FREE_CATEGORY_SLUG
                 return (
                   <li key={q.id} style={{ borderTop: "1px solid var(--slate-100)" }}>
