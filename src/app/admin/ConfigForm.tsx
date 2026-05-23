@@ -66,7 +66,13 @@ export function ConfigForm({ entry, current }: Props) {
         )}
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      {/*
+        En mobile el field (select / textarea / radio cards) + el botón
+        Guardar no caben en una fila — el Guardar se desbordaba. Solución:
+        stack vertical en mobile, fila en sm+ (igual que desktop).
+        El botón Guardar lleva self-start en mobile para alinear a la izq.
+      */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-2.5">
         {entry.options && entry.options.length > 0 && entry.optionVariant === "cards" ? (
           <CardsField
             entryKey={entry.key}
@@ -106,6 +112,7 @@ export function ConfigForm({ entry, current }: Props) {
         <button
           type="submit"
           disabled={isPending}
+          className="self-start sm:self-auto"
           style={{
             padding: "8px 14px",
             borderRadius: 8,
@@ -119,6 +126,7 @@ export function ConfigForm({ entry, current }: Props) {
             display: "inline-flex",
             alignItems: "center",
             gap: 6,
+            flexShrink: 0,
           }}
         >
           {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
