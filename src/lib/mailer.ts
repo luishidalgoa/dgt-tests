@@ -25,6 +25,25 @@ import nodemailer from "nodemailer"
 import type { Transporter } from "nodemailer"
 import { getEffectiveSecret } from "@/lib/secretCatalog"
 import { captureAppException } from "@/lib/sentryUser"
+import { shouldNotifyOnce } from "@/lib/sentryThrottle"
+
+/**
+ * Códigos de error SISTÉMICOS de nodemailer/Gmail SMTP — el mismo
+ * error se reproducirá en cada send hasta que se arregle la config
+ * o vuelva el servicio. Aplicamos throttle (1 evento por 30min) para
+ * no spamear Sentry con 200 eventos idénticos durante un fallo.
+ *
+ *   EAUTH       → password incorrecto / 2FA cambió / app password revocada
+ *   ECONNECTION → no podemos conectar a smtp.gmail.com (red, DNS, firewall)
+ *   ETIMEDOUT   → conexión abierta pero Gmail no responde (rate limit
+ *                 oculto, servidor sobrecargado)
+ *
+ * Códigos PER-EMAIL (no throttle, queremos cada uno):
+ *   EENVELOPE   → email destinatario mal formateado / rebotado por Gmail
+ *   EMESSAGE    → mensaje rechazado (spam, demasiado grande)
+ *   ESTREAM     → fallo al leer body, raro
+ */
+const SYSTEMIC_SMTP_CODES = new Set(["EAUTH", "ECONNECTION", "ETIMEDOUT"])
 
 let _transporter: Transporter | null = null
 
@@ -89,24 +108,33 @@ export async function sendMail(opts: SendMailOpts): Promise<boolean> {
     console.error("[mailer] error enviando email:", err)
     // Sentry: el caller (webhook de payment_failed, recovery email, etc.)
     // hace fire-and-forget e ignora el `false` que devolvemos. Sin Sentry
-    // los emails fallidos serían silenciosos. Capturamos con tags útiles:
-    // subject suele decir el template (no PII), to lo hasheamos para no
-    // mandar el email plano a Sentry (RGPD).
-    const recipientHash = await hashEmailForLog(opts.to)
-    captureAppException(err, {
-      category: "email",
-      tags: {
-        provider:  "gmail-smtp",
-        // err.code típico de nodemailer: EAUTH, ECONNECTION, EENVELOPE,
-        // EMESSAGE, ESTREAM, ETIMEDOUT
-        errorCode: (err as { code?: string })?.code ?? "unknown",
-      },
-      extra: {
-        subject:       opts.subject,
-        recipientHash, // sha256 del email destinatario, suficiente para
-                       // correlacionar quejas sin filtrar el email plano
-      },
-    })
+    // los emails fallidos serían silenciosos.
+    const code          = (err as { code?: string })?.code ?? "unknown"
+    const isSystemic    = SYSTEMIC_SMTP_CODES.has(code)
+    // Throttle: si Gmail se cae o se cambió la app password, los próximos
+    // 200 emails fallarán todos con el MISMO código → 1 evento basta.
+    // Per-email (EENVELOPE etc.) siempre capturamos para diagnosticar
+    // emails inválidos concretos.
+    const shouldCapture = !isSystemic || shouldNotifyOnce(`mailer:gmail:${code}`)
+    if (shouldCapture) {
+      const recipientHash = await hashEmailForLog(opts.to)
+      captureAppException(err, {
+        category: "email",
+        tags: {
+          provider:  "gmail-smtp",
+          errorCode: code,
+        },
+        extra: {
+          subject:       opts.subject,
+          recipientHash, // sha256 del email destinatario, sin PII plano
+          throttled:     isSystemic ? "first-in-30min" : "no",
+        },
+        // Sistémicos = warning (condición temporal infra).
+        // Per-email = error (algo concreto que se debería arreglar).
+        level:       isSystemic ? "warning" : "error",
+        fingerprint: isSystemic ? ["mailer-systemic", "gmail", code] : undefined,
+      })
+    }
     return false
   }
 }

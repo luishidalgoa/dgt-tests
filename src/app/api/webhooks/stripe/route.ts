@@ -98,6 +98,14 @@ export async function POST(req: NextRequest) {
     // reintentará. Pero si el problema es lógica nuestra (no transitorio),
     // los reintentos seguirán fallando y el user queda en estado raro
     // (pagó, no es PRO). Capturamos para enterarnos en el momento.
+    //
+    // ⚠ INTENCIONAL: aquí NO aplicamos shouldNotifyOnce/throttle como en
+    // AI/mailer. Cada evento de Stripe es ÚNICO (eventId distinto) y
+    // representa un cobro / suscripción / refund de un user concreto.
+    // El admin necesita enterarse de CADA fallo de pago para poder
+    // reconciliar manualmente — perder uno = un user enfadado que
+    // pagó y no recibió acceso. Sentry ya agrupa por stacktrace, así
+    // que si es el mismo bug saldrá como 1 issue con N events.
     captureAppException(err, {
       category: "stripe",
       tags: {
