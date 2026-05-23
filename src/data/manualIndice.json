@@ -1792,22 +1792,22 @@
         "subBloques": [
           {
             "codigo": "Def.2.1",
-            "titulo": "",
+            "titulo": "Definición de vehículos especiales",
             "_preguntas": 2
           },
           {
             "codigo": "Def.2.2",
-            "titulo": "",
+            "titulo": "Vehículos de movilidad personal",
             "_preguntas": 6
           },
           {
             "codigo": "Def.2.3",
-            "titulo": "",
+            "titulo": "Tipos de vehículos especiales",
             "_preguntas": 9
           },
           {
             "codigo": "Def.2.6",
-            "titulo": "",
+            "titulo": "Vehículos de uso compartido",
             "_preguntas": 2
           }
         ]
