@@ -8,6 +8,15 @@ const schema = z.object({
   email:       z.string().trim().toLowerCase().email("Email no válido"),
   password:    z.string().min(6).max(120),
   displayName: z.string().max(80).optional(),
+  /**
+   * RGPD + LSSI (EU): el usuario tiene que dar consentimiento explícito
+   * a los términos y política antes del registro. El front lo valida
+   * con un checkbox required; aquí lo validamos defensivamente por si
+   * alguien hace POST directo al endpoint saltándoselo.
+   */
+  acceptTerms: z.literal(true, {
+    message: "Tienes que aceptar los términos y la política de privacidad",
+  }),
 })
 
 export async function POST(req: Request) {
