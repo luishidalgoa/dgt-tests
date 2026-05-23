@@ -385,18 +385,29 @@ body {
   position: sticky;
   top: 0;
   z-index: 50;
-  backdrop-filter: blur(14px) saturate(160%);
-  -webkit-backdrop-filter: blur(14px) saturate(160%);
-  background: rgba(254, 247, 237, 0.78);
+  /* Fondo OPACO al 100% — antes era rgba(0.78) con backdrop-filter, pero
+     algo en Tailwind v4 resetea el backdrop-filter y el contenido se veía
+     a través al scrollear. Opaco es legible siempre, mismo color que el
+     body así que el cambio visual es imperceptible. */
+  background: rgb(254, 247, 237);
   border-bottom: 1px solid rgba(180, 83, 9, 0.12);
 }
 .nav {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 14px 24px;
+  /* En mobile reducimos padding lateral para dar más espacio al contenido.
+     En sm+ (≥640px) vuelve al padding original 24px de desktop. */
+  padding: 14px 14px;
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 12px;
+  min-width: 0;
+}
+@media (min-width: 640px) {
+  .nav {
+    padding: 14px 24px;
+    gap: 18px;
+  }
 }
 .logo {
   display: flex;
@@ -423,7 +434,26 @@ body {
   display: flex;
   align-items: center;
   gap: 4px;
-  margin-left: 18px;
+  /* En mobile: scroll horizontal con momentum, sin scrollbar visible.
+     Esto permite ver "Inicio · Competir · Stats · Historial · Por temas · Test de errores"
+     deslizando lateralmente, sin que el navbar entero se desborde. */
+  margin-left: 0;
+  overflow-x: auto;
+  overflow-y: visible;
+  min-width: 0;
+  flex: 1 1 0;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+}
+.links::-webkit-scrollbar { display: none; }
+@media (min-width: 640px) {
+  .links {
+    margin-left: 18px;
+    overflow-x: visible;
+    flex: 0 0 auto;
+  }
 }
 .links a {
   padding: 8px 14px;
@@ -432,6 +462,9 @@ body {
   text-decoration: none;
   font-weight: 600;
   font-size: 14px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  scroll-snap-align: start;
   transition: background 0.15s, color 0.15s;
 }
 .links a:hover {
@@ -454,6 +487,20 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
+}
+/* En mobile escondemos el nombre del usuario y el plan badge dentro del
+   .avatar para que solo se vean: inicial avatar + quota IA + settings + logout.
+   En sm+ (≥640px) vuelven a verse normales. */
+.avatar .name,
+.avatar .plan-badge-wrap {
+  display: none;
+}
+@media (min-width: 640px) {
+  .avatar .name,
+  .avatar .plan-badge-wrap {
+    display: inline-flex;
+  }
 }
 .pill-ghost {
   padding: 8px 16px;
