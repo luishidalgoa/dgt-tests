@@ -5,6 +5,7 @@ import { detectRuntimeEnv, detectStripeMode } from "@/lib/runtimeEnv"
 import { detectEnvFiles, getEnvFileForVar } from "@/lib/envFiles"
 import { SecretForm } from "./SecretForm"
 import { TestAIConnectionButton } from "@/components/TestAIConnectionButton"
+import { TestSentryConnectionButton } from "@/components/TestSentryConnectionButton"
 import { KeyRound, ExternalLink, Cloud, Laptop, ChevronRight } from "lucide-react"
 
 export const dynamic = "force-dynamic"
@@ -175,6 +176,13 @@ export default async function AdminSecretsPage() {
 
               {entry.aiProvider && (
                 <TestAIConnectionButton provider={entry.aiProvider} label={entry.label} />
+              )}
+
+              {/* Sentry test: solo en la card del DSN. Las otras 3 entries
+                  (ORG/PROJECT/AUTH_TOKEN) no necesitan test propio — solo
+                  importan al build time, no en runtime. */}
+              {entry.key === "NEXT_PUBLIC_SENTRY_DSN" && (
+                <TestSentryConnectionButton label="Sentry" />
               )}
 
               {entry.providerUrl && (
