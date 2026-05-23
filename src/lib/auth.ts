@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs"
 import { redirect } from "next/navigation"
 import { db } from "@/lib/db"
 import { getSession } from "@/lib/session"
+import { identifyUserInSentry } from "@/lib/sentryUser"
 
 const BCRYPT_ROUNDS = 10
 
@@ -95,11 +96,24 @@ export async function authenticate(identifier: string, password: string) {
   return ok ? user : null
 }
 
-/** Devuelve el usuario logueado o null. Usar en server components / API. */
+/** Devuelve el usuario logueado o null. Usar en server components / API.
+ *
+ * Side-effect: asocia el user al scope de Sentry para que cualquier error
+ * capturado durante este request quede correlacionado en el dashboard.
+ * Si el user es null (request anónimo), limpiamos el scope. */
 export async function getCurrentUser() {
   const session = await getSession()
-  if (!session.userId) return null
-  return db.user.findUnique({ where: { id: session.userId } })
+  if (!session.userId) {
+    identifyUserInSentry(null)
+    return null
+  }
+  const user = await db.user.findUnique({ where: { id: session.userId } })
+  if (user) {
+    identifyUserInSentry({ id: user.id, username: user.username })
+  } else {
+    identifyUserInSentry(null)
+  }
+  return user
 }
 
 /** Igual que getCurrentUser pero redirige a /login si no hay sesión. */

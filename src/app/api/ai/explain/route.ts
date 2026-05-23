@@ -4,6 +4,8 @@ import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
 import { explainQuestion, AIProviderError, type AIExplanationResult } from "@/lib/ai"
 import { consumeToken, getQuotaStatus } from "@/lib/aiQuota"
+import { captureAppException } from "@/lib/sentryUser"
+import { getAIProvider } from "@/lib/configCatalog"
 
 const postSchema = z.object({
   questionId: z.number().int().positive(),
@@ -215,6 +217,25 @@ export async function POST(req: Request) {
     // pero NUNCA lo enviamos al cliente — siempre mapeamos a un mensaje
     // amigable + código que el toast del front puede traducir.
     console.error("[ai/explain] error del provider:", err)
+
+    // Sentry: tragamos el error a nivel HTTP (devolvemos 5xx amigable),
+    // así que captureRequestError NO lo verá. Lo capturamos manualmente
+    // con tags útiles (provider, kind, questionId). El user ya está
+    // identificado en el scope por getCurrentUser arriba.
+    const provider = await getAIProvider().catch(() => "unknown")
+    captureAppException(err, {
+      category: "ai",
+      tags: {
+        provider,
+        kind:       err instanceof AIProviderError ? err.kind : "unknown",
+        withImage:  String(withImage),
+        chargedNow: String(chargedNow),
+      },
+      extra: {
+        questionId,
+        attemptId,
+      },
+    })
 
     if (err instanceof AIProviderError) {
       switch (err.kind) {
