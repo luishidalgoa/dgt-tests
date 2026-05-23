@@ -272,7 +272,9 @@ export function AIExplainPanel({
       <DialogTrigger asChild>
         <button
           type="button"
-          className="inline-flex items-center gap-2"
+          /* min-h-[44px] en mobile para touch target accesible. En sm+
+             se deja al padding natural (≈38px), que en desktop es OK. */
+          className="inline-flex items-center gap-2 min-h-[44px] sm:min-h-0"
           style={{
             padding: "8px 14px",
             borderRadius: 10,

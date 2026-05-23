@@ -20,6 +20,7 @@ export function AuthForm({ mode }: AuthFormProps) {
   const [password,   setPassword]   = useState("")
   const [showPwd,    setShowPwd]    = useState(false)
   const [remember,   setRemember]   = useState(true)
+  const [acceptTerms, setAcceptTerms] = useState(false)      // solo register, opt-in TOS+Privacy
   const [error,      setError]      = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
@@ -29,11 +30,19 @@ export function AuthForm({ mode }: AuthFormProps) {
     e.preventDefault()
     setError(null)
 
+    // Validación opt-in obligatorio (RGPD + LSSI en EU). El servidor
+    // también lo valida defensivamente — si alguien manda POST directo
+    // al endpoint sin acceptTerms, debe rechazar.
+    if (!isLogin && !acceptTerms) {
+      setError("Tienes que aceptar los términos y la política de privacidad para crear la cuenta")
+      return
+    }
+
     startTransition(async () => {
       try {
         const payload = isLogin
           ? { identifier, password, remember }
-          : { username: identifier, email, password }
+          : { username: identifier, email, password, acceptTerms }
         const res = await fetch(`/api/auth/${mode}`, {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
@@ -64,7 +73,12 @@ export function AuthForm({ mode }: AuthFormProps) {
             : "Crea tu cuenta y empieza a practicar"}
         </p>
 
-        <form onSubmit={handleSubmit} noValidate>
+        {/* suppressHydrationWarning en form e inputs porque Chrome Credential
+            Manager (Smart Lock / Autofill) inyecta atributos __gcruniqueid en
+            campos detectados como login antes de que React hidrate. Sin esto,
+            cada render de /login dispara "tree hydrated but some attributes...
+            didn't match" en Chrome móvil/desktop. */}
+        <form onSubmit={handleSubmit} noValidate suppressHydrationWarning>
           <label htmlFor="identifier" className="auth-label">
             {isLogin ? "Usuario o email" : "Usuario"}
           </label>
@@ -88,6 +102,7 @@ export function AuthForm({ mode }: AuthFormProps) {
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
               placeholder={isLogin ? "tu usuario o tu@email.com" : "tu_usuario"}
+              suppressHydrationWarning
               // En register solo letras minúsculas/números/_.-
               {...(isLogin ? {} : { pattern: "[a-zA-Z0-9_.\\-]+" })}
             />
@@ -123,6 +138,7 @@ export function AuthForm({ mode }: AuthFormProps) {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="tu@email.com"
+                  suppressHydrationWarning
                 />
               </div>
               <p
@@ -156,6 +172,7 @@ export function AuthForm({ mode }: AuthFormProps) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder={isLogin ? "••••••••••" : "Mínimo 6 caracteres"}
+              suppressHydrationWarning
             />
             <button
               type="button"
@@ -188,6 +205,37 @@ export function AuthForm({ mode }: AuthFormProps) {
                   </svg>
                 </span>
                 Recordarme en este dispositivo
+              </label>
+            </div>
+          )}
+
+          {!isLogin && (
+            <div className="auth-row auth-row--terms">
+              <label className="auth-remember">
+                <input
+                  type="checkbox"
+                  required
+                  checked={acceptTerms}
+                  onChange={(e) => setAcceptTerms(e.target.checked)}
+                />
+                <span className="auth-check" aria-hidden="true">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="3"
+                    strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                </span>
+                <span>
+                  He leído y acepto los{" "}
+                  <Link
+                    href="/privacidad"
+                    target="_blank"
+                    rel="noopener"
+                    style={{ color: "var(--orange-600)", textDecoration: "underline" }}
+                  >
+                    términos y la política de privacidad
+                  </Link>
+                </span>
               </label>
             </div>
           )}

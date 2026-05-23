@@ -14,8 +14,16 @@ import {
   Target,
   ChevronDown,
   ChevronRight,
-  History,
+  Eye,
 } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { AI_QUOTA_CHANGED_EVENT, type MonthlyQuota } from "@/components/AIExplainPanel"
 
 // ── Tipos ────────────────────────────────────────────────────────────────
@@ -90,10 +98,13 @@ export function DashStatsAnalysis({ history, totalAnswers, aiQuotaRemaining }: P
   const [items, setItems]              = useState<AnalysisHistoryItem[]>(history)
   const [quotaRemaining, setQuotaRem]  = useState<number>(aiQuotaRemaining)
   const [isPending, startTransition]   = useTransition()
-  const [showOlder, setShowOlder]      = useState(false)
+  const [open, setOpen]                = useState(false)
+  // IDs expandidos dentro del modal. El más reciente se expande por defecto.
+  const [expandedIds, setExpandedIds]  = useState<Set<number>>(() => {
+    return history[0] ? new Set([history[0].id]) : new Set()
+  })
 
   const latest        = items[0] ?? null
-  const older         = items.slice(1)
   const hasPrevious   = latest !== null
   const newAnswers    = hasPrevious ? totalAnswers - latest.snapshotAnswers : 0
 
@@ -102,6 +113,14 @@ export function DashStatsAnalysis({ history, totalAnswers, aiQuotaRemaining }: P
   const enoughForRefresh = !hasPrevious || newAnswers >= MIN_NEW_FOR_REFRESH
   const enoughData       = hasPrevious ? enoughForRefresh : enoughInitial
   const disabled         = !enoughData || !enoughTokens || isPending
+
+  function toggleExpanded(id: number) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
 
   function handleGenerate() {
     startTransition(async () => {
@@ -123,23 +142,28 @@ export function DashStatsAnalysis({ history, totalAnswers, aiQuotaRemaining }: P
           }
           return
         }
-        // body = { result, quota, cached, generatedAt, analysisId }
         const newItem: AnalysisHistoryItem = {
           id:               body.analysisId ?? Date.now(),
           result:           body.result,
           generatedAt:      body.generatedAt,
           snapshotAnswers:  totalAnswers,
-          snapshotAttempts: 0,  // no nos lo devuelve el endpoint, no se usa en UI
+          snapshotAttempts: 0,
           snapshotCorrect:  0,
           model:            null,
         }
 
         if (body.cached) {
-          // No insertar duplicado: el más reciente ya es éste.
           toast.info("Sin nuevos datos: mostrando el último análisis (gratis)")
         } else {
-          // Prepend + mantener tope local de MAX_HISTORY_ITEMS
           setItems((prev) => [newItem, ...prev].slice(0, 5))
+          // Expandir el recién generado automáticamente en el modal
+          setExpandedIds((prev) => {
+            const next = new Set(prev)
+            next.add(newItem.id)
+            return next
+          })
+          // Abrir el modal automáticamente al generar uno nuevo
+          setOpen(true)
           toast.success(`Análisis generado · -${COST} tokens`)
         }
 
@@ -153,7 +177,7 @@ export function DashStatsAnalysis({ history, totalAnswers, aiQuotaRemaining }: P
     })
   }
 
-  // ── No hay análisis previo → CTA inicial ──────────────────────────
+  // ─── Caso sin análisis: CTA inicial igual que antes ────────────────
   if (!latest) {
     return (
       <div className="dash-stats-analysis dash-stats-analysis--cta">
@@ -194,81 +218,126 @@ export function DashStatsAnalysis({ history, totalAnswers, aiQuotaRemaining }: P
     )
   }
 
-  // ── Hay historial: el más reciente expandido + acordeón anteriores ──
+  // ─── Caso con análisis: preview + botón abrir modal ─────────────────
   return (
-    <div className="dash-stats-analysis">
+    <div className="dash-stats-analysis dash-stats-analysis--preview">
       <div className="dash-stats-analysis__head">
         <Sparkles className="h-4 w-4" />
         <span>Análisis IA · {formatDate(latest.generatedAt)}</span>
-        <button
-          type="button"
-          onClick={handleGenerate}
-          disabled={disabled}
-          className="dash-stats-analysis__refresh"
-          title={refreshHint({ enoughTokens, enoughForRefresh, hasPrevious, newAnswers, quotaRemaining })}
-        >
-          {isPending ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <RefreshCw className="h-3.5 w-3.5" />
-          )}
-          <span>Actualizar</span>
-        </button>
+        <span className="dash-stats-analysis__count-pill">
+          {items.length} {items.length === 1 ? "análisis" : "análisis"}
+        </span>
       </div>
 
-      {hasPrevious && !enoughForRefresh && (
-        <div className="dash-stats-analysis__hint" style={{ marginTop: 0, marginBottom: 10 }}>
-          {newAnswers === 0
-            ? `Aún no tienes respuestas nuevas desde el último análisis.`
-            : `Llevas ${newAnswers} respuesta${newAnswers === 1 ? "" : "s"} nueva${newAnswers === 1 ? "" : "s"}. Necesitas ${MIN_NEW_FOR_REFRESH} para actualizar.`}
-        </div>
-      )}
+      {/* Preview corto de la valoración más reciente (truncado, 3 líneas) */}
+      <p className="dash-stats-analysis__preview-text">{latest.result.valoracion}</p>
 
-      <AnalysisBody item={latest} />
-
-      {older.length > 0 && (
-        <div className="dash-stats-analysis__history">
-          <button
-            type="button"
-            onClick={() => setShowOlder((v) => !v)}
-            className="dash-stats-analysis__history-toggle"
-            aria-expanded={showOlder}
+      <div className="dash-stats-analysis__preview-actions">
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild>
+            <button type="button" className="dash-stats-analysis__btn-secondary">
+              <Eye className="h-4 w-4" />
+              Ver análisis IA
+            </button>
+          </DialogTrigger>
+          <DialogContent
+            className="!max-w-[min(96vw,820px)] !w-[min(96vw,820px)] !max-h-[90vh] overflow-y-auto"
           >
-            {showOlder ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-            <History className="h-3.5 w-3.5" />
-            <span>
-              {showOlder ? "Ocultar" : "Ver"} anteriores ({older.length})
-            </span>
-          </button>
-          {showOlder && (
-            <div className="dash-stats-analysis__history-list">
-              {older.map((item) => (
-                <details key={item.id} className="dash-stats-analysis__history-item">
-                  <summary>
-                    <span className="dash-stats-analysis__history-date">
-                      {formatDate(item.generatedAt)}
-                    </span>
-                    <span className="dash-stats-analysis__history-summary">
-                      {truncate(item.result.valoracion, 90)}
-                    </span>
-                  </summary>
-                  <AnalysisBody item={item} compact />
-                </details>
-              ))}
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5" style={{ color: "var(--orange-600)" }} />
+                Análisis IA de tu progreso
+              </DialogTitle>
+              <DialogDescription>
+                {items.length === 1
+                  ? "1 análisis en tu historial."
+                  : `${items.length} análisis en tu historial · más reciente arriba.`}
+              </DialogDescription>
+            </DialogHeader>
+
+            {/* Acción global: actualizar */}
+            <div className="dash-stats-modal__actions">
+              <button
+                type="button"
+                onClick={handleGenerate}
+                disabled={disabled}
+                className="dash-stats-analysis__btn"
+                title={refreshHint({ enoughTokens, enoughForRefresh, hasPrevious, newAnswers, quotaRemaining })}
+              >
+                {isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Analizando…
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4" />
+                    Actualizar análisis
+                    <span className="dash-stats-analysis__cost">· {COST} tokens</span>
+                  </>
+                )}
+              </button>
+              {hasPrevious && !enoughForRefresh && (
+                <small className="dash-stats-analysis__hint" style={{ margin: 0 }}>
+                  {newAnswers === 0
+                    ? `Aún no tienes respuestas nuevas desde el último análisis.`
+                    : `Llevas ${newAnswers} respuesta${newAnswers === 1 ? "" : "s"} nueva${newAnswers === 1 ? "" : "s"}. Necesitas ${MIN_NEW_FOR_REFRESH} para actualizar.`}
+                </small>
+              )}
+              {!enoughTokens && enoughData && (
+                <small className="dash-stats-analysis__hint" style={{ margin: 0 }}>
+                  Te faltan tokens: tienes {quotaRemaining}, este análisis cuesta {COST}.
+                </small>
+              )}
             </div>
-          )}
-        </div>
-      )}
+
+            {/* Lista de análisis */}
+            <div className="dash-stats-modal__list">
+              {items.map((item, idx) => {
+                const isLatest = idx === 0
+                const isOpen   = expandedIds.has(item.id)
+                return (
+                  <article
+                    key={item.id}
+                    className={`dash-stats-modal__item${isOpen ? " dash-stats-modal__item--open" : ""}${isLatest ? " dash-stats-modal__item--latest" : ""}`}
+                  >
+                    <button
+                      type="button"
+                      className="dash-stats-modal__item-header"
+                      onClick={() => toggleExpanded(item.id)}
+                      aria-expanded={isOpen}
+                    >
+                      {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      <span className="dash-stats-modal__item-date">{formatDate(item.generatedAt)}</span>
+                      {isLatest && (
+                        <span className="dash-stats-modal__item-badge">Más reciente</span>
+                      )}
+                      <span className="dash-stats-modal__item-summary">
+                        {truncate(item.result.valoracion, 80)}
+                      </span>
+                    </button>
+                    {isOpen && (
+                      <div className="dash-stats-modal__item-body">
+                        <AnalysisBody item={item} />
+                      </div>
+                    )}
+                  </article>
+                )
+              })}
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
     </div>
   )
 }
 
 // ── Subcomponente que pinta el cuerpo de UN análisis ─────────────────────
 
-function AnalysisBody({ item, compact = false }: { item: AnalysisHistoryItem; compact?: boolean }) {
+function AnalysisBody({ item }: { item: AnalysisHistoryItem }) {
   const { result, id } = item
   return (
-    <div className={compact ? "dash-stats-analysis__body dash-stats-analysis__body--compact" : "dash-stats-analysis__body"}>
+    <div className="dash-stats-analysis__body">
       <p className="dash-stats-analysis__valoracion">{result.valoracion}</p>
 
       {result.fortalezas.length > 0 && (
@@ -317,7 +386,6 @@ function AnalysisBody({ item, compact = false }: { item: AnalysisHistoryItem; co
         </div>
       )}
 
-      {/* CTA: test personalizado basado en ESTE análisis */}
       <div className="dash-stats-analysis__cta-row">
         <Link
           href={`/test-personalizado?analysisId=${id}`}

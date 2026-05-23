@@ -224,8 +224,14 @@ export async function analyzeStats(
 
   const opts: AICompleteOptions = {
     jsonMode:    true,
-    temperature: 0.4,   // un poco de criatividad para los consejos
-    maxTokens:   2000,  // analísis estructurado puede ser largo
+    temperature: 0.4,   // un poco de creatividad para los consejos
+    // 8000 tokens. El JSON visible son ~800-1500 tokens, pero los modelos
+    // "thinking" de Gemini (2.5-flash, flash-latest…) gastan VARIOS miles
+    // en pensamiento interno antes de generar la salida. Con 4000 hemos
+    // visto que el output llegaba truncado a mitad de un comentario.
+    // 8000 da margen sobrado; si tu provider/modelo no es thinking, no
+    // pasa nada porque solo cobramos por los tokens realmente generados.
+    maxTokens:   8000,
   }
   const text = await provider.complete(systemPrompt, userPrompt, opts)
 
@@ -238,21 +244,55 @@ export async function analyzeStats(
   let raw: unknown
   try {
     raw = JSON.parse(cleaned)
-  } catch {
+  } catch (parseErr) {
     // Intentar extraer el primer bloque { ... } por si vino con preámbulo
     const m = cleaned.match(/\{[\s\S]*\}/)
     if (!m) {
-      throw new AIProviderError(provider.name, 502, "respuesta del modelo no es JSON")
+      // Sin `}` cerrado → respuesta TRUNCADA. Si encima viene vacía, el
+      // modelo ni siquiera pudo emitir output (thinking budget agotado).
+      const isEmpty   = cleaned.length === 0
+      const isPartial = !isEmpty && /^\s*\{/.test(cleaned)
+      const preview = isEmpty
+        ? "(respuesta vacía)"
+        : `"${cleaned.slice(0, 300).replace(/\s+/g, " ")}${cleaned.length > 300 ? "..." : ""}"`
+      const reason = isEmpty
+        ? "respuesta vacía (probable thinking budget agotado)"
+        : isPartial
+          ? "JSON truncado a mitad (output cortado antes de cerrar el objeto)"
+          : "el modelo no emitió un JSON reconocible"
+      console.error(`[aiStatsAnalysis] ${reason} (provider=${provider.name}) · raw=${preview}`)
+      throw new AIProviderError(provider.name, 502, `${reason} · recibido: ${preview}`)
     }
-    raw = JSON.parse(m[0])
+    try {
+      raw = JSON.parse(m[0])
+    } catch (e) {
+      // El regex encontró `{...}` pero el contenido es inválido. Causa
+      // típica: el output se truncó dentro de un valor de string, y el
+      // último `}` que el regex agarró pertenecía a un sub-objeto previo
+      // (p.ej. un item de "debilidades"), dejando dentro un string sin
+      // cerrar o un campo a mitad.
+      console.error(
+        `[aiStatsAnalysis] JSON malformado, probable truncado del output (provider=${provider.name})\n` +
+        `   parse original error: ${(parseErr as Error).message}\n` +
+        `   parse del bloque {...}: ${(e as Error).message}\n` +
+        `   raw recibido (primeros 500 chars):\n${cleaned.slice(0, 500)}`,
+      )
+      throw new AIProviderError(
+        provider.name,
+        502,
+        `JSON truncado del modelo: ${(e as Error).message}`,
+      )
+    }
   }
 
   const parsed = resultSchema.safeParse(raw)
   if (!parsed.success) {
+    const fields = parsed.error.issues.map((i) => i.path.join(".")).join(", ")
+    console.error(`[aiStatsAnalysis] JSON no cumple schema (${provider.name}). Campos con problemas: ${fields}. Raw:`, raw)
     throw new AIProviderError(
       provider.name,
       502,
-      `JSON del modelo no cumple el schema: ${parsed.error.issues.map((i) => i.path.join(".")).join(", ")}`,
+      `JSON del modelo no cumple el schema: ${fields}`,
     )
   }
   return parsed.data

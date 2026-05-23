@@ -70,7 +70,13 @@ export function HeaderUser({ username, aiTokensRemaining, aiTokensMax, plan }: H
         <span className="pic" aria-hidden="true">{initial}</span>
         <span className="name">{username}</span>
       </Link>
-      {plan && <PlanBadge plan={plan} />}
+      {/* Wrapper con clase identificable para que el CSS mobile lo oculte
+          y deje sólo: avatar inicial + quota IA + settings + logout. */}
+      {plan && (
+        <span className="plan-badge-wrap">
+          <PlanBadge plan={plan} />
+        </span>
+      )}
       {hasQuota && (
         <span
           title={`Te quedan ${liveRemaining} de ${liveMax} tokens IA este mes`}
