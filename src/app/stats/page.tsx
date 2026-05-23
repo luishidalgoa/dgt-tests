@@ -112,8 +112,10 @@ export default async function StatsPage() {
         </div>
       </header>
 
-      {/* Stats globales — 4 cards */}
-      <div className="grid gap-3 sm:grid-cols-4 mb-6">
+      {/* Stats globales — 4 cards. En mobile 2×2 (compacto, evita 4 cards
+          apiladas que ocupan toda la pantalla). En sm+ vuelve a 4×1 como
+          antes (desktop intacto). */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         <StatCard label="Acierto global" value={`${globalAccuracy.toFixed(1)}%`} accent="green" />
         <StatCard label="Intentos"       value={String(totalAttempts)} accent="ink" />
         <StatCard label="Aciertos"        value={String(correctAnswers)} accent="green" />

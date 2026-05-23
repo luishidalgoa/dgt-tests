@@ -517,6 +517,14 @@ body {
   font-weight: 700;
   font-size: 13.5px;
   text-decoration: none;
+  /* Tap target accesible en mobile — pills tappables como "Iniciar sesión",
+     "Temas sin practicar", etc. En sm+ se queda al alto natural. */
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+@media (min-width: 640px) {
+  .pill-ghost { min-height: 0; }
 }
 .pill-ghost:hover {
   border-color: var(--orange-500);

@@ -323,6 +323,9 @@ function FilterPill({ href, label, count, active }: {
   return (
     <Link
       href={href}
+      /* min-h-[44px] en mobile para tap target accesible. En sm+ vuelve
+         al alto natural ~32px (desktop intacto). */
+      className="min-h-[44px] sm:min-h-0"
       style={{
         display:        "inline-flex",
         alignItems:     "center",
