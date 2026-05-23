@@ -7,6 +7,7 @@ import { db } from "@/lib/db"
 import { imageUrl } from "@/lib/imageUrl"
 import { questionToSlug, questionIdFromSlug } from "@/lib/questionUrl"
 import { isSeoExposeProQuestions } from "@/lib/configCatalog"
+import { QUESTION_VISIBLE_WHERE } from "@/lib/questions"
 import { StructuredDataBreadcrumb } from "@/components/StructuredData"
 import { InteractiveQuestion } from "@/components/InteractiveQuestion"
 
@@ -41,7 +42,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       ...(exposePro ? {} : { tier: "FREE" }),
       // Excluimos solo las AI descartadas. null=humana, true=AI aprobada,
       // false=AI descartada (no se muestra).
-      OR: [{ aiApproved: { not: false } }, { aiApproved: null }],
+      ...QUESTION_VISIBLE_WHERE,
     },
     select: { enunciado: true, codigoTema: true },
   })
@@ -94,7 +95,7 @@ export default async function QuestionPage({ params }: PageProps) {
     where: {
       id,
       ...(exposePro ? {} : { tier: "FREE" }),
-      OR: [{ aiApproved: { not: false } }, { aiApproved: null }],
+      ...QUESTION_VISIBLE_WHERE,
     },
     include: {
       options: { orderBy: { letra: "asc" } },
@@ -140,7 +141,7 @@ export default async function QuestionPage({ params }: PageProps) {
           codigoTema: question.codigoTema,
           id:         { not: question.id },
           ...relatedTierFilter,
-          OR: [{ aiApproved: { not: false } }, { aiApproved: null }],
+          ...QUESTION_VISIBLE_WHERE,
         },
         take:   5,
         select: {
@@ -165,13 +166,13 @@ export default async function QuestionPage({ params }: PageProps) {
       ? {
           id: { notIn: [question.id, ...related.map((r) => r.id)] },
           ...relatedTierFilter,
-          OR: [{ aiApproved: { not: false } }, { aiApproved: null }],
+          ...QUESTION_VISIBLE_WHERE,
         }
       : {
           id: { notIn: [question.id, ...related.map((r) => r.id)] },
           testQuestions: { some: { test: { category: { slug: categoria } } } },
           ...relatedTierFilter,
-          OR: [{ aiApproved: { not: false } }, { aiApproved: null }],
+          ...QUESTION_VISIBLE_WHERE,
         }
 
     const fill = await db.question.findMany({

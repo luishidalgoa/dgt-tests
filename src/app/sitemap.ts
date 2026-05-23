@@ -4,6 +4,7 @@ import { FREE_CATEGORY_SLUG, FREE_TEST_LIMIT } from "@/lib/permissions"
 import { RECURSOS } from "@/content/recursos/_registry"
 import { questionToSlug } from "@/lib/questionUrl"
 import { isSeoExposeProQuestions } from "@/lib/configCatalog"
+import { QUESTION_VISIBLE_WHERE } from "@/lib/questions"
 
 /**
  * /sitemap.xml — Next.js lo genera de este export al build.
@@ -167,7 +168,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         ? {
             // ON: cualquier pregunta visible (cualquier tier, cualquier
             // categoría), aprobada por review IA (o humana original).
-            OR: [{ aiApproved: { not: false } }, { aiApproved: null }],
+            ...QUESTION_VISIBLE_WHERE,
           }
         : {
             // OFF: solo FREE de permiso-b.
@@ -175,7 +176,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
             testQuestions: {
               some: { test: { category: { slug: FREE_CATEGORY_SLUG } } },
             },
-            OR: [{ aiApproved: { not: false } }, { aiApproved: null }],
+            ...QUESTION_VISIBLE_WHERE,
           },
       select: {
         id:        true,

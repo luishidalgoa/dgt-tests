@@ -5,6 +5,7 @@ import { db } from "@/lib/db"
 import { FREE_CATEGORY_SLUG } from "@/lib/permissions"
 import { questionToSlug } from "@/lib/questionUrl"
 import { isSeoExposeProQuestions } from "@/lib/configCatalog"
+import { QUESTION_VISIBLE_WHERE } from "@/lib/questions"
 import { StructuredDataBreadcrumb } from "@/components/StructuredData"
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app"
@@ -59,22 +60,22 @@ export default async function PreguntasIndexPage() {
   // Si el toggle SEO está ON, listamos TODO. Si OFF, solo FREE de permiso-b.
   const expose = await isSeoExposeProQuestions()
 
-  // Construimos el where como objeto plano para evitar un panic conocido
-  // del query engine de Prisma 6.19.3 con ciertos ternarios inline +
-  // filtros de relación vacíos como `testQuestions: { some: {} }`.
-  // Cuando ON, omitimos el filtro de relación: las orphans (preguntas
-  // sin TestQuestion) no deberían existir en BBDD; si existieran,
-  // les damos un slug fallback en el render.
+  // Usamos QUESTION_VISIBLE_WHERE (helper canónico del proyecto) para
+  // filtrar las preguntas. Aplica la regla "humanas siempre visibles +
+  // AI solo si aiApproved=true" — alineado con /temas, /test-errores,
+  // exámenes oficiales, etc.
+  //
+  // Por qué no inline OR { aiApproved: { not: false } } — Prisma 6.19.3
+  // panickea con ese patrón sobre el Boolean nullable. QUESTION_VISIBLE_WHERE
+  // usa `aiGenerated: false` que sí funciona estable.
   const whereClause = expose
-    ? {
-        OR: [{ aiApproved: { not: false } }, { aiApproved: null }],
-      }
+    ? { ...QUESTION_VISIBLE_WHERE }
     : {
         tier: "FREE" as const,
         testQuestions: {
           some: { test: { category: { slug: FREE_CATEGORY_SLUG } } },
         },
-        OR: [{ aiApproved: { not: false } }, { aiApproved: null }],
+        ...QUESTION_VISIBLE_WHERE,
       }
 
   const questions = await db.question.findMany({
