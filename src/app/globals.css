@@ -832,7 +832,10 @@ body {
 /* Tile grid para listados de tests */
 .tile-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  /* minmax 180px: en viewports <420 cabe 1 col (los 2 cols quedaban
+     apretados); en >=420 vuelven a 2 cols. Sirve tanto para guest
+     dashboard como para listado de tests por categoría. */
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 12px;
 }
 .tile {
@@ -1085,6 +1088,17 @@ body {
   background: rgba(239, 68, 68, 0.06);
   border: 1px solid rgba(239, 68, 68, 0.15);
 }
+.dash-stats-analysis__weakness-context {
+  /* Línea de contexto jerárquico (ej. "Tema 3 · Bloque 3.2") que va
+     antes del sub-bloque concreto, para que en mobile el título no
+     ocupe 4 líneas. */
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--slate-500);
+  font-weight: 700;
+  margin-bottom: 3px;
+}
 .dash-stats-analysis__weakness-head {
   display: flex;
   align-items: baseline;
@@ -1130,7 +1144,9 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 8px 14px;
+  /* padding vertical 10px (antes 8) para llegar a ~44px de alto y
+     cumplir touch target mínimo accesible en mobile. */
+  padding: 10px 14px;
   border-radius: 10px;
   background: linear-gradient(135deg, #fff7ed, #ffedd5);
   border: 1.5px solid rgba(249, 115, 22, 0.45);

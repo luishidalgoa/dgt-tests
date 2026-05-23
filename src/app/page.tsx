@@ -469,9 +469,9 @@ function GuestDashboard({ category }: { category: GuestCategoryData }) {
           Modo invitado
         </h2>
         <p style={{ fontSize: 14.5, lineHeight: 1.55, color: "var(--slate-600)", marginTop: 8, marginBottom: 14 }}>
-          Tienes acceso a los <b>7 primeros tests de Permiso B</b> para que pruebes la plataforma.
-          Para desbloquear el resto, examen real, historial, IA y competición,{" "}
-          <Link href="/register" style={{ color: "var(--orange-600)", fontWeight: 700 }}>crea una cuenta gratis</Link>.
+          <b>7 tests gratuitos</b> de Permiso B para que pruebes.{" "}
+          <Link href="/register" style={{ color: "var(--orange-600)", fontWeight: 700 }}>Crea una cuenta</Link>{" "}
+          para acceso completo (lista debajo).
         </p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Link href="/register" className="btn-primary">

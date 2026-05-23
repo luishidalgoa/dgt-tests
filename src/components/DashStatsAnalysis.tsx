@@ -359,17 +359,30 @@ function AnalysisBody({ item }: { item: AnalysisHistoryItem }) {
             Áreas a reforzar
           </div>
           <div className="dash-stats-analysis__weakness-list">
-            {result.debilidades.map((w, i) => (
-              <div key={i} className="dash-stats-analysis__weakness">
-                <div className="dash-stats-analysis__weakness-head">
-                  <span className="dash-stats-analysis__weakness-name">{w.tema}</span>
-                  <span className="dash-stats-analysis__weakness-count">
-                    {w.fallos} {w.fallos === 1 ? "fallo" : "fallos"}
-                  </span>
+            {result.debilidades.map((w, i) => {
+              // Parsear jerarquía: el tema viene como
+              // "Tema 3: foo · Bloque 3.2: bar · Sub-bloque 3.2.1: baz"
+              // → contexto "Tema 3 · Bloque 3.2" arriba, "Sub-bloque 3.2.1: baz"
+              // como nombre principal. Si no hay " · " (formato distinto),
+              // se renderiza todo el string como nombre.
+              const parts = w.tema.split(" · ")
+              const last  = parts[parts.length - 1]
+              const ctx   = parts.slice(0, -1)
+                .map((p) => p.split(":")[0].trim())
+                .join(" · ")
+              return (
+                <div key={i} className="dash-stats-analysis__weakness">
+                  {ctx && <div className="dash-stats-analysis__weakness-context">{ctx}</div>}
+                  <div className="dash-stats-analysis__weakness-head">
+                    <span className="dash-stats-analysis__weakness-name">{last}</span>
+                    <span className="dash-stats-analysis__weakness-count">
+                      {w.fallos} {w.fallos === 1 ? "fallo" : "fallos"}
+                    </span>
+                  </div>
+                  <p>{w.comentario}</p>
                 </div>
-                <p>{w.comentario}</p>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}
