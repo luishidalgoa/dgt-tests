@@ -93,6 +93,9 @@ function buildSystemPrompt(): string {
     "- whyOthersWrong: una entrada por CADA opción incorrecta. Nombra el error conceptual.",
     "- keyPhrases: 0 a 3 frases. SUBSTRINGS LITERALES (case-sensitive, sin reformular) del campo",
     "  EXPLICACIÓN OFICIAL para que el front las subraye. Si la explicación es de 1 frase corta, devuelve [].",
+    "  CRÍTICO: NO añadas ni quites comas, puntos, dos puntos, paréntesis ni espacios respecto",
+    "  al original. Copia CARÁCTER A CARÁCTER. Si dudas, devuelve uno menos — mejor ningún",
+    "  subrayado que un substring inventado que no matcheará.",
     "- Hablas de TÚ ('debes', no 'el conductor debe'). Sin condescendencia.",
     "- Responde en español. SOLO el JSON, sin markdown ni texto extra.",
   ].join("\n")
