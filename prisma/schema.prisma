@@ -51,6 +51,14 @@ model User {
    *  marcado como vistas (welcome, actualizaciones de términos, etc.).
    *  Ver src/lib/notifications.ts para el registro. */
   acknowledgments String        @default("[]")
+  // ── Gamificación: XP + nivel ──────────────────────────────────────
+  /// XP acumulado. El nivel se deriva de aquí en src/lib/xp.ts:getLevel.
+  /// Se incrementa al finalizar exámenes (ver awardXp).
+  xp              Int           @default(0)
+  /// Fecha del último bonus de "7 días seguidos" otorgado. Se usa para
+  /// evitar pagar el bonus más de una vez por semana. NULL = nunca
+  /// recibido.
+  lastWeekStreakBonusAt DateTime?
   attempts        ExamAttempt[]
   hostedParties   Party[]       @relation("HostedParties")
   partyPlays      PartyPlayer[] @relation("PartyParticipations")

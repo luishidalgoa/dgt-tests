@@ -2,7 +2,15 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
-import type { SubmitAttemptResponse } from "@/types/exam"
+import type { AttemptXpReward, SubmitAttemptResponse } from "@/types/exam"
+import {
+  awardWeeklyStreakBonusIfDue,
+  awardXp,
+  computeExamXp,
+  getLevel,
+  sumXp,
+  type AwardXpResult,
+} from "@/lib/xp"
 
 const submitSchema = z.object({
   testId: z.number().int().nullable(),
@@ -114,11 +122,59 @@ export async function POST(req: Request) {
       ? `/${categorySlug}/${testNumber}/resultado/${attempt.id}`
       : `/historial/${attempt.id}`
 
+  // ── XP & nivel ──────────────────────────────────────────────────────
+  // Otorga XP por finalizar (con bonus de aprobado/perfecto) y, si
+  // procede, el bonus semanal por racha de 7 días. El "nivel final"
+  // que se muestra al cliente es el último estado después de aplicar
+  // ambos. Los errores de DB aquí NO deben tumbar la respuesta del
+  // examen — son extras, así que los degradamos a 0 XP.
+  let xpReward: AttemptXpReward
+  try {
+    const breakdown = computeExamXp({ mode, score, total: answers.length })
+    const xpAmount  = sumXp(breakdown)
+    const xpResult  = await awardXp(user.id, xpAmount, breakdown[0]?.reason ?? "exam-finish")
+
+    // Tras el examen, intenta cobrar el bonus de racha. Si lo paga,
+    // sobreescribe el nivel final con el resultante. Mantiene el
+    // breakdown para que el cliente pueda mostrar las dos líneas.
+    let finalState: AwardXpResult = xpResult
+    const streakResult = await awardWeeklyStreakBonusIfDue(user.id)
+    if (streakResult) {
+      finalState = streakResult
+      breakdown.push({ reason: "streak-7days", amount: streakResult.newXp - streakResult.oldXp })
+    }
+
+    xpReward = {
+      awarded:   finalState.newXp - xpResult.oldXp,
+      breakdown,
+      leveledUp: finalState.newLevel > xpResult.oldLevel,
+      oldLevel:  xpResult.oldLevel,
+      newLevel:  finalState.newLevel,
+      iconPath:  finalState.levelInfo.iconPath,
+      levelLabel: finalState.levelInfo.label,
+    }
+  } catch (err) {
+    // No tumbar la respuesta — el cliente vería el examen como "no
+    // guardado" pero sí está guardado. Logueamos y devolvemos XP=0.
+    console.error("[xp] failed to award XP for attempt", attempt.id, err)
+    const fallbackLevel = getLevel(0)
+    xpReward = {
+      awarded:    0,
+      breakdown:  [],
+      leveledUp:  false,
+      oldLevel:   fallbackLevel.level,
+      newLevel:   fallbackLevel.level,
+      iconPath:   fallbackLevel.iconPath,
+      levelLabel: fallbackLevel.label,
+    }
+  }
+
   const response: SubmitAttemptResponse = {
     attemptId: attempt.id,
     score,
     total:     answers.length,
     redirectUrl,
+    xp:        xpReward,
   }
   return NextResponse.json(response)
 }

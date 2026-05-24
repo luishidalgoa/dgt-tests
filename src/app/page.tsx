@@ -8,6 +8,8 @@ import { ContinueExamPill } from "@/components/ContinueExamPill"
 import { DashStatsAnalysis, type StatsAnalysisResult, type AnalysisHistoryItem } from "@/components/DashStatsAnalysis"
 import { MAX_HISTORY_ITEMS } from "@/lib/aiStatsAnalysis"
 import { StructuredDataHome } from "@/components/StructuredData"
+import { StreakIcon } from "@/components/StreakIcon"
+import { getLevel } from "@/lib/xp"
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app"
 
@@ -153,6 +155,11 @@ export default async function HomePage() {
   }
   const maxDay = Math.max(1, ...last7.map((d) => d.count))
 
+  // ── XP & nivel ────────────────────────────────────────────────────
+  // El icono "🔥" del bloque "Actividad esta semana" se sustituye por el
+  // asset del nivel actual derivado de user.xp (ver src/lib/xp.ts).
+  const xpInfo = getLevel(user.xp)
+
   // Errores pendientes
   const pendingErrors = await db.$queryRaw<{ count: bigint }[]>`
     SELECT COUNT(*) as count FROM (
@@ -267,7 +274,7 @@ export default async function HomePage() {
       <section className="dash-streak">
         <div className="dash-streak-head">
           <h3>Actividad esta semana</h3>
-          <span className="fire" aria-hidden="true">🔥</span>
+          <StreakIcon xp={user.xp} size={40} />
         </div>
         <h2>
           <b>{dailyAvg.toFixed(1)}</b> {dailyAvg === 1 ? "test/día" : "tests/día"}
@@ -277,6 +284,55 @@ export default async function HomePage() {
             ? "Aún no has hecho ningún test esta semana"
             : `${weekTotal} en los últimos 7 días${streakDays > 1 ? ` · racha de ${streakDays} días` : ""}`}
         </p>
+
+        {/* Mini-bloque de nivel + barra de progreso a próximo nivel.
+            Cuando el usuario está en MAX_LEVEL, nextLevelXp = null → no
+            mostramos barra, solo el badge "Nivel máximo". */}
+        <div className="dash-xp" style={{ marginTop: 10, marginBottom: 12 }}>
+          <div
+            style={{
+              display:        "flex",
+              alignItems:     "center",
+              justifyContent: "space-between",
+              fontSize:       12.5,
+              fontWeight:     700,
+              color:          "rgba(255,255,255,0.92)",
+              marginBottom:   6,
+            }}
+          >
+            <span>
+              Nivel {xpInfo.level} · {xpInfo.label}
+            </span>
+            <span style={{ fontFamily: "var(--font-mono)", opacity: 0.85 }}>
+              {xpInfo.nextLevelXp === null
+                ? `${user.xp} XP · MAX`
+                : `${user.xp} / ${xpInfo.nextLevelXp} XP`}
+            </span>
+          </div>
+          <div
+            style={{
+              height:       6,
+              background:   "rgba(255,255,255,0.18)",
+              borderRadius: 999,
+              overflow:     "hidden",
+            }}
+            role="progressbar"
+            aria-valuenow={xpInfo.progressPct}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label="Progreso al siguiente nivel"
+          >
+            <div
+              style={{
+                width:      `${xpInfo.progressPct}%`,
+                height:     "100%",
+                background: "linear-gradient(90deg, #FFD24A, #FF7A1A)",
+                transition: "width 400ms ease",
+              }}
+            />
+          </div>
+        </div>
+
         <div
           className="dash-days"
           aria-label="Tests por día (últimos 7)"

@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import {
@@ -242,6 +243,23 @@ export function ExamRunner({
         }
         const data = (await res.json()) as SubmitAttemptResponse
         clearExamState()
+        // Sonner persiste el toast entre navegaciones porque el <Toaster>
+        // está montado en el root layout. El push() siguiente cambia la
+        // página pero el toast sigue visible en el resultado/historial.
+        if (data.xp?.leveledUp) {
+          toast.success(
+            `¡Subes a nivel ${data.xp.newLevel}! · ${data.xp.levelLabel}`,
+            {
+              description: `+${data.xp.awarded} XP en este examen`,
+              duration: 6000,
+            },
+          )
+        } else if (data.xp?.awarded > 0) {
+          toast.success(`+${data.xp.awarded} XP`, {
+            description: `Nivel ${data.xp.newLevel} · ${data.xp.levelLabel}`,
+            duration: 3500,
+          })
+        }
         router.push(data.redirectUrl)
       } catch (err) {
         submittedRef.current = false
