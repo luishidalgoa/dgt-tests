@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   questionUpdate:         vi.fn(),
   optionUpdate:           vi.fn(),
   aiCacheDeleteMany:      vi.fn(),
+  reportUpdateMany:       vi.fn(),
   transaction:            vi.fn(),
   revalidatePath:         vi.fn(),
 }))
@@ -25,6 +26,9 @@ vi.mock("@/lib/db", () => ({
     },
     aICacheEntry: {
       deleteMany: mocks.aiCacheDeleteMany,
+    },
+    questionReport: {
+      updateMany: mocks.reportUpdateMany,
     },
     $transaction: mocks.transaction,
   },
@@ -74,6 +78,7 @@ describe("updateQuestionAction", () => {
       })
     })
     mocks.aiCacheDeleteMany.mockResolvedValue({ count: 0 })
+    mocks.reportUpdateMany.mockResolvedValue({ count: 0 })
     mocks.questionUpdate.mockResolvedValue({})
     mocks.optionUpdate.mockResolvedValue({})
   })
@@ -168,6 +173,23 @@ describe("updateQuestionAction", () => {
         imagen:     null,
       }),
     }))
+  })
+
+  it("marca automáticamente como fixed los reports pending de la pregunta", async () => {
+    mocks.reportUpdateMany.mockResolvedValue({ count: 2 })
+    await updateQuestionAction(fd({
+      id:          "1",
+      enunciado:   "Enunciado nuevo y suficientemente largo de verdad",
+      explicacion: "Explicación.",
+      codigoTema:  "TC 1",
+      imagen:      "",
+      optionsJson: JSON.stringify(STANDARD_OPTIONS),
+    }))
+    expect(mocks.reportUpdateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { questionId: 1, status: "pending" },
+      data:  expect.objectContaining({ status: "fixed", reviewedBy: 42 }),
+    }))
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/admin/reports")
   })
 
   it("no invalida cache IA si nada cambió", async () => {

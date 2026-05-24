@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Pencil, ChevronLeft, ChevronRight, ListChecks, Search } from "lucide-react"
+import { Pencil, ChevronLeft, ChevronRight, ListChecks, Search, MessageSquareWarning } from "lucide-react"
 import type { Prisma } from "@prisma/client"
 import { db } from "@/lib/db"
 import { classifyCodigoTema } from "@/lib/temas"
@@ -134,6 +134,21 @@ export default async function AdminQuestionsPage({ searchParams }: PageProps) {
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
+  // Conteo de reports PENDIENTES por pregunta de la página actual. Una
+  // sola query agrupada — no añadimos columna oculta cuando no hay reports
+  // (UI los esconde con el ?? 0). Le damos visibilidad sin tocar el filtro.
+  const pendingReportsByQuestion = new Map<number, number>()
+  if (rows.length > 0) {
+    const reportCounts = await db.questionReport.groupBy({
+      by:     ["questionId"],
+      where:  { questionId: { in: rows.map((r) => r.id) }, status: "pending" },
+      _count: { _all: true },
+    })
+    for (const c of reportCounts) {
+      pendingReportsByQuestion.set(c.questionId, c._count._all)
+    }
+  }
+
   return (
     <div>
       <Link href="/admin" className="back-link" style={{ marginBottom: 14 }}>
@@ -196,6 +211,7 @@ export default async function AdminQuestionsPage({ searchParams }: PageProps) {
                   <Th>Enunciado</Th>
                   <Th style={{ width: 70 }}>Tier</Th>
                   <Th style={{ width: 60 }}>IA</Th>
+                  <Th style={{ width: 70 }}>Reports</Th>
                   <Th style={{ width: 160 }}>Última edición</Th>
                   <Th style={{ width: 90 }}>Acción</Th>
                 </tr>
@@ -255,6 +271,31 @@ export default async function AdminQuestionsPage({ searchParams }: PageProps) {
                         }}>
                           {q.aiApproved === true ? "✓" : q.aiApproved === false ? "✗" : "…"}
                         </span>
+                      ) : (
+                        <span style={{ color: "var(--slate-300)", fontSize: 11 }}>—</span>
+                      )}
+                    </Td>
+                    <Td>
+                      {(pendingReportsByQuestion.get(q.id) ?? 0) > 0 ? (
+                        <Link
+                          href="/admin/reports"
+                          title={`${pendingReportsByQuestion.get(q.id)} incidencias pendientes sobre esta pregunta`}
+                          style={{
+                            display:        "inline-flex",
+                            alignItems:     "center",
+                            gap:            4,
+                            padding:        "2px 8px",
+                            borderRadius:   999,
+                            background:     "rgba(245, 158, 11, 0.12)",
+                            color:          "var(--amber-d, #92400e)",
+                            fontSize:       11,
+                            fontWeight:     800,
+                            textDecoration: "none",
+                          }}
+                        >
+                          <MessageSquareWarning className="h-3 w-3" />
+                          {pendingReportsByQuestion.get(q.id)}
+                        </Link>
                       ) : (
                         <span style={{ color: "var(--slate-300)", fontSize: 11 }}>—</span>
                       )}

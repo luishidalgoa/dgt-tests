@@ -1,8 +1,9 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import { ChevronLeft, Pencil, ExternalLink } from "lucide-react"
+import { ChevronLeft, Pencil, ExternalLink, AlertTriangle, MessageSquareWarning } from "lucide-react"
 import { db } from "@/lib/db"
 import { questionToSlug } from "@/lib/questionUrl"
+import { reportTypeLabel } from "@/lib/questionReports"
 import { EditQuestionForm } from "./EditQuestionForm"
 
 export const dynamic = "force-dynamic"
@@ -34,6 +35,13 @@ export default async function EditQuestionPage({ params }: PageProps) {
       },
       lastEditedByUser: {
         select: { id: true, username: true, displayName: true },
+      },
+      // Reports abiertos sobre esta pregunta — los listamos arriba del
+      // editor para que el admin tenga contexto antes de tocar nada.
+      // Al guardar la edición se marcan como `fixed` automáticamente.
+      reports: {
+        where:   { status: "pending" },
+        orderBy: { createdAt: "desc" },
       },
     },
   })
@@ -97,6 +105,59 @@ export default async function EditQuestionPage({ params }: PageProps) {
           </a>
         )}
       </div>
+
+      {/* Reports pendientes asociados a esta pregunta */}
+      {question.reports.length > 0 && (
+        <div
+          className="card-soft"
+          style={{
+            padding:      16,
+            marginBottom: 16,
+            background:   "rgba(245, 158, 11, 0.06)",
+            border:       "1px solid rgba(245, 158, 11, 0.30)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <MessageSquareWarning className="h-4 w-4" style={{ color: "var(--amber-d, #92400e)" }} />
+            <span style={{ fontSize: 13, fontWeight: 800, color: "var(--amber-d, #92400e)" }}>
+              {question.reports.length === 1
+                ? "1 incidencia pendiente reportada por un usuario"
+                : `${question.reports.length} incidencias pendientes reportadas por usuarios`}
+            </span>
+            <Link
+              href="/admin/reports"
+              style={{
+                marginLeft:     "auto",
+                fontSize:       11.5,
+                color:          "var(--orange-600)",
+                textDecoration: "none",
+              }}
+            >
+              Ver panel completo →
+            </Link>
+          </div>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: "var(--slate-700)" }}>
+            {question.reports.map((r) => (
+              <li key={r.id} style={{ marginBottom: 6 }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                  <AlertTriangle className="h-3 w-3" style={{ color: "var(--amber-d, #92400e)" }} />
+                  <b>{reportTypeLabel(r.type)}</b>
+                </span>
+                {r.comment && (
+                  <span style={{ color: "var(--slate-600)" }}> — “{r.comment}”</span>
+                )}
+                <span style={{ color: "var(--slate-400)", fontSize: 11, marginLeft: 6 }}>
+                  ({r.createdAt.toLocaleDateString("es-ES")})
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p style={{ margin: "10px 0 0", fontSize: 11.5, color: "var(--slate-500)", fontStyle: "italic" }}>
+            Al guardar cambios, estas incidencias se marcan como <b>fixed</b> automáticamente.
+            Puedes reabrirlas desde el panel de reports si no atendían a estos cambios.
+          </p>
+        </div>
+      )}
 
       <EditQuestionForm
         questionId={question.id}

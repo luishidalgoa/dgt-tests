@@ -280,7 +280,11 @@ export default async function AdminReportsPage({ searchParams }: PageProps) {
                     )}
                   </div>
 
-                  <ReportActions reportId={r.id} currentStatus={filterStatus} />
+                  <ReportActions
+                    reportId={r.id}
+                    questionId={r.question.id}
+                    currentStatus={filterStatus}
+                  />
                 </div>
               </article>
             )

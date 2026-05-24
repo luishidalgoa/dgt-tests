@@ -115,6 +115,19 @@ export async function updateQuestionAction(formData: FormData): Promise<ActionRe
     await db.aICacheEntry.deleteMany({ where: { questionId: parsed.data.id } })
   }
 
+  // Cerrar reports pendientes: si hay incidencias abiertas sobre esta
+  // pregunta y el admin acaba de editarla, los marcamos como `fixed`
+  // automáticamente con `reviewedBy = admin.id`. El admin puede reabrirlos
+  // desde /admin/reports si el cambio no era lo que pedía el reporte.
+  const closedReports = await db.questionReport.updateMany({
+    where: { questionId: parsed.data.id, status: "pending" },
+    data:  { status: "fixed", reviewedAt: new Date(), reviewedBy: admin.id },
+  })
+  if (closedReports.count > 0) {
+    revalidatePath("/admin/reports")
+    revalidatePath("/admin")
+  }
+
   // Invalidar las páginas SEO afectadas. La URL canónica depende del
   // enunciado (puede haber cambiado el slug); buscamos la categoria
   // primaria via testQuestions para construir el path.
