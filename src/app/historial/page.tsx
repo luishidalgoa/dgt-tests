@@ -9,6 +9,7 @@ import {
   Trophy,
   Lightbulb,
   XCircle,
+  BookMarked,
 } from "lucide-react"
 
 export const dynamic = "force-dynamic"
@@ -131,19 +132,30 @@ export default async function HistorialPage() {
       ) : (
         <div className="card-soft" style={{ padding: 8 }}>
           {attempts.map((a) => {
-            const score    = a.score ?? 0
-            const ratio    = score / a.total
-            const passed   = ratio >= PASS_THRESHOLD
-            const isErrors = a.mode === "errores"
-            const href = isErrors
+            const score   = a.score ?? 0
+            const ratio   = score / a.total
+            const passed  = ratio >= PASS_THRESHOLD
+            // Los modos sin test asociado (errores, errores-refuerzo, tema)
+            // se revisan en /historial/[id]. El resto usa la URL canónica
+            // del modo normal.
+            const noTest  = !a.test
+            const isTema  = a.mode === "tema"
+            const href = noTest
               ? `/historial/${a.id}`
               : `/${a.test?.category.slug}/${a.test?.testNumber}/resultado/${a.id}`
             const light = passed ? "green" : ratio >= 0.7 ? "amber" : "red"
 
             // Etiqueta corta para el confirm del borrado
-            const deleteLabel = isErrors
-              ? "Test de errores"
+            const deleteLabel = noTest
+              ? (isTema ? "Práctica por temas" : "Test de errores")
               : `${a.test?.category.name ?? "Test"} · Test ${a.test?.testNumber ?? a.id}`
+
+            const subtitle = (() => {
+              if (a.mode === "errores-refuerzo") return "Repaso de errores · refuerzo IA"
+              if (a.mode === "errores")          return "Repaso de errores"
+              if (a.mode === "tema")             return "Práctica por temas"
+              return "Práctica"
+            })()
 
             return (
               <SwipeableHistoryRow
@@ -153,7 +165,12 @@ export default async function HistorialPage() {
                 <Link href={href} className="dash-row-item">
                   <span className={`dash-light ${light}`} aria-hidden="true" />
                   <div className="dash-row-title">
-                    {isErrors ? (
+                    {isTema ? (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <BookMarked className="h-4 w-4" style={{ color: "var(--orange-600)" }} />
+                        Práctica por temas
+                      </span>
+                    ) : noTest ? (
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                         <Lightbulb className="h-4 w-4" style={{ color: "var(--amber)" }} />
                         Test de errores
@@ -170,7 +187,7 @@ export default async function HistorialPage() {
                       </span>
                     )}
                     <small>
-                      {a.mode === "examen" ? "Examen real" : a.mode === "errores" ? "Repaso de errores" : "Práctica"}
+                      {subtitle}
                       {" · "}
                       {timeAgo(a.startedAt)}
                     </small>

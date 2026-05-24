@@ -564,20 +564,25 @@ export default async function HomePage() {
             const href = a.test
               ? `/${a.test.category.slug}/${a.test.testNumber}/resultado/${a.id}`
               : `/historial/${a.id}`
+            const title = a.test
+              ? `${a.test.category.name} · Test ${a.test.testNumber}`
+              : a.mode === "tema"
+              ? "Práctica por temas"
+              : "Test de errores"
+            const subtitle =
+              a.mode === "errores-refuerzo"
+                ? "Repaso de errores · refuerzo IA"
+                : a.mode === "errores"
+                ? "Repaso de errores"
+                : a.mode === "tema"
+                ? "Práctica por temas"
+                : "Modo práctica"
             return (
               <Link key={a.id} href={href} className="dash-row-item">
                 <span className={`dash-light ${light}`} aria-hidden="true" />
                 <div className="dash-row-title">
-                  {a.test
-                    ? `${a.test.category.name} · Test ${a.test.testNumber}`
-                    : "Test de errores"}
-                  <small>
-                    {a.mode === "examen"
-                      ? "Modo examen real"
-                      : a.mode === "errores"
-                      ? "Repaso de errores"
-                      : "Modo práctica"}
-                  </small>
+                  {title}
+                  <small>{subtitle}</small>
                 </div>
                 <div className="dash-score">
                   {a.score}/{a.total}
