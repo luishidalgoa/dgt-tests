@@ -64,10 +64,6 @@ type Suspect = {
   officialPct:     number
 }
 
-function truncate(s: string, max: number): string {
-  return s.length > max ? s.slice(0, max - 1) + "…" : s
-}
-
 async function main() {
   const target = process.env.TURSO_DATABASE_URL && process.env.TURSO_DATABASE_URL.includes("turso.io")
     ? "🔴 PROD (Turso)"
@@ -217,10 +213,10 @@ async function main() {
     const tag = markers ? `  [${markers}]` : ""
     console.log()
     console.log(`#${s.id} — ${s.totalAnswers} respuestas${tag}`)
-    console.log(`   "${truncate(s.enunciado, 80)}"`)
-    console.log(`   Oficial:  ${s.officialLetter}) ${truncate(s.officialText, 60)}`)
+    console.log(`   ${s.enunciado}`)
+    console.log(`   Oficial:  ${s.officialLetter}) ${s.officialText}`)
     console.log(`             ${s.officialCount}/${s.totalAnswers}  (${s.officialPct.toFixed(1)}%)`)
-    console.log(`   Mayoría:  ${s.empiricalLetter}) ${truncate(s.empiricalText, 60)}`)
+    console.log(`   Mayoría:  ${s.empiricalLetter}) ${s.empiricalText}`)
     console.log(`             ${s.empiricalCount}/${s.totalAnswers}  (${s.empiricalPct.toFixed(1)}%)`)
   }
   if (suspects.length > TOP_N) {
