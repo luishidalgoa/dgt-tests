@@ -383,9 +383,15 @@ export default async function HomePage() {
             const title = d.restored
               ? `${d.letter}: día restaurado con crédito`
               : `${d.letter}: ${d.count} test${d.count === 1 ? "" : "s"}`
+            // last7 va de hace-6-días (i=0) a hoy (i=6).
+            // dayOffset: -6, -5, ..., -1 (ayer), 0 (hoy). Permite que el
+            // botón de restaurar localice el chip de "ayer" por DOM query
+            // para volar su chispa allí.
+            const dayOffset = i - 6
             return (
               <div
                 key={i}
+                data-day-offset={dayOffset}
                 className={`dash-day ${isEmpty && !d.restored ? "empty" : ""}`}
                 style={{
                   flexDirection: "column",

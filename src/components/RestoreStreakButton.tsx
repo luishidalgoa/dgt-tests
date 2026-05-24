@@ -7,20 +7,18 @@ import { restoreStreakAction } from "@/app/actions/streak"
 
 interface Props {
   credits: number
-  /** Posiciones del ciclo (1..7) que se iluminarán al restaurar. Si
-   *  está vacío hacemos restauración sin animación (fallback). El padre
-   *  lo computa con `computeRestoreTargetDays` en xp.ts. */
+  /** Posiciones del ciclo (1..7) que pasarán a "earned" tras la
+   *  restauración. Las usamos solo para aplicarles un fade-in suave
+   *  como CONSECUENCIA de la restauración — la animación principal
+   *  va al día roto en el chart, no a estos chips. */
   cycleDaysToRestore: number[]
 }
 
-/** Duración de vuelo de cada chispa, ms. */
-const SPARK_FLIGHT_MS = 550
-/** Delay entre el lanzamiento de cada chispa, ms. */
-const SPARK_STAGGER_MS = 130
-/** Cuánto se queda el chip "ardiendo" tras impactar, ms. */
-const CHIP_IGNITE_MS = 800
-/** Buffer extra antes de pedir al server el restore, ms. Permite que
- *  los frames de la última chispa terminen de pintarse. */
+/** Duración del vuelo de la chispa, ms. */
+const SPARK_FLIGHT_MS = 600
+/** Cuánto se queda el chip yesterday descongelándose, ms. */
+const THAW_DURATION_MS = 600
+/** Buffer extra antes de pedir al server, ms. */
 const POST_ANIM_BUFFER_MS = 150
 
 /**
@@ -29,29 +27,29 @@ const POST_ANIM_BUFFER_MS = 150
  * Solo se renderiza si el padre (page.tsx) ha calculado `canRestore=true`
  * — este componente NO decide eligibilidad.
  *
- * Flow al hacer click (con prefers-reduced-motion=no-preference):
+ * Animación al pulsar (semántica de RESCATE, no de recompensa: NO se
+ * concede XP retroactiva, solo se reconecta la cadena):
  *
- *   1. Bloqueamos re-click. Botón pasa a estado `is-firing` (icono spin).
- *   2. Por cada posición en `cycleDaysToRestore`, spawneamos una chispa
- *      SVG en `position: fixed` a la coordenada del botón.
- *   3. La chispa viaja al chip correspondiente (`[data-cycle-day=N]`)
- *      con arco vía Web Animations API, escalonadas por SPARK_STAGGER_MS.
- *   4. Al aterrizar, el chip recibe `.is-igniting` → flash + scale bounce
- *      vía CSS keyframes (chipIgnite).
- *   5. Tras todas las chispas + buffer, llamamos al server action.
- *   6. Si OK: fade-out del botón (`is-leaving`) + `router.refresh()` —
- *      el re-render del Server Component ya trae los chips con su estado
- *      "earned" real, sin parpadeo.
- *   7. Si error: revertimos la animación y mostramos el mensaje.
+ *   1. Botón pasa a `is-firing` (icono refresh gira rápido).
+ *   2. UNA chispa AZUL (color hielo, no fuego — la metáfora es
+ *      "descongelar") sale del centro del botón con arco y llega al
+ *      chip de ayer en el chart (`[data-day-offset="-1"]`).
+ *   3. Al impactar, el chip ayer recibe `.is-thawing` → overlay con
+ *      patrón rayado azul + ❄ apareciendo con scale-bounce.
+ *   4. Simultáneamente: los chips del ciclo en `cycleDaysToRestore`
+ *      reciben `.is-rekindling` → fade suave de gris → naranja. Es la
+ *      CONSECUENCIA visible de la reconexión, no la acción.
+ *   5. Tras la animación + buffer: server action.
+ *   6. Server OK → `.is-leaving` fade-out del botón + `router.refresh()`.
+ *      El re-render trae los chips de verdad en su estado restaurado.
  *
- * Con prefers-reduced-motion=reduce, saltamos pasos 2-4 y llamamos
- * directo al server.
+ * Fallback con prefers-reduced-motion=reduce: salta animaciones,
+ * llama directo al server.
  */
 export function RestoreStreakButton({ credits, cycleDaysToRestore }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
-  // `isFiring`  = animación en curso. `isLeaving` = fade-out final.
   const [isFiring, setIsFiring] = useState(false)
   const [isLeaving, setIsLeaving] = useState(false)
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -85,100 +83,103 @@ export function RestoreStreakButton({ credits, cycleDaysToRestore }: Props) {
     setError(null)
 
     const btn = buttonRef.current
+    const yesterdayChip = document.querySelector<HTMLElement>(
+      '[data-day-offset="-1"]',
+    )
     const reduceMotion =
       typeof window !== "undefined" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches
 
-    // Sin animación: degradación elegante para reduced-motion / SSR / chips
-    // no encontrados. Llamamos al server directamente.
-    if (reduceMotion || !btn || cycleDaysToRestore.length === 0) {
-      runServerAction()
-      return
-    }
-
-    // Localiza los chips destino en el DOM. Si alguno falta (cycle no
-    // está montado todavía por algún motivo), también fallback.
-    const targetChips = cycleDaysToRestore
-      .map((day) => document.querySelector(`[data-cycle-day="${day}"]`))
-      .filter((el): el is HTMLElement => el instanceof HTMLElement)
-
-    if (targetChips.length === 0) {
+    // Sin animación: degradación elegante.
+    if (reduceMotion || !btn || !yesterdayChip) {
       runServerAction()
       return
     }
 
     setIsFiring(true)
-    const btnRect = btn.getBoundingClientRect()
-    const originX = btnRect.left + btnRect.width / 2
-    const originY = btnRect.top + btnRect.height / 2
 
-    targetChips.forEach((chip, i) => {
-      window.setTimeout(() => {
-        const chipRect = chip.getBoundingClientRect()
-        const targetX = chipRect.left + chipRect.width / 2
-        const targetY = chipRect.top + chipRect.height / 2
+    // Coordenadas: del centro del botón al centro del chip de ayer.
+    const btnRect  = btn.getBoundingClientRect()
+    const chipRect = yesterdayChip.getBoundingClientRect()
+    const oX = btnRect.left + btnRect.width / 2
+    const oY = btnRect.top + btnRect.height / 2
+    const tX = chipRect.left + chipRect.width / 2
+    const tY = chipRect.top + chipRect.height / 2
+    const dx = tX - oX
+    const dy = tY - oY
+    // Pico del arco — para vuelos cortos hacia abajo el arco es leve.
+    const arcPeakY = dy - Math.abs(dx) * 0.15 - 30
 
-        const dx = targetX - originX
-        const dy = targetY - originY
-        // Pico del arco: 30 px por encima del punto medio, más alto si
-        // el vuelo es largo. Queda un trayecto natural en lugar de
-        // recto.
-        const arcPeakY = dy - Math.abs(dx) * 0.18 - 35
+    // Spawn de la chispa AZUL (variante .is-rescue).
+    const spark = document.createElement("span")
+    spark.className = "restore-spark is-rescue"
+    spark.style.left = `${oX}px`
+    spark.style.top = `${oY}px`
+    document.body.appendChild(spark)
 
-        // Spawn de la chispa
-        const spark = document.createElement("span")
-        spark.className = "restore-spark"
-        spark.style.left = `${originX}px`
-        spark.style.top = `${originY}px`
-        document.body.appendChild(spark)
+    const anim = spark.animate(
+      [
+        { transform: "translate(-50%, -50%) scale(0.5)", opacity: 0, offset: 0 },
+        { transform: "translate(-50%, -50%) scale(1.4)", opacity: 1, offset: 0.08 },
+        {
+          transform:
+            `translate(calc(${dx * 0.5}px - 50%), calc(${arcPeakY}px - 50%)) scale(1.1)`,
+          opacity: 1,
+          offset:  0.5,
+        },
+        {
+          transform:
+            `translate(calc(${dx}px - 50%), calc(${dy}px - 50%)) scale(1.5)`,
+          opacity: 1,
+          offset:  0.92,
+        },
+        {
+          transform:
+            `translate(calc(${dx}px - 50%), calc(${dy}px - 50%)) scale(0.3)`,
+          opacity: 0,
+          offset:  1,
+        },
+      ],
+      {
+        duration: SPARK_FLIGHT_MS,
+        easing:   "cubic-bezier(0.42, 0, 0.58, 1)",
+        fill:     "forwards",
+      },
+    )
 
-        // Web Animations API: trayectoria con 5 keyframes para el arco.
-        const anim = spark.animate(
-          [
-            { transform: "translate(-50%, -50%) scale(0.5)", opacity: 0, offset: 0 },
-            { transform: "translate(-50%, -50%) scale(1.3)", opacity: 1, offset: 0.08 },
-            {
-              transform:
-                `translate(calc(${dx * 0.5}px - 50%), calc(${arcPeakY}px - 50%)) scale(1)`,
-              opacity: 1,
-              offset: 0.5,
-            },
-            {
-              transform:
-                `translate(calc(${dx}px - 50%), calc(${dy}px - 50%)) scale(1.6)`,
-              opacity: 1,
-              offset: 0.9,
-            },
-            {
-              transform:
-                `translate(calc(${dx}px - 50%), calc(${dy}px - 50%)) scale(0.2)`,
-              opacity: 0,
-              offset: 1,
-            },
-          ],
-          {
-            duration: SPARK_FLIGHT_MS,
-            easing:   "cubic-bezier(0.42, 0, 0.58, 1)",
-            fill:     "forwards",
-          },
+    // Cuando la chispa aterriza:
+    //   - chip yesterday se "descongela" con overlay.
+    //   - chips del ciclo destinados a iluminarse: fade suave (consecuencia).
+    anim.onfinish = () => {
+      spark.remove()
+      yesterdayChip.classList.add("is-thawing")
+      // Limpiamos la clase tras la duración del thaw — el chip volverá
+      // a su estado natural cuando el server-component re-renderice con
+      // restored=true.
+      window.setTimeout(
+        () => yesterdayChip.classList.remove("is-thawing"),
+        THAW_DURATION_MS,
+      )
+
+      // Fade suave en los chips del ciclo afectados.
+      for (const day of cycleDaysToRestore) {
+        const chip = document.querySelector<HTMLElement>(
+          `[data-cycle-day="${day}"]`,
         )
+        if (!chip) continue
+        chip.classList.add("is-rekindling")
+        window.setTimeout(
+          () => chip.classList.remove("is-rekindling"),
+          THAW_DURATION_MS + 100,
+        )
+      }
+    }
 
-        anim.onfinish = () => {
-          spark.remove()
-          chip.classList.add("is-igniting")
-          window.setTimeout(
-            () => chip.classList.remove("is-igniting"),
-            CHIP_IGNITE_MS,
-          )
-        }
-      }, i * SPARK_STAGGER_MS)
-    })
-
-    // Cuando aterriza la última chispa, pedimos al server. La animación
-    // de ignición de los chips sigue en paralelo (no la bloqueamos).
-    const lastSparkLandsAt =
-      (targetChips.length - 1) * SPARK_STAGGER_MS + SPARK_FLIGHT_MS
-    window.setTimeout(runServerAction, lastSparkLandsAt + POST_ANIM_BUFFER_MS)
+    // Tras la animación + buffer, pedimos al server.
+    window.setTimeout(
+      runServerAction,
+      SPARK_FLIGHT_MS + THAW_DURATION_MS / 2 + POST_ANIM_BUFFER_MS,
+    )
   }, [cycleDaysToRestore, isFiring, isPending, runServerAction])
 
   const intentosLabel = `${credits} ${credits === 1 ? "intento" : "intentos"}`
