@@ -1500,6 +1500,27 @@ body {
   gap: 8px;
 }
 
+/* Mini chip de "intentos de restauración" que vive a la derecha del
+   dash-motivate. Pegado a la derecha vía margin-left:auto para
+   separarse del texto motivacional. */
+.dash-restore-credits {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px 2px 7px;
+  border-radius: 999px;
+  background: rgba(249, 115, 22, 0.10);
+  border: 1px solid rgba(249, 115, 22, 0.32);
+  color: var(--orange-600);
+  font-size: 12px;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  letter-spacing: -0.01em;
+  cursor: help;
+  white-space: nowrap;
+}
+
 /* ── Restore streak button ─────────────────────────────────────────
    El botón "Restaurar racha (N intentos)" debajo del StreakCycle.
    Aparece solo cuando canRestore=true. Como es un CTA opcional pero
@@ -2235,6 +2256,7 @@ details[open] > summary .secret-group-chevron {
   .xp-gain-bubble { transition: opacity 0.15s linear; }
   .xp-gain-bubble__bar-fill { transition: width 0.15s linear; }
 }
+
 
 
 

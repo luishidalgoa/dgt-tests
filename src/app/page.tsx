@@ -3,7 +3,7 @@ import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
 import { ATTEMPT_STATS_WHERE } from "@/lib/stats"
 import { getQuotaStatus } from "@/lib/aiQuota"
-import { Play, Zap, AlertTriangle, LogIn, UserPlus, Sparkles } from "lucide-react"
+import { Play, Zap, AlertTriangle, LogIn, UserPlus, Sparkles, RefreshCw } from "lucide-react"
 import { ContinueExamPill } from "@/components/ContinueExamPill"
 import { DashStatsAnalysis, type StatsAnalysisResult, type AnalysisHistoryItem } from "@/components/DashStatsAnalysis"
 import { MAX_HISTORY_ITEMS } from "@/lib/aiStatsAnalysis"
@@ -448,11 +448,35 @@ export default async function HomePage() {
         </div>
         <div className="dash-motivate">
           <Zap className="h-4 w-4" />
-          {weekTotal === 0
-            ? "Empieza hoy"
-            : dailyAvg >= 3
-            ? "Buen ritmo — sigue así"
-            : "Sube la media: 3 tests/día"}
+          <span>
+            {weekTotal === 0
+              ? "Empieza hoy"
+              : dailyAvg >= 3
+              ? "Buen ritmo — sigue así"
+              : "Sube la media: 3 tests/día"}
+          </span>
+          {/* Chip resumido del nº de intentos de restauración disponibles.
+              Solo se muestra si hay >=1 — si está a 0 no aporta nada.
+              El tooltip explica qué hace ese contador. */}
+          {user.streakRestoreCredits > 0 && (
+            <span
+              className="dash-restore-credits"
+              title={
+                `Tienes ${user.streakRestoreCredits} ` +
+                `${user.streakRestoreCredits === 1 ? "intento" : "intentos"} ` +
+                `para restaurar tu racha si la rompes. ` +
+                `Ganas +1 cada 7 días seguidos (máx 5).`
+              }
+              aria-label={
+                `${user.streakRestoreCredits} ` +
+                `${user.streakRestoreCredits === 1 ? "intento" : "intentos"} ` +
+                `de restauración de racha disponibles`
+              }
+            >
+              <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+              {user.streakRestoreCredits}
+            </span>
+          )}
         </div>
       </section>
 
