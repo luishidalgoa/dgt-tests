@@ -13,6 +13,7 @@ import { CookieConsent } from "@/components/CookieConsent"
 import { MaintenancePage } from "@/components/MaintenancePage"
 import { hasFullAccess } from "@/lib/permissions"
 import { Toaster } from "sonner"
+import { XpGainBubble } from "@/components/XpGainBubble"
 import "./globals.css"
 
 const inter = Inter({
@@ -235,6 +236,9 @@ export default async function RootLayout({
         {/* Toaster global de sonner — los componentes cliente disparan
             toasts con `import { toast } from "sonner"` y se muestran aquí. */}
         <Toaster richColors position="top-right" closeButton />
+        {/* Bubble efímera de XP gained tras un examen real. Lee
+            sessionStorage en cada cambio de ruta y se autodisparara. */}
+        <XpGainBubble />
       </body>
     </html>
   )

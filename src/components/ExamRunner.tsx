@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import {
@@ -21,6 +22,7 @@ import {
   clearExamState,
   type SavedExamState,
 } from "@/lib/examState"
+import { triggerXpGainAnimation } from "@/lib/xpAnimation"
 import {
   ArrowLeft,
   ArrowRight,
@@ -70,6 +72,11 @@ export function ExamRunner({
   const [answers, setAnswers] = useState<Record<number, number | null>>({})
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  // Ref a la última versión de `handleFinish` — necesario para que el
+  // botón DEV pueda dispararlo DESPUÉS de hacer setAnswers (que es
+  // async). Sin esta indirección la closure capturaría el handleFinish
+  // viejo con `answers` vacío.
+  const handleFinishRef = useRef<(() => void) | null>(null)
   const [secondsLeft, setSecondsLeft] = useState<number | null>(timeLimit)
   // En modo práctica (timeLimit===null) corre un cronómetro hacia ARRIBA
   // contando tiempo transcurrido. Reemplaza el "no hay timer" que había
@@ -220,9 +227,16 @@ export function ExamRunner({
       return
     }
 
+    // "Examen real" = mode normal + cronómetro. Lo necesita el endpoint
+    // para decidir si conceder XP base por examen (solo en exámenes
+    // reales). Práctica desde un test, /temas o /test-errores no da XP
+    // base — solo el bonus diario de racha si el modo cuenta para stats.
+    const isRealExam = mode === "normal" && timeLimit !== null
+
     const payload: SubmitAttemptPayload = {
       testId: test.id,
       mode,
+      isRealExam,
       answers: questions.map((qu) => ({
         questionId:       qu.id,
         selectedOptionId: answers[qu.id] ?? null,
@@ -242,6 +256,30 @@ export function ExamRunner({
         }
         const data = (await res.json()) as SubmitAttemptResponse
         clearExamState()
+        // Dispara la animación de XP gain (bubble + pelotitas) UNA sola
+        // vez con el total combinado base+bonus. La función helper
+        // garantiza idempotencia — el endpoint ya devuelve la suma en
+        // `data.xp.awarded`, no hay dos eventos separados.
+        const fired = triggerXpGainAnimation(data.xp)
+        if (!fired && data.xp?.awarded > 0) {
+          // Fallback: storage no disponible (modo incógnito raro) →
+          // toast simple para no perder el feedback.
+          toast.success(`+${data.xp.awarded} XP`, {
+            description: `Nivel ${data.xp.newLevel} · ${data.xp.levelLabel}`,
+            duration: 3500,
+          })
+        }
+        // El level-up sigue mostrándose como toast prominente además
+        // de la animación de la barra — es un evento celebratorio.
+        if (data.xp?.leveledUp) {
+          toast.success(
+            `¡Subes a nivel ${data.xp.newLevel}! · ${data.xp.levelLabel}`,
+            {
+              description: `+${data.xp.awarded} XP en este examen`,
+              duration: 6000,
+            },
+          )
+        }
         router.push(data.redirectUrl)
       } catch (err) {
         submittedRef.current = false
@@ -249,6 +287,63 @@ export function ExamRunner({
       }
     })
   }, [answers, isGuest, mode, questions, router, test.id, test.testNumber, test.category])
+
+  // Sincroniza el ref con la última versión de handleFinish. El cheat
+  // mode dev necesita disparar handleFinish DESPUÉS de setAnswers, y
+  // sin este ref capturaría una versión vieja vía closure. Lo hacemos
+  // en un effect (no en render) para no romper la regla de "no mutar
+  // refs durante render" — siempre corre tras commit.
+  useEffect(() => {
+    handleFinishRef.current = handleFinish
+  })
+
+  /**
+   * DEV ONLY: rellena las respuestas con un `targetCorrect` exacto de
+   * aciertos (el resto, errores) y dispara `handleFinish`. Atajo para
+   * iterar la UI de la bubble XP sin contestar 30 preguntas y forzando
+   * scores conocidos (100%, 27/30, 50%, 0%).
+   *
+   * Requiere que el server haya shipeado `correctOptionId` por pregunta
+   * (lo hace cuando NODE_ENV=development, ver page.tsx → sendSolutions).
+   * Si por alguna razón no está, cae a "primera opción" como wrong y
+   * "primera opción" como correct — score impredecible, pero al menos
+   * no peta.
+   */
+  const devFinishWithScore = useCallback((targetCorrect: number) => {
+    if (process.env.NODE_ENV !== "development") return
+    // Decidimos QUÉ índices serán correctos via shuffle Fisher-Yates de
+    // las posiciones [0, n). Los primeros `targetCorrect` indices del
+    // shuffle marcamos como correctas. Así el score = targetCorrect
+    // exacto, no aproximado.
+    const indices = questions.map((_, i) => i)
+    for (let i = indices.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[indices[i], indices[j]] = [indices[j], indices[i]]
+    }
+    const correctIdxSet = new Set(indices.slice(0, targetCorrect))
+
+    const next: Record<number, number | null> = {}
+    questions.forEach((qu, i) => {
+      const correctId = qu.correctOptionId ?? null
+      if (correctIdxSet.has(i)) {
+        // Acierto: elige la opción correcta si la sabemos; si no, una
+        // cualquiera (mejor que dejar null).
+        next[qu.id] = correctId ?? qu.options[0]?.id ?? null
+      } else {
+        // Fallo: elige una opción que NO sea la correcta. Si no sabemos
+        // cuál es la correcta, escoge una al azar y asume que cuenta.
+        const wrongOpts = correctId != null
+          ? qu.options.filter((o) => o.id !== correctId)
+          : qu.options
+        const pick = wrongOpts[Math.floor(Math.random() * wrongOpts.length)]
+        next[qu.id] = pick?.id ?? null
+      }
+    })
+    setAnswers(next)
+    // Esperar a que React commit el setAnswers + cree la nueva closure
+    // de handleFinish, luego dispararla vía ref.
+    window.setTimeout(() => handleFinishRef.current?.(), 60)
+  }, [questions])
 
   // ── Temporizador ────────────────────────────────────────────────────────
   // Patrón estándar de countdown: el setTimeout dispara el setSecondsLeft
@@ -352,6 +447,61 @@ export function ExamRunner({
 
   return (
     <div className="space-y-6">
+      {/* ── DEV-only cheat pills ──────────────────────────────────────
+          Botonera flotante con 4 atajos: cada pill rellena con un score
+          exacto y dispara finalizar. Solo aparece en NODE_ENV=development,
+          así que en producción ni siquiera entra al bundle (Next/Turbopack
+          hace tree-shake por la rama if). El cálculo del score depende de
+          que el server haya shipeado `correctOptionId` por pregunta, lo
+          cual también gateamos por NODE_ENV server-side. */}
+      {process.env.NODE_ENV === "development" && !isPending && (
+        <div
+          role="group"
+          aria-label="Atajos DEV: forzar score y finalizar"
+          style={{
+            position:     "fixed",
+            top:          82,
+            right:        16,
+            zIndex:       9500,
+            display:      "inline-flex",
+            gap:          6,
+            padding:      "4px 4px",
+            borderRadius: 10,
+            background:   "rgba(15, 23, 42, 0.92)",
+            border:       "1px solid rgba(255,255,255,0.12)",
+            boxShadow:    "0 10px 24px -10px rgba(0,0,0,0.55)",
+            backdropFilter: "blur(6px)",
+          }}
+        >
+          {([
+            { label: "100%", target: questions.length,     bg: "#16a34a" }, // verde
+            { label: "27/30", target: Math.max(questions.length - 3, 0), bg: "#0ea5e9" }, // azul
+            { label: "50%",  target: Math.floor(questions.length / 2), bg: "#f59e0b" }, // amber
+            { label: "0%",   target: 0,                    bg: "#ef4444" }, // rojo
+          ] as const).map(({ label, target, bg }) => (
+            <button
+              key={label}
+              type="button"
+              onClick={() => devFinishWithScore(target)}
+              title={`DEV: forzar ${target}/${questions.length} aciertos y finalizar`}
+              style={{
+                background:   bg,
+                color:        "#fff",
+                padding:      "5px 9px",
+                fontSize:     11,
+                fontWeight:   800,
+                borderRadius: 6,
+                cursor:       "pointer",
+                border:       "1px solid rgba(255,255,255,0.18)",
+                letterSpacing: "0.02em",
+                lineHeight:   1,
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
       {/* Header con progreso y timer */}
       <div className="space-y-2">
         {/*

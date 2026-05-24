@@ -3,11 +3,16 @@ import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
 import { ATTEMPT_STATS_WHERE } from "@/lib/stats"
 import { getQuotaStatus } from "@/lib/aiQuota"
-import { Play, Zap, AlertTriangle, LogIn, UserPlus, Sparkles } from "lucide-react"
+import { Play, Zap, AlertTriangle, LogIn, UserPlus, Sparkles, RefreshCw } from "lucide-react"
 import { ContinueExamPill } from "@/components/ContinueExamPill"
 import { DashStatsAnalysis, type StatsAnalysisResult, type AnalysisHistoryItem } from "@/components/DashStatsAnalysis"
 import { MAX_HISTORY_ITEMS } from "@/lib/aiStatsAnalysis"
 import { StructuredDataHome } from "@/components/StructuredData"
+import { StreakIcon } from "@/components/StreakIcon"
+import { StreakCycle } from "@/components/StreakCycle"
+import { RestoreStreakButton } from "@/components/RestoreStreakButton"
+import { computeRestoreTargetDays, getLevel, getStreakState } from "@/lib/xp"
+import { computeStreakState } from "@/lib/streak"
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app"
 
@@ -111,12 +116,11 @@ export default async function HomePage() {
     doneByCategory.set(c.id, c._count.tests > 0 ? Math.round((done / c._count.tests) * 100) : 0)
   }
 
-  // Actividad: nº exámenes por día (últimos 7) + media diaria.
-  // Date.now() lo lee react-hooks/purity como impuro, pero estamos en
-  // un Server Component dinámico (force-dynamic): cada request se sirve
-  // fresco y necesitamos la hora actual del servidor.
-  // eslint-disable-next-line react-hooks/purity
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+  // Actividad: nº exámenes por día (últimos 7) + media diaria + racha.
+  // `new Date()` aquí es Server Component dinámico (force-dynamic): cada
+  // request se sirve fresco y necesitamos la hora actual del servidor.
+  const now = new Date()
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
   const weekAttempts = await db.examAttempt.findMany({
     where: {
       userId:     user.id,
@@ -126,32 +130,39 @@ export default async function HomePage() {
     },
     select: { startedAt: true },
   })
-  const todayMid = new Date()
-  todayMid.setHours(0, 0, 0, 0)
-  const DAY_LETTERS = ["D", "L", "M", "X", "J", "V", "S"]
-  // 7 días: índice 0 = hace 6 días, 6 = hoy
-  const last7: { letter: string; count: number; isToday: boolean }[] = []
-  for (let i = 6; i >= 0; i--) {
-    const day = new Date(todayMid.getTime() - i * 86400000)
-    const next = new Date(day.getTime() + 86400000)
-    const count = weekAttempts.filter(
-      (a) => a.startedAt >= day && a.startedAt < next
-    ).length
-    last7.push({
-      letter: DAY_LETTERS[day.getDay()],
-      count,
-      isToday: i === 0,
-    })
-  }
-  const weekTotal = last7.reduce((acc, d) => acc + d.count, 0)
-  const dailyAvg = weekTotal / 7
-  // Racha de días consecutivos hasta hoy con al menos 1 examen
-  let streakDays = 0
-  for (let i = last7.length - 1; i >= 0; i--) {
-    if (last7[i].count > 0) streakDays++
-    else break
-  }
-  const maxDay = Math.max(1, ...last7.map((d) => d.count))
+  // Toda la lógica del gráfico de los 7 días (last7, streakDays con
+  // días restaurados, canRestore) vive en src/lib/streak.ts. El estado
+  // 3-valor del icono (active/frozen/dormant) y el ciclo de bonus de XP
+  // lo gestiona src/lib/xp.ts:getStreakState — son dos vistas
+  // complementarias sobre los mismos datos.
+  const streak = computeStreakState(
+    weekAttempts.map(a => a.startedAt),
+    user.streakRestoredUntil,
+    now,
+    { credits: user.streakRestoreCredits }
+  )
+  const { last7, weekTotal, dailyAvg, maxDay, canRestore } = streak
+
+  // ── XP & nivel ────────────────────────────────────────────────────
+  // El icono "🔥" del bloque "Actividad esta semana" se sustituye por el
+  // asset del nivel actual derivado de user.xp (ver src/lib/xp.ts).
+  // El estado de racha (active/frozen/dormant) decide si el icono se
+  // pinta normal, congelado o apagado, y el ciclo de bonus se muestra
+  // bajo la barra de XP.
+  const xpInfo      = getLevel(user.xp)
+  const streakInfo  = await getStreakState(user.id)
+
+  // Posiciones del ciclo (1..7) que pasarán a "earned" si el user gasta
+  // un crédito ahora. Lo necesita <RestoreStreakButton> para volar
+  // chispas a esos chips. Si no hay nada que restaurar, queda vacío y
+  // el botón hará fallback sin animación.
+  const cycleDaysToRestore = canRestore
+    ? computeRestoreTargetDays({
+        attemptDates:         weekAttempts.map((a) => a.startedAt),
+        currentRestoredUntil: user.streakRestoredUntil,
+        now,
+      })
+    : []
 
   // Errores pendientes
   const pendingErrors = await db.$queryRaw<{ count: bigint }[]>`
@@ -267,7 +278,18 @@ export default async function HomePage() {
       <section className="dash-streak">
         <div className="dash-streak-head">
           <h3>Actividad esta semana</h3>
-          <span className="fire" aria-hidden="true">🔥</span>
+          <StreakIcon
+            xp={user.xp}
+            size={56}
+            state={streakInfo.state}
+            ariaLabel={
+              streakInfo.state === "frozen"
+                ? "Racha en peligro: aún no has hecho ningún examen hoy"
+                : streakInfo.state === "dormant"
+                ? "Racha apagada"
+                : "Racha activa"
+            }
+          />
         </div>
         <h2>
           <b>{dailyAvg.toFixed(1)}</b> {dailyAvg === 1 ? "test/día" : "tests/día"}
@@ -275,8 +297,81 @@ export default async function HomePage() {
         <p className="sub">
           {weekTotal === 0
             ? "Aún no has hecho ningún test esta semana"
-            : `${weekTotal} en los últimos 7 días${streakDays > 1 ? ` · racha de ${streakDays} días` : ""}`}
+            : `${weekTotal} en los últimos 7 días${
+                streakInfo.state === "active"  && streakInfo.days > 1 ? ` · racha de ${streakInfo.days} días` :
+                streakInfo.state === "frozen"  && streakInfo.days > 0 ? ` · racha de ${streakInfo.days} días congelada` :
+                ""
+              }`}
         </p>
+
+        {/* Mini-bloque de nivel + barra de progreso a próximo nivel.
+            Cuando el usuario está en MAX_LEVEL, nextLevelXp = null → no
+            mostramos barra, solo el badge "Nivel máximo".
+            Paleta: sobre .dash-streak blanco. Texto slate, fill naranja. */}
+        <div className="dash-xp" style={{ marginTop: 4, marginBottom: 14 }}>
+          <div
+            style={{
+              display:        "flex",
+              alignItems:     "center",
+              justifyContent: "space-between",
+              fontSize:       12.5,
+              fontWeight:     700,
+              color:          "var(--slate-700)",
+              marginBottom:   6,
+            }}
+          >
+            <span>
+              Nivel {xpInfo.level} · {xpInfo.label}
+            </span>
+            <span
+              style={{
+                fontFamily: "var(--font-mono)",
+                color:      "var(--slate-500)",
+                fontWeight: 600,
+              }}
+            >
+              {xpInfo.nextLevelXp === null
+                ? `${user.xp} XP · MAX`
+                : `${user.xp} / ${xpInfo.nextLevelXp} XP`}
+            </span>
+          </div>
+          <div
+            style={{
+              height:       6,
+              background:   "var(--slate-200)",
+              borderRadius: 999,
+              overflow:     "hidden",
+            }}
+            role="progressbar"
+            aria-valuenow={xpInfo.progressPct}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label="Progreso al siguiente nivel"
+          >
+            <div
+              style={{
+                width:      `${xpInfo.progressPct}%`,
+                height:     "100%",
+                background: "linear-gradient(90deg, var(--orange-500), var(--orange-600))",
+                transition: "width 400ms ease",
+              }}
+            />
+          </div>
+        </div>
+
+        <StreakCycle
+          state={streakInfo.state}
+          days={streakInfo.days}
+          claimedToday={streakInfo.claimedToday}
+        />
+
+        {canRestore && (
+          <RestoreStreakButton
+            credits={user.streakRestoreCredits}
+            cycleDaysToRestore={cycleDaysToRestore}
+          />
+        )}
+
         <div
           className="dash-days"
           aria-label="Tests por día (últimos 7)"
@@ -285,10 +380,19 @@ export default async function HomePage() {
           {last7.map((d, i) => {
             const isEmpty = d.count === 0
             const heightPct = Math.max(14, (d.count / maxDay) * 100)
+            const title = d.restored
+              ? `${d.letter}: día restaurado con crédito`
+              : `${d.letter}: ${d.count} test${d.count === 1 ? "" : "s"}`
+            // last7 va de hace-6-días (i=0) a hoy (i=6).
+            // dayOffset: -6, -5, ..., -1 (ayer), 0 (hoy). Permite que el
+            // botón de restaurar localice el chip de "ayer" por DOM query
+            // para volar su chispa allí.
+            const dayOffset = i - 6
             return (
               <div
                 key={i}
-                className={`dash-day ${isEmpty ? "empty" : ""}`}
+                data-day-offset={dayOffset}
+                className={`dash-day ${isEmpty && !d.restored ? "empty" : ""}`}
                 style={{
                   flexDirection: "column",
                   aspectRatio: "auto",
@@ -302,7 +406,7 @@ export default async function HomePage() {
                   outline: d.isToday ? "2px solid var(--orange-600)" : "none",
                   outlineOffset: 1,
                 }}
-                title={`${d.letter}: ${d.count} test${d.count === 1 ? "" : "s"}`}
+                title={title}
               >
                 <div
                   style={{
@@ -312,13 +416,17 @@ export default async function HomePage() {
                     marginBottom: 4,
                   }}
                 >
-                  {d.count}
+                  {d.restored ? "❄" : d.count}
                 </div>
                 <div
                   style={{
                     width: "60%",
-                    background: isEmpty ? "transparent" : "rgba(255,255,255,0.7)",
-                    height: `${heightPct}%`,
+                    background: d.restored
+                      ? "repeating-linear-gradient(45deg, rgba(125,211,252,0.55) 0 4px, rgba(255,255,255,0.3) 4px 8px)"
+                      : isEmpty
+                        ? "transparent"
+                        : "rgba(255,255,255,0.7)",
+                    height: `${d.restored ? 30 : heightPct}%`,
                     maxHeight: 60,
                     borderRadius: 4,
                     marginInline: "auto",
@@ -340,11 +448,35 @@ export default async function HomePage() {
         </div>
         <div className="dash-motivate">
           <Zap className="h-4 w-4" />
-          {weekTotal === 0
-            ? "Empieza hoy"
-            : dailyAvg >= 3
-            ? "Buen ritmo — sigue así"
-            : "Sube la media: 3 tests/día"}
+          <span>
+            {weekTotal === 0
+              ? "Empieza hoy"
+              : dailyAvg >= 3
+              ? "Buen ritmo — sigue así"
+              : "Sube la media: 3 tests/día"}
+          </span>
+          {/* Chip resumido del nº de intentos de restauración disponibles.
+              Solo se muestra si hay >=1 — si está a 0 no aporta nada.
+              El tooltip explica qué hace ese contador. */}
+          {user.streakRestoreCredits > 0 && (
+            <span
+              className="dash-restore-credits"
+              title={
+                `Tienes ${user.streakRestoreCredits} ` +
+                `${user.streakRestoreCredits === 1 ? "intento" : "intentos"} ` +
+                `para restaurar tu racha si la rompes. ` +
+                `Ganas +1 cada 7 días seguidos (máx 5).`
+              }
+              aria-label={
+                `${user.streakRestoreCredits} ` +
+                `${user.streakRestoreCredits === 1 ? "intento" : "intentos"} ` +
+                `de restauración de racha disponibles`
+              }
+            >
+              <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+              {user.streakRestoreCredits}
+            </span>
+          )}
         </div>
       </section>
 

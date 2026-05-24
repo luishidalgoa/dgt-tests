@@ -1500,6 +1500,207 @@ body {
   gap: 8px;
 }
 
+/* Mini chip de "intentos de restauración" que vive a la derecha del
+   dash-motivate. Pegado a la derecha vía margin-left:auto para
+   separarse del texto motivacional. */
+.dash-restore-credits {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px 2px 7px;
+  border-radius: 999px;
+  background: rgba(249, 115, 22, 0.10);
+  border: 1px solid rgba(249, 115, 22, 0.32);
+  color: var(--orange-600);
+  font-size: 12px;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  letter-spacing: -0.01em;
+  cursor: help;
+  white-space: nowrap;
+}
+
+/* ── Restore streak button ─────────────────────────────────────────
+   El botón "Restaurar racha (N intentos)" debajo del StreakCycle.
+   Aparece solo cuando canRestore=true. Como es un CTA opcional pero
+   con timing limitado (solo el día siguiente a la rotura) animamos
+   para atraer la atención sin ser molestos:
+     - Pulse continuo de "ripple ring" suave (2.4s loop).
+     - Hover: lift + brillo en sombra + rotación leve del refresh icon.
+     - Active (mousedown): squish hacia abajo.
+   Toda la lógica de aparición/desaparición la decide el padre. */
+@keyframes restoreStreakPulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 0   rgba(249, 115, 22, 0.45),
+      0 4px 12px -6px rgba(234, 88, 12, 0.35);
+  }
+  70% {
+    box-shadow:
+      0 0 0 12px rgba(249, 115, 22, 0),
+      0 4px 12px -6px rgba(234, 88, 12, 0.35);
+  }
+}
+.restore-streak-btn {
+  animation: restoreStreakPulse 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
+}
+.restore-streak-btn:hover {
+  animation: none;
+  transform: translateY(-1px) scale(1.02);
+  background: linear-gradient(180deg, #fff7ed, #fed7aa) !important;
+  box-shadow:
+    0 8px 16px -6px rgba(234, 88, 12, 0.45),
+    0 0 0 4px rgba(249, 115, 22, 0.12);
+}
+.restore-streak-btn:active {
+  transform: scale(0.97);
+  box-shadow: 0 2px 6px -4px rgba(234, 88, 12, 0.45);
+  transition-duration: 0.05s;
+}
+.restore-streak-btn:disabled {
+  animation: none;
+  cursor: wait;
+  opacity: 0.7;
+}
+.restore-streak-btn .refresh-icon {
+  transition: transform 250ms ease;
+}
+.restore-streak-btn:hover .refresh-icon {
+  transform: rotate(60deg);
+}
+
+/* ── Estados durante la animación de restaurar ─────────────────────
+   `is-firing`  → el botón ha sido pulsado, las chispas están en vuelo.
+                  Quitamos el pulse continuo y giramos el icono refresh.
+   `is-leaving` → el server confirmó OK; fade-out + shrink antes de que
+                  React desmonte el componente (canRestore pasa a false). */
+.restore-streak-btn.is-firing {
+  animation: none;
+  pointer-events: none;
+}
+.restore-streak-btn.is-firing .refresh-icon {
+  animation: restoreSpin 0.55s linear infinite;
+}
+@keyframes restoreSpin {
+  to { transform: rotate(360deg); }
+}
+.restore-streak-btn.is-leaving {
+  animation: none;
+  opacity: 0;
+  transform: scale(0.92);
+  transition: opacity 200ms ease, transform 200ms ease;
+  pointer-events: none;
+}
+
+/* Chispa que vuela del botón al chip de AYER en el chart de actividad.
+   Se monta en <body> con position:fixed. El Web Animations API mueve
+   `transform`; las propiedades visuales viven aquí.
+   La variante `.is-rescue` (azul/hielo) comunica "descongelar el día
+   perdido", NO "concede XP" — al restaurar no se gana XP retroactiva,
+   solo se reconecta la cadena de la racha. */
+.restore-spark {
+  position: fixed;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 10000;
+  will-change: transform, opacity;
+  /* Fallback naranja (sin .is-rescue). Reservado por si en el futuro
+     queremos chispas de XP reales en otra animación. */
+  background: radial-gradient(
+    circle at 35% 35%,
+    #fff7ed 0%,
+    #fbbf24 35%,
+    #f97316 65%,
+    rgba(249, 115, 22, 0) 100%
+  );
+  box-shadow:
+    0 0 10px 3px rgba(251, 191, 36, 0.65),
+    0 0 22px 8px rgba(249, 115, 22, 0.35);
+}
+.restore-spark.is-rescue {
+  background: radial-gradient(
+    circle at 35% 35%,
+    #f0f9ff 0%,
+    #7dd3fc 30%,
+    #0ea5e9 65%,
+    rgba(14, 165, 233, 0) 100%
+  );
+  box-shadow:
+    0 0 10px 3px rgba(125, 211, 252, 0.7),
+    0 0 24px 10px rgba(14, 165, 233, 0.35);
+}
+
+/* Cuando la chispa impacta el chip de AYER, ese chip recibe
+   `.is-thawing` durante ~600 ms. Mostramos un overlay con el patrón
+   rayado azul + ❄ — preview visual del estado restaurado que verá
+   tras el re-render del Server Component. La clase se quita cuando
+   router.refresh() trae el chip ya en estado `restored=true`. */
+[data-day-offset].is-thawing {
+  position: relative;
+}
+[data-day-offset].is-thawing::after {
+  content: "❄";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 800;
+  color: #0ea5e9;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(125, 211, 252, 0.55) 0 4px,
+    rgba(255, 255, 255, 0.3) 4px 8px
+  );
+  border-radius: inherit;
+  animation: dayThawIn 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  pointer-events: none;
+}
+@keyframes dayThawIn {
+  0%   { opacity: 0; transform: scale(0.5); }
+  60%  { opacity: 1; transform: scale(1.12); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* Chips del ciclo que pasarán a "earned" reciben este fade suave en
+   paralelo a la chispa de rescate. Es la CONSECUENCIA visible de la
+   reconexión: gris → naranja. Usamos un overlay para evitar pelearnos
+   con los styles inline del chip. */
+[data-cycle-day].is-rekindling {
+  position: relative;
+}
+[data-cycle-day].is-rekindling::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, #fdba74, #fb923c);
+  opacity: 0;
+  animation: chipRekindleIn 600ms ease-out 100ms forwards;
+  pointer-events: none;
+}
+@keyframes chipRekindleIn {
+  0%   { opacity: 0; }
+  100% { opacity: 0.82; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .restore-streak-btn { animation: none; }
+  .restore-streak-btn:hover { transform: none; }
+  .restore-streak-btn.is-firing .refresh-icon { animation: none; }
+  .restore-streak-btn.is-leaving { transition: opacity 0.1s linear; }
+  [data-day-offset].is-thawing::after { animation: none; }
+  [data-cycle-day].is-rekindling::after { animation: none; }
+}
+
 /* Errors banner */
 .dash-errors {
   position: relative;
@@ -1924,3 +2125,266 @@ body {
 details[open] > summary .secret-group-chevron {
   transform: rotate(90deg) !important;
 }
+
+/* ── XP gain bubble + pelotitas ─────────────────────────────────────
+   Bubble flotante que aparece tras un examen real cerca de donde
+   estaría el avatar (top-right). Animación de entrada por opacity +
+   translateY desde el componente; el fill de la barra es un
+   transition CSS. Las pelotitas son spans creados dinámicamente con
+   .xp-spark y animadas con Web Animations API desde el componente. */
+.xp-gain-bubble {
+  position: fixed;
+  /* Anclada justo DEBAJO del navbar (altura 72px + 6px de aire). En
+     desktop coincide aproximadamente con el borde derecho del grupo
+     avatar + tokens + ajustes. */
+  top: 78px;
+  right: 16px;
+  z-index: 9000;
+  min-width: 240px;
+  max-width: 340px;
+  padding: 12px 14px 11px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fff7ed 0%, #ffedd5 100%);
+  border: 1px solid #fb923c;
+  box-shadow:
+    0 12px 28px -12px rgba(234, 88, 12, 0.45),
+    0 4px 10px -4px rgba(234, 88, 12, 0.25);
+  pointer-events: none;
+  transition:
+    opacity 250ms ease,
+    transform 250ms cubic-bezier(0.34, 1.4, 0.64, 1);
+  font-family: var(--font-inter);
+}
+
+/* Mobile (≤640px): ancho completo con márgenes laterales mínimos. El
+   navbar es más compacto en mobile así que reducimos también el top.
+   `max-width: none` y `min-width: 0` para que respire en 320-380px. */
+/* En mobile el componente cliente puede setear `right` inline para
+   alinear con el nav-right en desktop. Forzamos los valores mobile con
+   !important para que la media query siempre gane en viewports
+   estrechos, independientemente del style inline. */
+@media (max-width: 640px) {
+  .xp-gain-bubble {
+    top: 70px !important;
+    left: 12px !important;
+    right: 12px !important;
+    max-width: none !important;
+    min-width: 0 !important;
+  }
+}
+
+/* ── Helper hint (icono "?" con tooltip/popover) ───────────────────
+   Patrón consistente para clarificar términos de UI sin ocupar
+   espacio. Trigger pequeño y discreto; popover oscuro al hacer click. */
+.help-hint {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.help-hint__trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Tap target generoso para mobile (W3C recomienda ≥24×24, Material
+     ≥44×44). Compensamos con margen negativo para que el layout no se
+     altere visualmente. El icono mantiene su tamaño. */
+  padding: 8px;
+  margin: -8px;
+  background: transparent;
+  border: 0;
+  color: var(--slate-400);
+  cursor: pointer;
+  border-radius: 50%;
+  transition: color 150ms ease, background 150ms ease;
+  /* Importante: -webkit-tap-highlight-color para que iOS no pinte el
+     rectángulo gris al tocar. Lo sustituimos por nuestro propio :active. */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.help-hint__trigger:hover,
+.help-hint__trigger:focus-visible,
+.help-hint__trigger:active {
+  color: var(--orange-600);
+  background: rgba(249, 115, 22, 0.12);
+  outline: none;
+}
+/* Popover base: solo estilos visuales. La posición (top/bottom/left/
+   right) y la dirección de la flecha la deciden las clases
+   modificadoras --h-* / --v-* que aplica el componente HelpHint según
+   el espacio disponible alrededor del trigger. Eso permite auto-flip
+   cuando el popover se saldría por algún borde. */
+.help-hint__popover {
+  position: absolute;
+  /* Por encima de cualquier overlay del dashboard pero por debajo de
+     toasts (10000) y la bubble XP (9000). */
+  z-index: 8500;
+  background: var(--slate-700);
+  color: #fff;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+  width: max-content;
+  /* Cap en 260px pero respeta viewports estrechos (≥260+24). */
+  max-width: min(260px, calc(100vw - 24px));
+  text-transform: none;
+  letter-spacing: 0;
+  box-shadow:
+    0 12px 24px -10px rgba(0, 0, 0, 0.4),
+    0 4px 8px -4px rgba(0, 0, 0, 0.2);
+  cursor: text;
+  user-select: text;
+}
+.help-hint__popover::before {
+  content: "";
+  position: absolute;
+  border: 6px solid transparent;
+}
+
+/* ── Horizontal alignment ──────────────────────────────────────── */
+.help-hint__popover--h-center {
+  left: 50%;
+  transform: translateX(-50%);
+}
+.help-hint__popover--h-center::before {
+  left: 50%;
+  transform: translateX(-50%);
+}
+.help-hint__popover--h-left {
+  left: 0;
+  right: auto;
+  transform: none;
+}
+.help-hint__popover--h-left::before {
+  left: 10px;
+  right: auto;
+  transform: none;
+}
+.help-hint__popover--h-right {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+.help-hint__popover--h-right::before {
+  right: 10px;
+  left: auto;
+  transform: none;
+}
+
+/* ── Vertical alignment + dirección de la flecha ───────────────── */
+.help-hint__popover--v-bottom {
+  top: calc(100% + 12px);
+  bottom: auto;
+}
+.help-hint__popover--v-bottom::before {
+  bottom: 100%;
+  top: auto;
+  border-bottom-color: var(--slate-700);
+}
+.help-hint__popover--v-top {
+  bottom: calc(100% + 12px);
+  top: auto;
+}
+.help-hint__popover--v-top::before {
+  top: 100%;
+  bottom: auto;
+  border-top-color: var(--slate-700);
+}
+
+.xp-gain-bubble[data-phase="exit"] {
+  transition:
+    opacity 320ms ease,
+    transform 320ms ease;
+}
+.xp-gain-bubble__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.xp-gain-bubble__icon {
+  font-size: 18px;
+  filter: drop-shadow(0 0 6px rgba(249, 115, 22, 0.6));
+}
+.xp-gain-bubble__delta {
+  font-size: 16px;
+  font-weight: 900;
+  color: var(--orange-600);
+  letter-spacing: -0.01em;
+  flex: 1;
+}
+.xp-gain-bubble__level {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--slate-500);
+  background: rgba(255, 255, 255, 0.7);
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--slate-200);
+}
+.xp-gain-bubble__bar {
+  position: relative;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(234, 88, 12, 0.18);
+}
+.xp-gain-bubble__bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #fbbf24, var(--orange-600));
+  transition: width 1300ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  border-radius: inherit;
+  box-shadow: 0 0 6px 1px rgba(251, 191, 36, 0.5);
+}
+.xp-gain-bubble__meta {
+  margin-top: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--slate-500);
+  font-family: var(--font-mono);
+  text-align: right;
+}
+.xp-gain-bubble__sparks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Pelotita naranja de XP. Estilo similar al .restore-spark pero más
+   pequeña y siempre cálida (la metáfora es "XP fluyendo a la barra"). */
+.xp-spark {
+  position: fixed;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 9100;
+  will-change: transform, opacity;
+  background: radial-gradient(
+    circle at 35% 35%,
+    #fff7ed 0%,
+    #fbbf24 35%,
+    #f97316 65%,
+    rgba(249, 115, 22, 0) 100%
+  );
+  box-shadow:
+    0 0 8px 2px rgba(251, 191, 36, 0.7),
+    0 0 18px 6px rgba(249, 115, 22, 0.35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xp-gain-bubble { transition: opacity 0.15s linear; }
+  .xp-gain-bubble__bar-fill { transition: width 0.15s linear; }
+}
+
+
+
+
+
+
+
+

@@ -60,10 +60,46 @@ export type AttemptMode = "normal" | "errores" | "errores-refuerzo" | "tema"
 export interface SubmitAttemptPayload {
   testId: number | null
   mode: AttemptMode
+  /** true sii el intento se completó como EXAMEN REAL (modo "normal"
+   *  con cronómetro de 30 min). Solo en ese caso se otorga XP base por
+   *  examen (`computeExamXp`). El bonus diario de racha se concede igual
+   *  para cualquier examen que cuente para stats — eso depende del
+   *  `mode`, no de este flag. */
+  isRealExam: boolean
   answers: {
     questionId: number
     selectedOptionId: number | null
   }[]
+}
+
+/** Recompensa de XP devuelta tras finalizar un intento. Permite al cliente
+ *  mostrar el toast de level-up + la animación de gain sin tener que
+ *  volver a llamar al servidor. */
+export interface AttemptXpReward {
+  /** Total de XP otorgado en este intento (suma del breakdown). */
+  awarded: number
+  /** Desglose por motivo. Útil si en el futuro queremos enseñar
+   *  "10 + 20 (aprobado) + 50 (perfecto)". */
+  breakdown: { reason: string; amount: number }[]
+  /** true sii este intento hizo subir al menos un nivel. */
+  leveledUp: boolean
+  /** Nivel nuevo (igual al antiguo si no hubo level-up). */
+  newLevel: number
+  /** Nivel viejo (anterior al intento). */
+  oldLevel: number
+  /** Path del icono del nivel NUEVO — listo para mostrar en el toast. */
+  iconPath: string
+  /** Etiqueta legible del nivel nuevo, p.ej. "Llama estable". */
+  levelLabel: string
+  /** XP del usuario ANTES de este intento. Necesario para animar la
+   *  barra de progreso desde el valor previo al nuevo. */
+  prevXp: number
+  /** XP total DESPUÉS de aplicar awarded. */
+  newXp: number
+  /** Umbral del siguiente nivel (null si está al máximo). */
+  nextLevelXp: number | null
+  /** Progreso al siguiente nivel en porcentaje (0..100). */
+  progressPct: number
 }
 
 export interface SubmitAttemptResponse {
@@ -71,4 +107,5 @@ export interface SubmitAttemptResponse {
   score: number
   total: number
   redirectUrl: string
+  xp: AttemptXpReward
 }

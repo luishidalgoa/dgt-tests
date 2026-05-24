@@ -313,8 +313,12 @@ export default async function ExamPage({ params, searchParams }: PageProps) {
   // Para invitados, las soluciones son necesarias porque no hay POST al servidor.
   // Para usuarios logueados en modo práctica (no examen), las enviamos también
   // para poder mostrar feedback inline al responder.
+  // En NODE_ENV=development también las shippeamos siempre (incluido modo
+  // examen real) para que el cheat button DEV pueda apuntar a un score
+  // exacto. El check es server-side, así que en prod jamás se envían.
   const isGuest = !user
-  const sendSolutions = isGuest || !examMode
+  const isDev = process.env.NODE_ENV === "development"
+  const sendSolutions = isGuest || !examMode || isDev
 
   // Cargar opciones con isCorrect y la explicación cuando hace falta
   const questionsWithSolutions = sendSolutions
