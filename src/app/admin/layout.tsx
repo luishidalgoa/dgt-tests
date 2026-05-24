@@ -1,6 +1,6 @@
 import { requireAdmin } from "@/lib/adminGuard"
 import Link from "next/link"
-import { ChevronLeft, Shield, Sliders, KeyRound } from "lucide-react"
+import { ChevronLeft, Shield, Sliders, KeyRound, Pencil, MessageSquareWarning } from "lucide-react"
 
 export const dynamic = "force-dynamic"
 
@@ -46,6 +46,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <Link href="/admin/secrets" className="btn-secondary">
           <KeyRound className="h-4 w-4" />
           API keys
+        </Link>
+        <Link href="/admin/questions" className="btn-secondary">
+          <Pencil className="h-4 w-4" />
+          Preguntas
+        </Link>
+        <Link href="/admin/reports" className="btn-secondary">
+          <MessageSquareWarning className="h-4 w-4" />
+          Reportes
         </Link>
       </nav>
 

@@ -22,6 +22,8 @@ import {
   type AIExplanationResult,
   type ProviderPingResult,
   type AICompleteOptions,
+  type AnswerSuggestionPayload,
+  type AnswerSuggestionResult,
 } from "./types"
 
 const ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
@@ -239,6 +241,118 @@ async function complete(
   return text
 }
 
+function buildSuggestAnswerSystem(): string {
+  return [
+    "Eres un examinador del Reglamento General de Circulación de la DGT española y un profesor experimentado de autoescuela.",
+    "Te llega una pregunta del examen teórico y debes determinar cuál de las opciones es la correcta según la normativa española vigente (Reglamento General de Circulación RD 1428/2003, Reglamento General de Conductores, Reglamento General de Vehículos y manual oficial de la DGT).",
+    "",
+    "Reglas:",
+    "1. Rígete EXCLUSIVAMENTE por la normativa DGT española.",
+    "2. La explicación oficial del temario es CONTEXTO, no una pista directa.",
+    "3. Si dudas entre dos opciones, refleja la incertidumbre en confidence.",
+    "4. Si encuentras referencia normativa concreta (artículo del RGC, número de señal, definición del manual), inclúyela en dgtBasis.",
+    "",
+    "DEVOLVERÁS EXCLUSIVAMENTE un JSON válido con esta forma exacta:",
+    "{",
+    '  "suggestedLetra": "A",                // letra exacta (A/B/C…), una sola',
+    '  "confidence":     0.0,                // 0..1',
+    '  "reasoning":      "...",              // 2-5 frases en español',
+    '  "dgtBasis":       "Art. X del RGC..."  // o null',
+    "}",
+    "",
+    "Responde en español. Sin markdown. Solo el JSON.",
+  ].join("\n")
+}
+
+function buildSuggestAnswerUser(p: AnswerSuggestionPayload): string {
+  const optionsBlock = p.options
+    .map((o) => `${o.letra.toUpperCase()}) ${o.texto}`)
+    .join("\n")
+  return [
+    `PREGUNTA: ${p.enunciado}`,
+    p.codigoTema ? `CÓDIGO TEMA (orientativo): ${p.codigoTema}` : "",
+    "",
+    "OPCIONES:",
+    optionsBlock,
+    "",
+    p.explicacionOficial
+      ? `EXPLICACIÓN OFICIAL DEL TEMARIO (contexto):\n${p.explicacionOficial}`
+      : "(No se adjunta explicación oficial — apóyate solo en la normativa DGT.)",
+    p.imagePath
+      ? "\n(Nota: esta pregunta tiene imagen asociada en el examen, pero este modelo no la procesa — apóyate solo en el texto.)"
+      : "",
+  ].filter(Boolean).join("\n")
+}
+
+function clamp01(n: unknown): number {
+  const x = typeof n === "number" ? n : parseFloat(String(n))
+  if (!Number.isFinite(x)) return 0
+  if (x < 0) return 0
+  if (x > 1) return Math.min(1, x > 100 ? 1 : x / 100)
+  return x
+}
+
+async function suggestAnswer(payload: AnswerSuggestionPayload): Promise<AnswerSuggestionResult> {
+  const { apiKey, model } = await getEnv()
+  const body = {
+    model,
+    messages: [
+      { role: "system", content: buildSuggestAnswerSystem() },
+      { role: "user",   content: buildSuggestAnswerUser(payload) },
+    ],
+    response_format: { type: "json_object" },
+    temperature:     0.1,
+    max_tokens:      1024,
+  }
+
+  const res = await fetch(ENDPOINT, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+    body:    JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => "")
+    throw new AIProviderError("groq", res.status, `Groq ${res.status}: ${text || res.statusText}`)
+  }
+
+  const data = (await res.json()) as { choices?: { message?: { content?: string } }[] }
+  const text = data.choices?.[0]?.message?.content?.trim() ?? ""
+  if (!text) throw new AIProviderError("groq", 500, "Groq no devolvió texto")
+
+  const cleaned = stripJsonFences(text)
+  let parsed: {
+    suggestedLetra?:  string
+    suggested_letra?: string
+    confidence?:      number
+    reasoning?:       string
+    dgtBasis?:        string | null
+    dgt_basis?:       string | null
+  }
+  try {
+    parsed = JSON.parse(cleaned)
+  } catch {
+    const match = cleaned.match(/\{[\s\S]*\}/)
+    if (!match) throw new AIProviderError("groq", 500, "Respuesta de Groq no es JSON")
+    parsed = JSON.parse(match[0])
+  }
+
+  const validLetras = new Set(payload.options.map((o) => o.letra.toUpperCase()))
+  const raw = (parsed.suggestedLetra ?? parsed.suggested_letra ?? "").toString().trim().toUpperCase()
+  const m = raw.match(/[A-Z]/)
+  const letter = m && validLetras.has(m[0]) ? m[0] : ""
+  if (!letter) {
+    throw new AIProviderError("groq", 500, `La IA devolvió una letra no válida: '${raw}'`)
+  }
+  const basis = parsed.dgtBasis ?? parsed.dgt_basis ?? null
+  return {
+    suggestedLetra: letter,
+    confidence:     clamp01(parsed.confidence),
+    reasoning:      (parsed.reasoning ?? "").toString().trim(),
+    dgtBasis:       basis === null || basis === undefined ? null : String(basis).trim() || null,
+    model,
+  }
+}
+
 /**
  * Health check: llamada minimal "responde 'ok'" para verificar API key
  * y modelo. Coste: ~5 tokens, latencia típica < 500ms en Groq.
@@ -273,6 +387,7 @@ export const groqProvider: AIProvider = {
   name:        "groq",
   displayName: "Groq (Llama)",
   explainQuestion,
+  suggestAnswer,
   complete,
   ping,
 }

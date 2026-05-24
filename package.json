@@ -25,6 +25,7 @@
     "turso:sync": "tsx --env-file=.env scripts/turso-sync.ts",
     "turso:apply-migration": "tsx --env-file=.env scripts/turso-apply-migration.ts",
     "turso:sync-ai-questions": "tsx --env-file=.env scripts/turso-sync-ai-questions.ts",
+    "turso:sync-question": "tsx --env-file=.env scripts/turso-sync-question.ts",
     "db:pull-prod": "tsx --env-file=.env scripts/db-pull-prod.ts",
     "user:seed": "tsx --env-file=.env scripts/seed-user.ts",
     "user:role": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/set-role.ts",

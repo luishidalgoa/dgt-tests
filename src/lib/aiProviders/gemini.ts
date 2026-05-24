@@ -17,6 +17,8 @@ import {
   type AIExplanationResult,
   type ProviderPingResult,
   type AICompleteOptions,
+  type AnswerSuggestionPayload,
+  type AnswerSuggestionResult,
 } from "./types"
 
 const ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models"
@@ -234,6 +236,122 @@ async function explainQuestion(payload: AIQuestionPayload): Promise<AIExplanatio
   }
 }
 
+function buildSuggestAnswerPrompt(p: AnswerSuggestionPayload): string {
+  const optionsBlock = p.options
+    .map((o) => `${o.letra.toUpperCase()}) ${o.texto}`)
+    .join("\n")
+  const validLetras = p.options.map((o) => o.letra.toUpperCase()).join("/")
+  return [
+    "Eres un examinador del Reglamento General de Circulación de la DGT española y un profesor experimentado de autoescuela.",
+    "Tu tarea: ante esta pregunta del examen teórico, determinar cuál de las opciones es la respuesta correcta según la normativa española vigente (Reglamento General de Circulación RD 1428/2003, Reglamento General de Conductores, Reglamento General de Vehículos y manual oficial de la DGT).",
+    "",
+    "REGLAS:",
+    "1. Rígete EXCLUSIVAMENTE por la normativa DGT española. Ignora normativas de otros países.",
+    "2. Si hay imagen, obsérvala con detalle: señales, marcas viales, vehículos, situación de la vía.",
+    "3. La explicación oficial del temario que se adjunta es CONTEXTO, NO una pista directa: úsala para fundamentar tu respuesta, no para copiarla.",
+    "4. Si dudas entre dos opciones, elige la que tenga base normativa más sólida y refleja la confianza con honestidad.",
+    "5. Si encuentras una referencia normativa concreta (artículo del RGC, número de señal, definición del manual), inclúyela en dgtBasis.",
+    "",
+    `PREGUNTA: ${p.enunciado}`,
+    p.codigoTema ? `CÓDIGO TEMA (orientativo): ${p.codigoTema}` : "",
+    "",
+    "OPCIONES:",
+    optionsBlock,
+    "",
+    p.explicacionOficial
+      ? `EXPLICACIÓN OFICIAL DEL TEMARIO (contexto):\n${p.explicacionOficial}`
+      : "(No se adjunta explicación oficial — apóyate solo en la normativa DGT.)",
+    "",
+    "Devuelve EXCLUSIVAMENTE un JSON válido (sin markdown, sin ```), con esta forma exacta:",
+    "{",
+    `  "suggestedLetra": "${validLetras.split("/")[0]}"`, "    // Letra que consideras correcta — exactamente una de: " + validLetras,
+    '  "confidence":     0.0,                // Tu confianza 0..1 (0=muy dudoso, 1=totalmente seguro)',
+    '  "reasoning":      "...",              // 2-5 frases en español explicando POR QUÉ es esta',
+    '  "dgtBasis":       "Art. X del RGC..."  // o null si no identificas una referencia concreta',
+    "}",
+    "",
+    "IMPORTANTE: Responde en español. Solo el JSON, nada más.",
+  ].filter(Boolean).join("\n")
+}
+
+function clamp01(n: unknown): number {
+  const x = typeof n === "number" ? n : parseFloat(String(n))
+  if (!Number.isFinite(x)) return 0
+  if (x < 0) return 0
+  if (x > 1) return Math.min(1, x > 100 ? 1 : x / 100)  // si llega 0..100, normaliza
+  return x
+}
+
+async function suggestAnswer(payload: AnswerSuggestionPayload): Promise<AnswerSuggestionResult> {
+  const { apiKey, model } = await getEnv()
+  const url = `${ENDPOINT}/${encodeURIComponent(model)}:generateContent`
+
+  const parts: unknown[] = [{ text: buildSuggestAnswerPrompt(payload) }]
+  if (payload.imagePath) {
+    const img = await readImageBase64(payload.imagePath)
+    if (img) parts.push({ inline_data: { mime_type: img.mime, data: img.data } })
+  }
+
+  const res = await fetch(url, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json", "X-goog-api-key": apiKey },
+    body:    JSON.stringify({
+      contents: [{ parts }],
+      // Temperatura baja: queremos análisis normativo determinista, no creativo.
+      generationConfig: {
+        temperature:      0.1,
+        responseMimeType: "application/json",
+        maxOutputTokens:  1024,
+      },
+    }),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => "")
+    throw new AIProviderError("gemini", res.status, `Gemini ${res.status}: ${text || res.statusText}`)
+  }
+
+  const data = (await res.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[]
+  }
+  const text =
+    data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("").trim() ?? ""
+  if (!text) throw new AIProviderError("gemini", 500, "Gemini no devolvió texto")
+
+  const cleaned = stripJsonFences(text)
+  let parsed: {
+    suggestedLetra?: string
+    suggested_letra?: string
+    confidence?:     number
+    reasoning?:      string
+    dgtBasis?:       string | null
+    dgt_basis?:      string | null
+  }
+  try {
+    parsed = JSON.parse(cleaned)
+  } catch {
+    const match = cleaned.match(/\{[\s\S]*\}/)
+    if (!match) throw new AIProviderError("gemini", 500, "Respuesta de la IA no es JSON")
+    parsed = JSON.parse(match[0])
+  }
+
+  const validLetras = new Set(payload.options.map((o) => o.letra.toUpperCase()))
+  const raw = (parsed.suggestedLetra ?? parsed.suggested_letra ?? "").toString().trim().toUpperCase()
+  // Acepta "A", "A)", "OPCIÓN A", etc. — extraemos primera letra A/B/C que aparezca.
+  const m = raw.match(/[A-Z]/)
+  const letter = m && validLetras.has(m[0]) ? m[0] : ""
+  if (!letter) {
+    throw new AIProviderError("gemini", 500, `La IA devolvió una letra no válida: '${raw}'`)
+  }
+  const basis = parsed.dgtBasis ?? parsed.dgt_basis ?? null
+  return {
+    suggestedLetra: letter,
+    confidence:     clamp01(parsed.confidence),
+    reasoning:      (parsed.reasoning ?? "").toString().trim(),
+    dgtBasis:       basis === null || basis === undefined ? null : String(basis).trim() || null,
+    model,
+  }
+}
+
 /**
  * Llamada genérica al modelo. Gemini no distingue 'system' como rol
  * separado — concatenamos system+user en un solo prompt, que es lo
@@ -330,6 +448,7 @@ export const geminiProvider: AIProvider = {
   name:        "gemini",
   displayName: "Google Gemini",
   explainQuestion,
+  suggestAnswer,
   complete,
   ping,
 }

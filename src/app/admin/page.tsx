@@ -4,7 +4,7 @@ import { CONFIG_CATALOG, type ConfigEntry, type ConfigCategory } from "@/lib/con
 import { db } from "@/lib/db"
 import { QUESTION_APPROVED_AI_WHERE, QUESTION_PENDING_REVIEW_WHERE } from "@/lib/questions"
 import { ConfigForm } from "./ConfigForm"
-import { Sliders, ToggleLeft, MessageSquareText, Sparkles, ListChecks, ArrowRight } from "lucide-react"
+import { Sliders, ToggleLeft, MessageSquareText, Sparkles, ListChecks, ArrowRight, Pencil, MessageSquareWarning } from "lucide-react"
 
 export const dynamic = "force-dynamic"
 
@@ -28,8 +28,10 @@ export default async function AdminPage() {
   )
 
   // Métricas de paneles secundarios (badge counts)
-  const pendingReviewCount = await db.question.count({ where: QUESTION_PENDING_REVIEW_WHERE })
-  const approvedAiCount    = await db.question.count({ where: QUESTION_APPROVED_AI_WHERE })
+  const pendingReviewCount  = await db.question.count({ where: QUESTION_PENDING_REVIEW_WHERE })
+  const approvedAiCount     = await db.question.count({ where: QUESTION_APPROVED_AI_WHERE })
+  const totalQuestions      = await db.question.count()
+  const pendingReportsCount = await db.questionReport.count({ where: { status: "pending" } })
 
   const groups: { category: ConfigCategory; title: string; icon: React.ReactNode; entries: ConfigEntry[] }[] = [
     {
@@ -71,6 +73,13 @@ export default async function AdminPage() {
               nav superior (layout.tsx) — aquí lo eliminamos para no
               duplicar el enlace. */}
           <AdminLinkCard
+            href="/admin/questions"
+            icon={<Pencil className="h-5 w-5" />}
+            title="Editar preguntas"
+            description="Listado paginado del banco completo con filtros para revisar y corregir el enunciado, las opciones o la explicación de cualquier pregunta."
+            badge={totalQuestions > 0 ? `${totalQuestions} en banco` : undefined}
+          />
+          <AdminLinkCard
             href="/admin/review-questions"
             icon={<Sparkles className="h-5 w-5" />}
             title="Revisar preguntas IA"
@@ -83,6 +92,13 @@ export default async function AdminPage() {
             title="Preguntas IA aprobadas"
             description="Auditoría de las preguntas IA ya aprobadas, filtrable por tema/bloque/sub-bloque."
             badge={approvedAiCount > 0 ? `${approvedAiCount} en circulación` : undefined}
+          />
+          <AdminLinkCard
+            href="/admin/reports"
+            icon={<MessageSquareWarning className="h-5 w-5" />}
+            title="Incidencias reportadas"
+            description="Reportes de usuarios sobre preguntas con errata, imagen rota, opciones repetidas, etc."
+            badge={pendingReportsCount > 0 ? `${pendingReportsCount} pendientes` : undefined}
           />
         </div>
       </section>

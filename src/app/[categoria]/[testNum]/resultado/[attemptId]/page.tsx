@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { ManualButton } from "@/components/ManualButton"
 import { QuestionImage } from "@/components/QuestionImage"
 import { ResultsAIButton } from "@/components/ResultsAIButton"
+import { QuestionReportButton } from "@/components/QuestionReportButton"
 import {
   ChevronLeft,
   CheckCircle2,
@@ -251,6 +252,12 @@ export default async function ResultPage({ params }: PageProps) {
                       #{a.questionId}
                     </div>
                   )}
+                  {/* Botón discreto para reportar incidencia sobre esta
+                      pregunta — útil tras ver el resultado, cuando el
+                      usuario detecta una errata o algo raro. */}
+                  <div style={{ display: "flex", justifyContent: "center", marginTop: 6 }}>
+                    <QuestionReportButton questionId={a.question.id} variant="text" />
+                  </div>
                 </div>
 
                 {/* Texto + opciones */}

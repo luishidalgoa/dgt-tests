@@ -26,6 +26,41 @@ export interface AIExplanationResult {
   highlightLetras: string[]
 }
 
+/**
+ * Payload de "¿cuál crees que es la respuesta correcta?" — usado en
+ * /admin/questions/[id]/edit. Diferencia clave con AIQuestionPayload:
+ * NO le pasamos la `correctLetra` (queremos que el modelo la deduzca por
+ * sí mismo, sin sesgar). La `explicacionOficial` se manda como contexto
+ * del temario, NO como pista de cuál es la correcta.
+ */
+export interface AnswerSuggestionPayload {
+  enunciado:          string
+  /** Texto del temario o explicación oficial que sirve de marco DGT. */
+  explicacionOficial: string | null
+  codigoTema:         string | null
+  options:            { letra: string; texto: string }[]
+  /** Filename de imagen (si la hay). En Groq se ignora — text-only. */
+  imagePath:          string | null
+}
+
+export interface AnswerSuggestionResult {
+  /** Letra que el modelo sugiere como correcta. */
+  suggestedLetra: string
+  /** Confianza estimada, 0..1. El modelo la auto-evalúa. */
+  confidence:     number
+  /** Razonamiento breve en español, 2-5 frases. */
+  reasoning:      string
+  /**
+   * Cita / referencia normativa DGT que justifica la respuesta:
+   * artículo del Reglamento General de Circulación, señal, definición
+   * del manual… Null si el modelo no lo identifica con suficiente
+   * seguridad.
+   */
+  dgtBasis:       string | null
+  /** Modelo IA que generó la sugerencia (auditoría). */
+  model:          string
+}
+
 /** Resultado de un health check del proveedor (botón "Probar conexión"). */
 export type ProviderPingResult =
   | { ok: true;  latencyMs: number; model: string }
@@ -56,6 +91,16 @@ export interface AIProvider {
   readonly displayName: string
   /** Llamada principal: explica una pregunta del examen. */
   explainQuestion(payload: AIQuestionPayload): Promise<AIExplanationResult>
+  /**
+   * "¿Cuál crees tú que es la respuesta correcta?" — sin pasarle la
+   * solución. Usado por /admin/questions/[id]/edit para que el admin
+   * obtenga una segunda opinión antes de corregir una pregunta.
+   *
+   * El prompt instruye al modelo a regirse por la normativa DGT
+   * española (Reglamento General de Circulación + manual oficial).
+   * Para providers que no aceptan imágenes (Groq), se ignora imagePath.
+   */
+  suggestAnswer(payload: AnswerSuggestionPayload): Promise<AnswerSuggestionResult>
   /**
    * Llamada genérica para tareas custom (scripts batch, herramientas
    * admin, etc.). Devuelve el texto crudo de la respuesta — el caller

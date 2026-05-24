@@ -10,6 +10,7 @@ import { isSeoExposeProQuestions } from "@/lib/configCatalog"
 import { QUESTION_VISIBLE_WHERE } from "@/lib/questions"
 import { StructuredDataBreadcrumb } from "@/components/StructuredData"
 import { InteractiveQuestion } from "@/components/InteractiveQuestion"
+import { QuestionReportButton } from "@/components/QuestionReportButton"
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app"
 
@@ -262,10 +263,15 @@ export default async function QuestionPage({ params }: PageProps) {
         )}
       </div>
 
-      <header style={{ marginBottom: 22 }}>
-        <h1 style={{ margin: 0, fontSize: 24, lineHeight: 1.35, letterSpacing: "-0.01em" }}>
+      <header style={{ marginBottom: 22, display: "flex", alignItems: "flex-start", gap: 8 }}>
+        <h1 style={{ margin: 0, fontSize: 24, lineHeight: 1.35, letterSpacing: "-0.01em", flex: 1 }}>
           {question.enunciado}
         </h1>
+        {/* La página es SSG (revalidate=86400) y no podemos detectar el
+            user en server sin opt-out del cache. isGuest=true por defecto:
+            visitantes verán un campo email opcional; logueados pueden
+            dejarlo vacío y la sesión les identificará igualmente. */}
+        <QuestionReportButton questionId={question.id} isGuest />
       </header>
 
       {/* Imagen (si tiene) */}
