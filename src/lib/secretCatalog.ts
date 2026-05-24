@@ -215,14 +215,26 @@ export function maskSecret(value: string): string {
  * aunque la BBDD esté en un estado raro.
  */
 export async function getEffectiveSecret(key: string): Promise<string | null> {
-  // Intentamos primero la BBDD
-  const row = await db.appConfig.findUnique({ where: { key } })
-  if (row && row.encrypted) {
-    try {
-      return decryptSecret(row.value)
-    } catch {
-      // Cifrado corrupto / key cambiada / etc. Caemos a env.
+  // Intentamos primero la BBDD. Si falla (BBDD caída, schema fuera de
+  // sync con el cliente, columna nueva sin migrar, etc.) caemos al env.
+  //
+  // CRÍTICO: este wrap try/catch es lo que permite que Sentry siga
+  // inicializándose cuando la BBDD está rota. Si la query de aquí
+  // throwea sin catch, el IIFE async de sentry.server.config.ts queda
+  // silenciosamente fallido — Sentry no se inicia → no captura el
+  // propio error de BBDD que tumbó a Sentry. Catch-22.
+  try {
+    const row = await db.appConfig.findUnique({ where: { key } })
+    if (row && row.encrypted) {
+      try {
+        return decryptSecret(row.value)
+      } catch {
+        // Cifrado corrupto / key cambiada / etc. Caemos a env.
+      }
     }
+  } catch {
+    // BBDD inaccesible o schema desincronizado. Fallback transparente
+    // a env — es CUANDO MÁS necesitamos observability funcionando.
   }
   // Fallback al env var con el mismo nombre
   const fromEnv = process.env[key]
