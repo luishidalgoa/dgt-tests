@@ -41,18 +41,34 @@ export function RestoreStreakButton({ credits }: Props) {
     })
   }
 
+  const intentosLabel = `${credits} ${credits === 1 ? "intento" : "intentos"}`
+  // Tooltip explicativo: por qué solo aparece hoy y cuándo se ganan más.
+  const tooltip =
+    `Solo puedes restaurar la racha el día siguiente a haberse roto. ` +
+    `Tienes ${intentosLabel} restante${credits === 1 ? "" : "s"} — ` +
+    `ganas +1 cada 7 días seguidos (máximo 5).`
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 12 }}>
+    <div
+      style={{
+        display:       "flex",
+        flexDirection: "column",
+        gap:           4,
+        marginTop:     12,
+        marginBottom:  18,
+      }}
+    >
       <button
         type="button"
         onClick={handleClick}
         disabled={isPending}
-        aria-label={`Restaurar racha rota — te quedan ${credits} ${credits === 1 ? "crédito" : "créditos"}`}
+        aria-label={`Restaurar racha rota — ${intentosLabel} restante${credits === 1 ? "" : "s"}`}
+        title={tooltip}
         style={{
           display:        "inline-flex",
           alignItems:     "center",
-          gap:            6,
-          padding:        "7px 14px",
+          gap:            8,
+          padding:        "8px 14px",
           borderRadius:   10,
           border:         "1px solid var(--orange-500)",
           background:     "linear-gradient(180deg, #fff, #fff7ed)",
@@ -68,7 +84,22 @@ export function RestoreStreakButton({ credits }: Props) {
         {isPending
           ? <Loader2 className="h-4 w-4 animate-spin" />
           : <RefreshCw className="h-4 w-4" />}
-        Restaurar racha ({credits})
+        <span>Restaurar racha</span>
+        <span
+          style={{
+            display:       "inline-flex",
+            alignItems:    "center",
+            padding:       "1px 8px",
+            borderRadius:  999,
+            background:    "var(--orange-500)",
+            color:         "#fff",
+            fontSize:      11.5,
+            fontWeight:    800,
+            letterSpacing: "0.02em",
+          }}
+        >
+          {intentosLabel}
+        </span>
       </button>
       {error && (
         <span

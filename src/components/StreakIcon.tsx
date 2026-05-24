@@ -1,5 +1,6 @@
 import Image from "next/image"
 import { getLevel } from "@/lib/xp"
+import { EmptyFlameIcon } from "@/components/icons/EmptyFlameIcon"
 
 /**
  * Estado visual del icono:
@@ -10,9 +11,12 @@ import { getLevel } from "@/lib/xp"
  *   - "dormant":  el usuario no tiene racha (siempre lvl-0).
  *
  * Por defecto = "active". Renderiza el PNG correspondiente al nivel
- * derivado de `xp`. Si el PNG aún no existe (estamos generando los
- * assets), Next/Image mostrará un 404 silencioso; añadimos un `alt`
- * descriptivo para que la UI siga siendo accesible.
+ * derivado de `xp`. Caso especial: para nivel 0 (active/frozen/dormant)
+ * usamos `<EmptyFlameIcon>` inline SVG en vez del PNG — el PNG era
+ * apenas visible sobre fondo blanco.
+ *
+ * Si el PNG aún no existe (estamos generando los assets de nivel 1..6),
+ * Next/Image mostrará un 404 silencioso; el contenedor mantiene su tamaño.
  */
 export type StreakIconState = "active" | "frozen" | "dormant"
 
@@ -67,20 +71,26 @@ export function StreakIcon({
         justifyContent: "center",
         width:          size,
         height:         size,
-        filter,
+        // Solo aplicamos filtro al PNG; el SVG ya viene con su propia
+        // versión frozen y no debe pasarse por el filtro.
+        filter:         info.level === 0 ? undefined : filter,
         transition:     "filter 200ms ease",
       }}
       title={`Nivel ${info.level} · ${info.label}${stateLabel}`}
       aria-label={ariaLabel ?? computedLabel}
     >
-      <Image
-        src={iconSrc}
-        alt=""
-        width={size}
-        height={size}
-        priority={false}
-        unoptimized
-      />
+      {info.level === 0 ? (
+        <EmptyFlameIcon size={size} frozen={state === "frozen"} />
+      ) : (
+        <Image
+          src={iconSrc}
+          alt=""
+          width={size}
+          height={size}
+          priority={false}
+          unoptimized
+        />
+      )}
     </span>
   )
 }
