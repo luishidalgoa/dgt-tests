@@ -2,6 +2,7 @@ import Link from "next/link"
 import { db } from "@/lib/db"
 import { requireUser } from "@/lib/auth"
 import { hasFullAccess } from "@/lib/permissions"
+import { JoinPartyForm } from "@/components/JoinPartyForm"
 import { Swords, ChevronLeft, Plus, Users, Trophy, ArrowRight, Crown } from "lucide-react"
 
 export const dynamic = "force-dynamic"
@@ -74,6 +75,10 @@ export default async function CompetirPage() {
           </Link>
         </div>
       )}
+
+      <div style={{ marginBottom: 20 }}>
+        <JoinPartyForm />
+      </div>
 
       {myRecent.length === 0 ? (
         <div className="empty-state">
