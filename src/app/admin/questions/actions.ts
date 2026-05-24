@@ -5,8 +5,17 @@ import { z } from "zod"
 import { db } from "@/lib/db"
 import { requireAdmin } from "@/lib/adminGuard"
 import { questionToSlug } from "@/lib/questionUrl"
+import {
+  suggestAnswerForQuestion,
+  AIProviderError,
+  type AnswerSuggestionResult,
+} from "@/lib/ai"
 
 type ActionResult = { ok: true } | { ok: false; error: string }
+
+type SuggestResult =
+  | { ok: true;  suggestion: AnswerSuggestionResult }
+  | { ok: false; error: string; kind?: "rate_limit" | "misconfigured" | "bad_request" | "server_error" | "unknown" }
 
 const editSchema = z.object({
   id:          z.number().int().positive(),
@@ -163,6 +172,60 @@ async function hasOptionChanges(
     if (c.texto !== n.texto || c.isCorrect !== n.isCorrect) return true
   }
   return false
+}
+
+/**
+ * Pide a la IA activa una segunda opinión sobre cuál es la respuesta
+ * correcta de una pregunta. NO le mandamos la opción marcada como
+ * correcta — queremos que el modelo la deduzca por sí solo bajo la
+ * normativa DGT española.
+ *
+ * Se invoca desde /admin/questions/[id]/edit con un botón "Pedir
+ * opinión IA". Sólo admins; no consume cuota de usuario.
+ *
+ * Si la IA no está configurada o falla, devolvemos `ok:false` con
+ * `kind` clasificado para que la UI muestre un mensaje útil.
+ */
+export async function suggestAnswerAction(questionId: number): Promise<SuggestResult> {
+  await requireAdmin()
+  if (!Number.isInteger(questionId) || questionId <= 0) {
+    return { ok: false, error: "questionId inválido" }
+  }
+
+  const question = await db.question.findUnique({
+    where:   { id: questionId },
+    include: { options: { orderBy: { letra: "asc" } } },
+  })
+  if (!question) return { ok: false, error: "Pregunta no encontrada" }
+  if (question.options.length === 0) {
+    return { ok: false, error: "La pregunta no tiene opciones" }
+  }
+
+  try {
+    const suggestion = await suggestAnswerForQuestion({
+      enunciado:          question.enunciado,
+      explicacionOficial: question.explicacion || null,
+      codigoTema:         question.codigoTema,
+      options:            question.options.map((o) => ({ letra: o.letra, texto: o.texto })),
+      imagePath:          question.imagen,
+    })
+    return { ok: true, suggestion }
+  } catch (err) {
+    if (err instanceof AIProviderError) {
+      return { ok: false, error: friendlyErrorMessage(err), kind: err.kind }
+    }
+    return { ok: false, error: err instanceof Error ? err.message : "Error inesperado" }
+  }
+}
+
+function friendlyErrorMessage(err: AIProviderError): string {
+  switch (err.kind) {
+    case "rate_limit":    return "El proveedor IA está saturado o sin cuota — inténtalo en unos minutos."
+    case "misconfigured": return "La API key del proveedor IA no es válida — revísala en /admin/secrets."
+    case "bad_request":   return "La IA no pudo procesar esta pregunta (posiblemente la imagen)."
+    case "server_error":  return "El proveedor IA tuvo un error temporal — reintenta."
+    default:              return "Error desconocido del proveedor IA."
+  }
 }
 
 async function getCanonicalSlug(

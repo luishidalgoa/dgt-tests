@@ -13,6 +13,8 @@ import type {
   AIQuestionPayload,
   AIExplanationResult,
   ProviderPingResult,
+  AnswerSuggestionPayload,
+  AnswerSuggestionResult,
 } from "./aiProviders/types"
 
 export {
@@ -21,6 +23,8 @@ export {
   type AIExplanationResult,
   type ProviderPingResult,
   type AICompleteOptions,
+  type AnswerSuggestionPayload,
+  type AnswerSuggestionResult,
 } from "./aiProviders/types"
 
 /** Resuelve el provider activo según AI_PROVIDER en configCatalog. */
@@ -42,6 +46,19 @@ export async function explainQuestion(
 ): Promise<AIExplanationResult> {
   const provider = await getActiveProvider()
   return provider.explainQuestion(payload)
+}
+
+/**
+ * Pide al provider activo que sugiera cuál es la respuesta correcta de
+ * una pregunta SIN pasársela hecha — usado por /admin/questions/[id]/edit
+ * como segunda opinión cuando el admin revisa una pregunta dudosa.
+ * El prompt se rige por la normativa DGT española.
+ */
+export async function suggestAnswerForQuestion(
+  payload: AnswerSuggestionPayload,
+): Promise<AnswerSuggestionResult> {
+  const provider = await getActiveProvider()
+  return provider.suggestAnswer(payload)
 }
 
 /** Ping del provider activo (botón "Probar conexión" de /admin). */

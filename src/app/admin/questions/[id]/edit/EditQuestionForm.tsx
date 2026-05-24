@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import { Save, Loader2, ImageIcon } from "lucide-react"
 import { imageUrl } from "@/lib/imageUrl"
 import { updateQuestionAction } from "../../actions"
+import { AISuggestPanel } from "./AISuggestPanel"
 
 interface OptionData {
   id:        number
@@ -146,6 +147,13 @@ export function EditQuestionForm({ questionId, initial }: Props) {
           </div>
         )}
       </Field>
+
+      {/* Segunda opinión IA — el panel sabe qué letra hay marcada ahora
+          para resaltar si la sugerencia coincide o no. */}
+      <AISuggestPanel
+        questionId={questionId}
+        currentCorrectLetra={options.find((o) => o.isCorrect)?.letra ?? null}
+      />
 
       {/* Opciones */}
       <Field label="Opciones (radio = correcta)">

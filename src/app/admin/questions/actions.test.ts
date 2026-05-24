@@ -1,19 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 const mocks = vi.hoisted(() => ({
-  requireAdmin:           vi.fn(),
-  questionFindUnique:     vi.fn(),
-  optionFindMany:         vi.fn(),
-  questionUpdate:         vi.fn(),
-  optionUpdate:           vi.fn(),
-  aiCacheDeleteMany:      vi.fn(),
-  reportUpdateMany:       vi.fn(),
-  transaction:            vi.fn(),
-  revalidatePath:         vi.fn(),
+  requireAdmin:              vi.fn(),
+  questionFindUnique:        vi.fn(),
+  optionFindMany:            vi.fn(),
+  questionUpdate:            vi.fn(),
+  optionUpdate:              vi.fn(),
+  aiCacheDeleteMany:         vi.fn(),
+  reportUpdateMany:          vi.fn(),
+  transaction:               vi.fn(),
+  revalidatePath:            vi.fn(),
+  suggestAnswerForQuestion:  vi.fn(),
 }))
 
 vi.mock("@/lib/adminGuard", () => ({ requireAdmin: mocks.requireAdmin }))
 vi.mock("next/cache",        () => ({ revalidatePath: mocks.revalidatePath }))
+vi.mock("@/lib/ai", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/ai")>("@/lib/ai")
+  return {
+    ...actual,
+    suggestAnswerForQuestion: mocks.suggestAnswerForQuestion,
+  }
+})
 vi.mock("@/lib/db", () => ({
   db: {
     question: {
@@ -34,7 +42,8 @@ vi.mock("@/lib/db", () => ({
   },
 }))
 
-import { updateQuestionAction } from "./actions"
+import { updateQuestionAction, suggestAnswerAction } from "./actions"
+import { AIProviderError } from "@/lib/ai"
 
 function fd(entries: Record<string, string>): FormData {
   const f = new FormData()
@@ -204,5 +213,99 @@ describe("updateQuestionAction", () => {
       optionsJson: JSON.stringify(STANDARD_OPTIONS),               // iguales
     }))
     expect(mocks.aiCacheDeleteMany).not.toHaveBeenCalled()
+  })
+})
+
+describe("suggestAnswerAction", () => {
+  const QUESTION_ROW = {
+    id:          1,
+    enunciado:   "¿Qué actuación debe evitar el conductor?",
+    explicacion: "Es importante respetar el medio ambiente.",
+    codigoTema:  "TC 1.1-2 (1-1)",
+    imagen:      "320671.png",
+    options: [
+      { id: 1, letra: "A", texto: "Cambiar el tubo...",  isCorrect: false },
+      { id: 2, letra: "B", texto: "Conducción eficiente.", isCorrect: false },
+      { id: 3, letra: "C", texto: "Lavar en vía pública.",  isCorrect: true  },
+    ],
+  }
+
+  beforeEach(() => {
+    Object.values(mocks).forEach((m) => m.mockReset?.())
+    mocks.requireAdmin.mockResolvedValue({ id: 42, role: "ADMIN" })
+    mocks.questionFindUnique.mockResolvedValue(QUESTION_ROW)
+  })
+
+  it("admin: llama al provider y devuelve la sugerencia", async () => {
+    mocks.suggestAnswerForQuestion.mockResolvedValue({
+      suggestedLetra: "C",
+      confidence:     0.92,
+      reasoning:      "Lavar en vía pública contamina las aguas.",
+      dgtBasis:       "Manual DGT, tema 1.1",
+      model:          "gemini-flash-latest",
+    })
+    const res = await suggestAnswerAction(1)
+    expect(res.ok).toBe(true)
+    if (res.ok) {
+      expect(res.suggestion.suggestedLetra).toBe("C")
+      expect(res.suggestion.confidence).toBeCloseTo(0.92)
+    }
+    expect(mocks.suggestAnswerForQuestion).toHaveBeenCalledWith(expect.objectContaining({
+      enunciado:          QUESTION_ROW.enunciado,
+      explicacionOficial: QUESTION_ROW.explicacion,
+      codigoTema:         QUESTION_ROW.codigoTema,
+      imagePath:          QUESTION_ROW.imagen,
+    }))
+    // CRÍTICO: NO le pasamos la correctLetra al provider — el modelo
+    // debe deducirla por sí solo. El payload de suggestAnswer solo
+    // tiene letra+texto (sin isCorrect).
+    const sentPayload = mocks.suggestAnswerForQuestion.mock.calls[0][0]
+    for (const opt of sentPayload.options) {
+      expect(opt).not.toHaveProperty("isCorrect")
+    }
+  })
+
+  it("rechaza questionId inválido", async () => {
+    const res = await suggestAnswerAction(0)
+    expect(res.ok).toBe(false)
+    expect(mocks.suggestAnswerForQuestion).not.toHaveBeenCalled()
+  })
+
+  it("404 si la pregunta no existe", async () => {
+    mocks.questionFindUnique.mockResolvedValue(null)
+    const res = await suggestAnswerAction(999)
+    expect(res.ok).toBe(false)
+    if (!res.ok) expect(res.error).toMatch(/no encontrada/i)
+    expect(mocks.suggestAnswerForQuestion).not.toHaveBeenCalled()
+  })
+
+  it("non-admin: requireAdmin tira notFound() → action rebota", async () => {
+    mocks.requireAdmin.mockRejectedValue(new Error("NEXT_NOT_FOUND"))
+    await expect(suggestAnswerAction(1)).rejects.toThrow("NEXT_NOT_FOUND")
+    expect(mocks.suggestAnswerForQuestion).not.toHaveBeenCalled()
+  })
+
+  it("clasifica errores del provider en kinds amigables (rate_limit)", async () => {
+    mocks.suggestAnswerForQuestion.mockRejectedValue(
+      new AIProviderError("gemini", 429, "Quota exceeded")
+    )
+    const res = await suggestAnswerAction(1)
+    expect(res.ok).toBe(false)
+    if (!res.ok) {
+      expect(res.kind).toBe("rate_limit")
+      expect(res.error).toMatch(/saturado|cuota/i)
+    }
+  })
+
+  it("clasifica errores del provider en kinds amigables (misconfigured)", async () => {
+    mocks.suggestAnswerForQuestion.mockRejectedValue(
+      new AIProviderError("gemini", 401, "Unauthorized")
+    )
+    const res = await suggestAnswerAction(1)
+    expect(res.ok).toBe(false)
+    if (!res.ok) {
+      expect(res.kind).toBe("misconfigured")
+      expect(res.error).toMatch(/api key/i)
+    }
   })
 })
