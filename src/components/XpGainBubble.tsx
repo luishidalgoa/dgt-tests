@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState } from "react"
 import { usePathname } from "next/navigation"
 import type { AttemptXpReward } from "@/types/exam"
+import { XP_GAIN_STORAGE_KEY } from "@/lib/xpAnimation"
 
-/** Clave en sessionStorage donde el ExamRunner deja el XP recién
- *  ganado para que esta bubble lo recoja tras el redirect. */
-const STORAGE_KEY = "dgt:xp-gain"
+/** Clave en sessionStorage. Centralizada en xpAnimation.ts para que
+ *  ExamRunner (escritor) y XpGainBubble (lector) usen el mismo string. */
+const STORAGE_KEY = XP_GAIN_STORAGE_KEY
 
 /** Cuánto se queda visible el bubble tras terminar la animación, ms. */
 const HOLD_AFTER_FILL_MS = 1800
