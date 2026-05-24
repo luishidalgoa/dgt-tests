@@ -57,78 +57,118 @@ export function ExplanationWithHighlights({ text, highlights }: Props) {
 export type Segment = { type: "text" | "mark"; value: string }
 
 /**
- * Normaliza una cadena para búsqueda tolerante: NFC → NFD → strip de
- * combining marks (U+0300–U+036F) → lowercase. Para texto español típico
- * en NFC, la longitud en codepoints se preserva (cada precompuesto con
- * tilde se reemplaza por su letra base, sin combinable separado).
- *
- * Regex construida con new RegExp + escapes \u para evitar problemas con
- * editores/renderizadores que se comen los combining marks invisibles
- * en literales /…/ — el comportamiento es el mismo que /[̀-ͯ]/g.
+ * Regex de combining marks (tildes Unicode descompuestas). Construida con
+ * new RegExp + escapes \u para evitar que editores/renderers se coman los
+ * caracteres invisibles del literal /…/.
  */
 const COMBINING_MARKS_RE = new RegExp("[\\u0300-\\u036f]", "g")
+const WHITESPACE_RE      = /\s/
 
-function normalizeForSearch(s: string): string {
-  return s
-    .normalize("NFC")
-    .normalize("NFD")
-    .replace(COMBINING_MARKS_RE, "")
-    .toLowerCase()
+/**
+ * Índice de búsqueda con mapping posicional:
+ *
+ *   - `needle`: versión normalizada del texto, donde
+ *       · cada run de whitespace (espacios, tabs, NBSP, newlines) → " " (1 espacio)
+ *       · cada char no-whitespace → su forma NFD-sin-tildes en minúscula
+ *
+ *   - `map[i]`: posición en el texto ORIGINAL del primer codepoint que
+ *       generó `needle[i]`. Para un run de whitespace, apunta al PRIMER
+ *       espacio del run. Para un char normal, apunta al char en sí.
+ *
+ * Con este map podemos buscar en needle pero renderizar slices del texto
+ * original — así el `<mark>` preserva las tildes, el casing y los dobles
+ * espacios del temario, aunque el modelo IA los haya "limpiado" al copiar.
+ */
+interface SearchIndex { needle: string; map: number[] }
+
+function buildSearchIndex(s: string): SearchIndex {
+  const chars: string[] = []
+  const map: number[]   = []
+  let i = 0
+  while (i < s.length) {
+    const ch = s[i]
+    if (WHITESPACE_RE.test(ch)) {
+      // Run de whitespace → colapsar a un único " " en el needle.
+      const start = i
+      while (i < s.length && WHITESPACE_RE.test(s[i])) i++
+      chars.push(" ")
+      map.push(start)
+      continue
+    }
+    // Char normal: NFD + strip combining marks + lowercase.
+    // En texto español típico (NFC), cada precompuesto se descompone a 1 base
+    // + N combining marks, y tras strip queda 1 carácter base. Mantenemos 1:1
+    // por char input, pero si la descomposición devuelve >1 char (rarísimo en
+    // español), los añadimos todos mapeando al mismo origen.
+    const normalized = ch
+      .normalize("NFD")
+      .replace(COMBINING_MARKS_RE, "")
+      .toLowerCase()
+    if (normalized.length === 0) {
+      // Era un combining mark suelto (texto ya en NFD). Ignorar.
+      i++
+      continue
+    }
+    for (const c of normalized) {
+      chars.push(c)
+      map.push(i)
+    }
+    i++
+  }
+  return { needle: chars.join(""), map }
+}
+
+/** Solo el needle (sin map) — útil para el phrase a buscar. */
+function buildSearchKey(s: string): string {
+  return buildSearchIndex(s).needle
 }
 
 export function splitWithHighlights(text: string, highlights: string[]): Segment[] {
   if (!highlights.length) return [{ type: "text", value: text }]
 
-  // Hacemos todas las búsquedas en lowercase + sin tildes para tolerar los
-  // desajustes que comete la IA al copiar frases del temario. Pero los
-  // índices y `text.slice()` finales usan el texto original — así el
-  // <mark> muestra el casing y las tildes del temario, no las del modelo.
-  //
-  // SAFEGUARD: la normalización solo es 1:1 (en codepoints) si el texto
-  // original ya está en NFC y solo perdemos diacríticos combinables. Si la
-  // longitud cambia tras normalizar, los índices no mapean al original y
-  // caemos al matching simple (case-insensitive, sin quitar tildes).
-  const textNormalized = normalizeForSearch(text)
-  const safeForDiacritics = textNormalized.length === text.length
-  const textKey = safeForDiacritics ? textNormalized : text.toLowerCase()
-  const normalizePhrase = (s: string) =>
-    safeForDiacritics ? normalizeForSearch(s) : s.toLowerCase()
+  // Construimos índice del texto. El needle es la versión "ascii-lower-collapsed"
+  // y el map permite traducir índices de needle → posiciones del texto original.
+  const { needle: textKey, map: textMap } = buildSearchIndex(text)
+  if (textKey.length === 0) return [{ type: "text", value: text }]
 
-  // Filtrar highlights: deben existir en el texto (normalizado) y no estar vacíos
-  const unique = Array.from(
-    new Set(
-      highlights
-        .map((h) => h.trim())
-        .filter((h) => h.length > 0 && textKey.includes(normalizePhrase(h)))
-    )
-  ).sort((a, b) => b.length - a.length) // largos primero
+  // Normaliza + filtra highlights: trim, descarta vacíos, descarta los que
+  // no aparecen en el textKey. Dedupe + ordena por longitud desc (largos
+  // primero, para que "alfa beta" gane sobre "alfa" en caso de solape).
+  const seen = new Set<string>()
+  const phraseKeys: { key: string }[] = []
+  for (const raw of highlights) {
+    const key = buildSearchKey(raw.trim())
+    if (!key.length || seen.has(key) || !textKey.includes(key)) continue
+    seen.add(key)
+    phraseKeys.push({ key })
+  }
+  phraseKeys.sort((a, b) => b.key.length - a.key.length)
+  if (!phraseKeys.length) return [{ type: "text", value: text }]
 
-  if (!unique.length) return [{ type: "text", value: text }]
-
-  // Acumulamos rangos no solapados [start, end)
+  // Acumulamos rangos en posiciones del TEXTO ORIGINAL (no del needle).
   const ranges: { start: number; end: number }[] = []
-
-  for (const phrase of unique) {
-    const phraseKey = normalizePhrase(phrase)
-    let from = 0
-    while (from <= text.length - phraseKey.length) {
-      const idx = textKey.indexOf(phraseKey, from)
-      if (idx === -1) break
-      const end = idx + phraseKey.length
-      // ¿Solapa con un rango existente?
-      const overlaps = ranges.some(
-        (r) => idx < r.end && end > r.start
-      )
-      if (!overlaps) ranges.push({ start: idx, end })
-      from = end
+  for (const { key } of phraseKeys) {
+    let fromKey = 0
+    while (fromKey <= textKey.length - key.length) {
+      const idxKey = textKey.indexOf(key, fromKey)
+      if (idxKey === -1) break
+      // Traducir índices needle → original via textMap.
+      // start = mapeo del primer char del match
+      // end   = mapeo del char SIGUIENTE al match (o text.length si no hay)
+      const lastNeedleIdx = idxKey + key.length - 1
+      const start = textMap[idxKey]
+      const end   = lastNeedleIdx + 1 < textMap.length
+        ? textMap[lastNeedleIdx + 1]
+        : text.length
+      const overlaps = ranges.some((r) => start < r.end && end > r.start)
+      if (!overlaps) ranges.push({ start, end })
+      fromKey = idxKey + key.length
     }
   }
 
   if (!ranges.length) return [{ type: "text", value: text }]
 
-  // Ordenar rangos por inicio
   ranges.sort((a, b) => a.start - b.start)
-
   const out: Segment[] = []
   let cursor = 0
   for (const r of ranges) {

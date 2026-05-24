@@ -70,4 +70,69 @@ describe("splitWithHighlights", () => {
     const mark = segs.find((s) => s.type === "mark")
     expect(mark!.value).toBe("VÍAS PÚBLICAS")
   })
+
+  // ── Whitespace tolerance (regresión #690 del banco DGT) ────────────────
+  // La explicación oficial DGT viene con dobles espacios (HTML mal parseado).
+  // La IA los colapsa a uno solo al copiar el substring. Antes esto rompía
+  // el match porque `text.includes(phrase)` era estricto. Ahora el matcher
+  // colapsa runs de whitespace en AMBOS lados antes de comparar.
+
+  it("tolera dobles espacios en el texto original (caso real #690)", () => {
+    const text = "Utilizar la  marcha más  corta posible, en las pendientes  descendentes."
+    const phrase = "Utilizar la marcha más corta posible, en las pendientes descendentes."
+    const segs = splitWithHighlights(text, [phrase])
+    const mark = segs.find((s) => s.type === "mark")
+    expect(mark).toBeDefined()
+    // El mark preserva los dobles espacios del original.
+    expect(mark!.value).toBe(
+      "Utilizar la  marcha más  corta posible, en las pendientes  descendentes."
+    )
+  })
+
+  it("tolera NBSP (U+00A0) en el texto como whitespace", () => {
+    const text = "Utilizar la marcha  corta"
+    const segs = splitWithHighlights(text, ["Utilizar la marcha corta"])
+    const mark = segs.find((s) => s.type === "mark")
+    expect(mark!.value).toBe("Utilizar la marcha  corta")
+  })
+
+  it("tolera tabs y newlines como whitespace al matchear", () => {
+    const text = "frase A\nfrase B\tfrase C"
+    const segs = splitWithHighlights(text, ["frase A frase B frase C"])
+    const mark = segs.find((s) => s.type === "mark")
+    expect(mark!.value).toBe("frase A\nfrase B\tfrase C")
+  })
+
+  it("preserva el whitespace original ALREDEDOR del match (no lo absorbe)", () => {
+    const text = "antes  PALABRA  después"
+    const segs = splitWithHighlights(text, ["PALABRA"])
+    expect(segs).toEqual([
+      { type: "text", value: "antes  " },
+      { type: "mark", value: "PALABRA" },
+      { type: "text", value: "  después" },
+    ])
+  })
+
+  it("combina mayúsculas + tildes + dobles espacios en una sola búsqueda", () => {
+    const text = "El conductor debe  reducir la  velocidad."
+    const phrase = "EL CONDUCTOR DEBE REDUCIR LA VELOCIDAD"
+    const segs = splitWithHighlights(text, [phrase])
+    const mark = segs.find((s) => s.type === "mark")
+    expect(mark).toBeDefined()
+    // Sin el punto final porque la phrase no lo incluye.
+    expect(mark!.value).toBe("El conductor debe  reducir la  velocidad")
+  })
+
+  it("matchea varias ocurrencias separadas por whitespace anidado", () => {
+    const text = "Cuidado.  Cuidado  con la curva.  Cuidado."
+    const segs = splitWithHighlights(text, ["Cuidado"])
+    const marks = segs.filter((s) => s.type === "mark")
+    expect(marks).toHaveLength(3)
+    for (const m of marks) expect(m.value).toBe("Cuidado")
+  })
+
+  it("no matchea phrase vacía tras trim + whitespace collapse", () => {
+    const segs = splitWithHighlights("texto cualquiera", ["   \n\t  "])
+    expect(segs).toEqual([{ type: "text", value: "texto cualquiera" }])
+  })
 })
