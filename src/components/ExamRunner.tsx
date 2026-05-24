@@ -607,6 +607,18 @@ export function ExamRunner({
                 </div>
               )}
 
+              {/* Botón visible "Reportar incidencia" — solo aparece en
+                  modo práctica tras corregir la pregunta. El icono ⚠
+                  pequeño junto al enunciado sigue ahí para reportar
+                  antes de responder, pero este botón con texto es
+                  para el momento en el que ya viste el resultado y
+                  detectas que algo no cuadra. */}
+              {showFeedback && (
+                <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end" }}>
+                  <QuestionReportButton questionId={q.id} isGuest={isGuest} variant="text" />
+                </div>
+              )}
+
               {/* IA: solo en práctica, solo logueados y con quota */}
               {showFeedback && aiQuota > 0 && q.explicacion && (
                 <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8 }}>
