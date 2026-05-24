@@ -2208,11 +2208,13 @@ details[open] > summary .secret-group-chevron {
   background: rgba(249, 115, 22, 0.12);
   outline: none;
 }
+/* Popover base: solo estilos visuales. La posición (top/bottom/left/
+   right) y la dirección de la flecha la deciden las clases
+   modificadoras --h-* / --v-* que aplica el componente HelpHint según
+   el espacio disponible alrededor del trigger. Eso permite auto-flip
+   cuando el popover se saldría por algún borde. */
 .help-hint__popover {
   position: absolute;
-  top: calc(100% + 12px);
-  left: 50%;
-  transform: translateX(-50%);
   /* Por encima de cualquier overlay del dashboard pero por debajo de
      toasts (10000) y la bubble XP (9000). */
   z-index: 8500;
@@ -2224,7 +2226,8 @@ details[open] > summary .secret-group-chevron {
   font-weight: 500;
   line-height: 1.45;
   width: max-content;
-  max-width: 260px;
+  /* Cap en 260px pero respeta viewports estrechos (≥260+24). */
+  max-width: min(260px, calc(100vw - 24px));
   text-transform: none;
   letter-spacing: 0;
   box-shadow:
@@ -2236,26 +2239,57 @@ details[open] > summary .secret-group-chevron {
 .help-hint__popover::before {
   content: "";
   position: absolute;
-  bottom: 100%;
+  border: 6px solid transparent;
+}
+
+/* ── Horizontal alignment ──────────────────────────────────────── */
+.help-hint__popover--h-center {
   left: 50%;
   transform: translateX(-50%);
-  border: 6px solid transparent;
+}
+.help-hint__popover--h-center::before {
+  left: 50%;
+  transform: translateX(-50%);
+}
+.help-hint__popover--h-left {
+  left: 0;
+  right: auto;
+  transform: none;
+}
+.help-hint__popover--h-left::before {
+  left: 10px;
+  right: auto;
+  transform: none;
+}
+.help-hint__popover--h-right {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+.help-hint__popover--h-right::before {
+  right: 10px;
+  left: auto;
+  transform: none;
+}
+
+/* ── Vertical alignment + dirección de la flecha ───────────────── */
+.help-hint__popover--v-bottom {
+  top: calc(100% + 12px);
+  bottom: auto;
+}
+.help-hint__popover--v-bottom::before {
+  bottom: 100%;
+  top: auto;
   border-bottom-color: var(--slate-700);
 }
-/* En viewports estrechos, el popover puede salirse por la derecha.
-   `right: 0` y reposicionar el arrow para alinearlo con el trigger. */
-@media (max-width: 480px) {
-  .help-hint__popover {
-    left: auto;
-    right: 0;
-    transform: none;
-    max-width: calc(100vw - 40px);
-  }
-  .help-hint__popover::before {
-    left: auto;
-    right: 8px;
-    transform: none;
-  }
+.help-hint__popover--v-top {
+  bottom: calc(100% + 12px);
+  top: auto;
+}
+.help-hint__popover--v-top::before {
+  top: 100%;
+  bottom: auto;
+  border-top-color: var(--slate-700);
 }
 
 .xp-gain-bubble[data-phase="exit"] {
@@ -2346,6 +2380,7 @@ details[open] > summary .secret-group-chevron {
   .xp-gain-bubble { transition: opacity 0.15s linear; }
   .xp-gain-bubble__bar-fill { transition: width 0.15s linear; }
 }
+
 
 
 

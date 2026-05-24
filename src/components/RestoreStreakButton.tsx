@@ -4,6 +4,7 @@ import { useState, useTransition, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Loader2, RefreshCw } from "lucide-react"
 import { restoreStreakAction } from "@/app/actions/streak"
+import { HelpHint } from "@/components/HelpHint"
 
 interface Props {
   credits: number
@@ -204,49 +205,59 @@ export function RestoreStreakButton({ credits, cycleDaysToRestore }: Props) {
         marginBottom:  18,
       }}
     >
-      <button
-        ref={buttonRef}
-        type="button"
-        onClick={handleClick}
-        disabled={showSpinner || isLeaving}
-        aria-label={`Restaurar racha rota — ${intentosLabel} restante${credits === 1 ? "" : "s"}`}
-        title={tooltip}
-        className={btnClass}
+      <div
         style={{
-          display:        "inline-flex",
-          alignItems:     "center",
-          gap:            8,
-          padding:        "8px 14px",
-          borderRadius:   10,
-          border:         "1px solid var(--orange-500)",
-          background:     "linear-gradient(180deg, #fff, #fff7ed)",
-          color:          "var(--orange-600)",
-          fontWeight:     700,
-          fontSize:       13,
-          cursor:         showSpinner ? "wait" : "pointer",
-          alignSelf:      "flex-start",
+          display:    "flex",
+          alignItems: "center",
+          gap:        10,
+          alignSelf:  "flex-start",
         }}
       >
-        {showSpinner
-          ? <Loader2 className="h-4 w-4 animate-spin" />
-          : <RefreshCw className="h-4 w-4 refresh-icon" />}
-        <span>Restaurar racha</span>
-        <span
+        <button
+          ref={buttonRef}
+          type="button"
+          onClick={handleClick}
+          disabled={showSpinner || isLeaving}
+          aria-label={`Restaurar racha rota — ${intentosLabel} restante${credits === 1 ? "" : "s"}`}
+          title={tooltip}
+          className={btnClass}
           style={{
-            display:       "inline-flex",
-            alignItems:    "center",
-            padding:       "1px 8px",
-            borderRadius:  999,
-            background:    "var(--orange-500)",
-            color:         "#fff",
-            fontSize:      11.5,
-            fontWeight:    800,
-            letterSpacing: "0.02em",
+            display:        "inline-flex",
+            alignItems:     "center",
+            gap:            8,
+            padding:        "8px 14px",
+            borderRadius:   10,
+            border:         "1px solid var(--orange-500)",
+            background:     "linear-gradient(180deg, #fff, #fff7ed)",
+            color:          "var(--orange-600)",
+            fontWeight:     700,
+            fontSize:       13,
+            cursor:         showSpinner ? "wait" : "pointer",
           }}
         >
-          {intentosLabel}
-        </span>
-      </button>
+          {showSpinner
+            ? <Loader2 className="h-4 w-4 animate-spin" />
+            : <RefreshCw className="h-4 w-4 refresh-icon" />}
+          <span>Restaurar racha</span>
+          <span
+            style={{
+              display:       "inline-flex",
+              alignItems:    "center",
+              padding:       "1px 8px",
+              borderRadius:  999,
+              background:    "var(--orange-500)",
+              color:         "#fff",
+              fontSize:      11.5,
+              fontWeight:    800,
+              letterSpacing: "0.02em",
+            }}
+          >
+            {intentosLabel}
+          </span>
+        </button>
+        {/* Helper visible para mobile (sin hover, sin tooltip nativo). */}
+        <HelpHint text={tooltip} ariaLabel="Qué es restaurar la racha" />
+      </div>
       {error && (
         <span
           role="alert"
