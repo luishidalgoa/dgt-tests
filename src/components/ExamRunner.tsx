@@ -419,6 +419,14 @@ export function ExamRunner({
                   {q.codigoTema}
                 </div>
               )}
+              {/* Botón "Reportar incidencia" — solo en modo práctica tras
+                  corregir la pregunta. Centrado debajo del TC para que sea
+                  descubrible sin estorbar el flujo de responder. */}
+              {showFeedback && (
+                <div style={{ display: "flex", justifyContent: "center" }}>
+                  <QuestionReportButton questionId={q.id} isGuest={isGuest} variant="text" />
+                </div>
+              )}
             </div>
 
             {/* Enunciado + opciones */}
@@ -604,18 +612,6 @@ export function ExamRunner({
                       Incorrecto — la respuesta correcta está marcada en verde.
                     </>
                   )}
-                </div>
-              )}
-
-              {/* Botón visible "Reportar incidencia" — solo aparece en
-                  modo práctica tras corregir la pregunta. El icono ⚠
-                  pequeño junto al enunciado sigue ahí para reportar
-                  antes de responder, pero este botón con texto es
-                  para el momento en el que ya viste el resultado y
-                  detectas que algo no cuadra. */}
-              {showFeedback && (
-                <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end" }}>
-                  <QuestionReportButton questionId={q.id} isGuest={isGuest} variant="text" />
                 </div>
               )}
 
