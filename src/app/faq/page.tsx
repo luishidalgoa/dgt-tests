@@ -62,6 +62,13 @@ const FAQS: { question: string; answer: string }[] = [
       "ADAS son los Sistemas Avanzados de Asistencia a la Conducción (control de crucero adaptativo, frenada de emergencia, asistente de mantenimiento de carril, detección de ángulo muerto, etc.). Entró en el banco oficial de preguntas DGT en 2022 y desde entonces aparecen preguntas sobre estos sistemas en los exámenes. En DGT Tests tienes una categoría específica 'ADAS' para practicar solo este bloque.",
   },
   {
+    question: "¿Cuál es la lista de vehículos según su dificultad de maniobra?",
+    answer:
+      "La lista de dificultad de maniobra es un orden oficial de la DGT (Reglamento General de Circulación) que clasifica los vehículos de MENOR a MAYOR dificultad para maniobrar. Se aplica como criterio de preferencia cuando dos vehículos coinciden en una vía estrecha, estrechamiento o tramo donde no caben los dos a la vez y ninguna otra norma decide: gana el de MAYOR dificultad de maniobra (el otro tiene que apartarse o ceder). " +
+      "El orden, de más fácil a más difícil de maniobrar, es: 1) Bicicletas y ciclos. 2) Motocicletas y ciclomotores. 3) Turismos. 4) Vehículos mixtos (turismos adaptados para carga, todoterrenos, etc.). 5) Furgonetas (hasta 3.500 kg de MMA). 6) Camiones (de más de 3.500 kg). 7) Autobuses. 8) Vehículos articulados (cabeza tractora + semirremolque). 9) Trenes turísticos. 10) Conjuntos de vehículos (vehículo principal + remolque, p. ej. coche con caravana). 11) Vehículos especiales (agrícolas, obras, etc.). " +
+      "Ejemplo práctico: en una calle estrecha donde solo cabe un vehículo, si te cruzas con un camión, tú con el turismo cedes — el camión tiene mayor dificultad de maniobra. Esta lista cae mucho en el examen, sobre todo en preguntas de preferencia en estrechamientos o cruces sin señalización.",
+  },
+  {
     question: "¿Cuántas veces puedo presentarme al examen teórico?",
     answer:
       "No hay límite legal en el número de convocatorias. Cada vez que suspendes y vuelves a presentarte pagas las tasas de nuevo (~94,05€ en 2026, importe del trámite completo). Si tras dos exámenes seguidos no apruebas, la autoescuela puede pedirte clases teóricas adicionales antes de la tercera convocatoria, pero esto depende de cada centro.",
