@@ -51,6 +51,18 @@ model User {
    *  marcado como vistas (welcome, actualizaciones de términos, etc.).
    *  Ver src/lib/notifications.ts para el registro. */
   acknowledgments String        @default("[]")
+  // ── Racha ─────────────────────────────────────────────────────────
+  /// Créditos disponibles para restaurar una racha rota. Empieza en 1
+  /// al crear cuenta; +1 cada vez que el usuario completa una semana
+  /// entera (7 días consecutivos). Tope 5. Ver src/lib/streak.ts.
+  streakRestoreCredits Int      @default(1)
+  /// Si el user gastó un crédito para restaurar la racha tras una
+  /// rotura, este campo guarda la fecha (medianoche local) del día
+  /// "ayer" que se restauró — el cálculo de racha lo cuenta como
+  /// hecho aunque no haya attempts ese día. Una restauración cubre
+  /// UN día roto; vuelve a null en cuanto el user pasa por una nueva
+  /// rotura sin restaurar. Ver src/lib/streak.ts.
+  streakRestoredUntil  DateTime?
   attempts        ExamAttempt[]
   hostedParties   Party[]       @relation("HostedParties")
   partyPlays      PartyPlayer[] @relation("PartyParticipations")

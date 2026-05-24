@@ -8,6 +8,9 @@ import { ContinueExamPill } from "@/components/ContinueExamPill"
 import { DashStatsAnalysis, type StatsAnalysisResult, type AnalysisHistoryItem } from "@/components/DashStatsAnalysis"
 import { MAX_HISTORY_ITEMS } from "@/lib/aiStatsAnalysis"
 import { StructuredDataHome } from "@/components/StructuredData"
+import { StreakIcon } from "@/components/StreakIcon"
+import { RestoreStreakButton } from "@/components/RestoreStreakButton"
+import { computeStreakState } from "@/lib/streak"
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app"
 
@@ -111,12 +114,11 @@ export default async function HomePage() {
     doneByCategory.set(c.id, c._count.tests > 0 ? Math.round((done / c._count.tests) * 100) : 0)
   }
 
-  // Actividad: nº exámenes por día (últimos 7) + media diaria.
-  // Date.now() lo lee react-hooks/purity como impuro, pero estamos en
-  // un Server Component dinámico (force-dynamic): cada request se sirve
-  // fresco y necesitamos la hora actual del servidor.
-  // eslint-disable-next-line react-hooks/purity
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+  // Actividad: nº exámenes por día (últimos 7) + media diaria + racha.
+  // `new Date()` aquí es Server Component dinámico (force-dynamic): cada
+  // request se sirve fresco y necesitamos la hora actual del servidor.
+  const now = new Date()
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
   const weekAttempts = await db.examAttempt.findMany({
     where: {
       userId:     user.id,
@@ -126,32 +128,16 @@ export default async function HomePage() {
     },
     select: { startedAt: true },
   })
-  const todayMid = new Date()
-  todayMid.setHours(0, 0, 0, 0)
-  const DAY_LETTERS = ["D", "L", "M", "X", "J", "V", "S"]
-  // 7 días: índice 0 = hace 6 días, 6 = hoy
-  const last7: { letter: string; count: number; isToday: boolean }[] = []
-  for (let i = 6; i >= 0; i--) {
-    const day = new Date(todayMid.getTime() - i * 86400000)
-    const next = new Date(day.getTime() + 86400000)
-    const count = weekAttempts.filter(
-      (a) => a.startedAt >= day && a.startedAt < next
-    ).length
-    last7.push({
-      letter: DAY_LETTERS[day.getDay()],
-      count,
-      isToday: i === 0,
-    })
-  }
-  const weekTotal = last7.reduce((acc, d) => acc + d.count, 0)
-  const dailyAvg = weekTotal / 7
-  // Racha de días consecutivos hasta hoy con al menos 1 examen
-  let streakDays = 0
-  for (let i = last7.length - 1; i >= 0; i--) {
-    if (last7[i].count > 0) streakDays++
-    else break
-  }
-  const maxDay = Math.max(1, ...last7.map((d) => d.count))
+  // Toda la lógica de racha (last7, streakDays, frozen, canRestore) vive
+  // ya en src/lib/streak.ts. El dashboard solo pasa attempts + estado del
+  // user y obtiene el shape listo para renderizar.
+  const streak = computeStreakState(
+    weekAttempts.map(a => a.startedAt),
+    user.streakRestoredUntil,
+    now,
+    { credits: user.streakRestoreCredits }
+  )
+  const { last7, weekTotal, dailyAvg, streakDays, maxDay, frozen, canRestore } = streak
 
   // Errores pendientes
   const pendingErrors = await db.$queryRaw<{ count: bigint }[]>`
@@ -267,7 +253,16 @@ export default async function HomePage() {
       <section className="dash-streak">
         <div className="dash-streak-head">
           <h3>Actividad esta semana</h3>
-          <span className="fire" aria-hidden="true">🔥</span>
+          <span className="fire">
+            <StreakIcon
+              frozen={frozen}
+              ariaLabel={
+                frozen
+                  ? "Racha en peligro: aún no has hecho ningún examen hoy"
+                  : "Racha activa"
+              }
+            />
+          </span>
         </div>
         <h2>
           <b>{dailyAvg.toFixed(1)}</b> {dailyAvg === 1 ? "test/día" : "tests/día"}
@@ -277,6 +272,9 @@ export default async function HomePage() {
             ? "Aún no has hecho ningún test esta semana"
             : `${weekTotal} en los últimos 7 días${streakDays > 1 ? ` · racha de ${streakDays} días` : ""}`}
         </p>
+        {canRestore && (
+          <RestoreStreakButton credits={user.streakRestoreCredits} />
+        )}
         <div
           className="dash-days"
           aria-label="Tests por día (últimos 7)"
@@ -285,10 +283,13 @@ export default async function HomePage() {
           {last7.map((d, i) => {
             const isEmpty = d.count === 0
             const heightPct = Math.max(14, (d.count / maxDay) * 100)
+            const title = d.restored
+              ? `${d.letter}: día restaurado con crédito`
+              : `${d.letter}: ${d.count} test${d.count === 1 ? "" : "s"}`
             return (
               <div
                 key={i}
-                className={`dash-day ${isEmpty ? "empty" : ""}`}
+                className={`dash-day ${isEmpty && !d.restored ? "empty" : ""}`}
                 style={{
                   flexDirection: "column",
                   aspectRatio: "auto",
@@ -302,7 +303,7 @@ export default async function HomePage() {
                   outline: d.isToday ? "2px solid var(--orange-600)" : "none",
                   outlineOffset: 1,
                 }}
-                title={`${d.letter}: ${d.count} test${d.count === 1 ? "" : "s"}`}
+                title={title}
               >
                 <div
                   style={{
@@ -312,13 +313,17 @@ export default async function HomePage() {
                     marginBottom: 4,
                   }}
                 >
-                  {d.count}
+                  {d.restored ? "❄" : d.count}
                 </div>
                 <div
                   style={{
                     width: "60%",
-                    background: isEmpty ? "transparent" : "rgba(255,255,255,0.7)",
-                    height: `${heightPct}%`,
+                    background: d.restored
+                      ? "repeating-linear-gradient(45deg, rgba(125,211,252,0.55) 0 4px, rgba(255,255,255,0.3) 4px 8px)"
+                      : isEmpty
+                        ? "transparent"
+                        : "rgba(255,255,255,0.7)",
+                    height: `${d.restored ? 30 : heightPct}%`,
                     maxHeight: 60,
                     borderRadius: 4,
                     marginInline: "auto",
