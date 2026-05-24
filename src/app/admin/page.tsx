@@ -4,7 +4,7 @@ import { CONFIG_CATALOG, type ConfigEntry, type ConfigCategory } from "@/lib/con
 import { db } from "@/lib/db"
 import { QUESTION_APPROVED_AI_WHERE, QUESTION_PENDING_REVIEW_WHERE } from "@/lib/questions"
 import { ConfigForm } from "./ConfigForm"
-import { Sliders, ToggleLeft, MessageSquareText, Sparkles, ListChecks, ArrowRight, Pencil, MessageSquareWarning } from "lucide-react"
+import { Sliders, ToggleLeft, MessageSquareText, Sparkles, ListChecks, ArrowRight, Pencil, MessageSquareWarning, BarChart3, Bug, ExternalLink } from "lucide-react"
 
 export const dynamic = "force-dynamic"
 
@@ -103,6 +103,30 @@ export default async function AdminPage() {
         </div>
       </section>
 
+      {/* Herramientas externas — dashboards de monitorización y analytics.
+          Cada link abre el provider en pestaña nueva (target="_blank") y
+          NO requieren navegación dentro de la app. */}
+      <section>
+        <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
+          <ExternalLink className="h-5 w-5" />
+          Herramientas externas
+        </h2>
+        <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
+          <AdminExternalCard
+            href="https://cloud.umami.is/websites/e275a86c-edbb-4b6b-ac2a-e3ae6a80437c"
+            icon={<BarChart3 className="h-5 w-5" />}
+            title="Umami · Analytics"
+            description="Visitantes, eventos (signup, subscription, test_completed), funnels de conversión. Datos en tiempo real, sin cookies."
+          />
+          <AdminExternalCard
+            href="https://luishidalgoa.sentry.io/issues/?project=dgt-tests"
+            icon={<Bug className="h-5 w-5" />}
+            title="Sentry · Errores"
+            description="Stack traces de errores en producción, agrupados por tipo. Filtra por environment=production para ver lo real."
+          />
+        </div>
+      </section>
+
       {groups.map((group) => (
         <section key={group.category}>
           <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
@@ -185,5 +209,57 @@ function AdminLinkCard({ href, icon, title, description, badge }: {
       </div>
       <ArrowRight className="h-4 w-4" style={{ color: "var(--slate-400)", flexShrink: 0, marginTop: 4 }} />
     </Link>
+  )
+}
+
+/**
+ * Variante de AdminLinkCard para enlaces EXTERNOS (Umami, Sentry, etc.).
+ * Usa <a target="_blank"> en vez de <Link> de Next, y muestra el icono
+ * ExternalLink en lugar de la flecha derecha para indicar visualmente
+ * que abre otra pestaña.
+ */
+function AdminExternalCard({ href, icon, title, description }: {
+  href:        string
+  icon:        React.ReactNode
+  title:       string
+  description: string
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="card-soft"
+      style={{
+        display:        "flex",
+        alignItems:     "flex-start",
+        gap:            12,
+        padding:        16,
+        textDecoration: "none",
+        color:          "inherit",
+      }}
+    >
+      <div style={{
+        flexShrink:     0,
+        width:          38, height: 38,
+        borderRadius:   10,
+        display:        "inline-flex",
+        alignItems:     "center",
+        justifyContent: "center",
+        background:     "rgba(14, 165, 233, 0.10)",   // sky-500 light bg
+        color:          "rgb(2, 132, 199)",            // sky-700 fg
+      }}>
+        {icon}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>{title}</div>
+        </div>
+        <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--slate-500)", lineHeight: 1.4 }}>
+          {description}
+        </p>
+      </div>
+      <ExternalLink className="h-4 w-4" style={{ color: "var(--slate-400)", flexShrink: 0, marginTop: 4 }} />
+    </a>
   )
 }
