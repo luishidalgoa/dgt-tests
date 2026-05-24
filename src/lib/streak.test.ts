@@ -222,6 +222,20 @@ describe("computeStreakState — canRestore (eligibilidad)", () => {
     )
     expect(s.canRestore).toBe(false)
   })
+
+  it("NO eligible si hoy YA tiene examen real (racha nueva ya empezada)", () => {
+    // Usuario hizo el examen hoy primero → cobró D1=+5 de la racha
+    // nueva. Restaurar la vieja ahora es semánticamente confuso (¿se
+    // fusionan los días? ¿se paga D? retroactivo?). Forzamos a que
+    // restaure ANTES de jugar para que la economía quede limpia.
+    const s = computeStreakState(
+      [dayAgo(0), dayAgo(2)], // hoy + anteayer reales, ayer roto
+      null,
+      NOW,
+      { credits: 5 },
+    )
+    expect(s.canRestore).toBe(false)
+  })
 })
 
 describe("computeStreakDaysOnly", () => {

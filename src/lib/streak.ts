@@ -118,17 +118,23 @@ export function computeStreakState(
   const frozen = today.count === 0
 
   // Eligibilidad de restauración:
+  //   - HOY no tiene examen REAL todavía. Si el usuario ya jugó hoy,
+  //     ya empezó una racha nueva (cobró D1=+5) — restaurar la racha
+  //     vieja después es semánticamente extraño. Forzamos "primero
+  //     restaurar, luego jugar" para que el botón sea coherente.
   //   - ayer no tiene examen REAL ni está ya restaurado
   //   - anteayer SÍ tiene examen REAL (sin contar restoredUntil)
   //   - aún hay créditos
   //   - el restoredUntil no es ya el día de ayer (no se puede
   //     re-restaurar el mismo día)
   const yesterdayDay = new Date(todayMid.getTime() - MS_PER_DAY)
+  const todayHasReal = today.count > 0
   const yesterdayBroken = yesterday.count === 0 && !yesterday.restored
   const anteayerHadReal = anteayer.count > 0
   const restoredIsYesterday =
     restoredMid !== null && restoredMid.getTime() === yesterdayDay.getTime()
   const canRestore =
+    !todayHasReal &&
     yesterdayBroken &&
     anteayerHadReal &&
     opts.credits > 0 &&

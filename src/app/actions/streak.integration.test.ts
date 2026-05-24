@@ -110,6 +110,20 @@ describe("restoreStreakAction — eligibilidad (canRestore=false)", () => {
     expect(dbMocks.user.updateMany).not.toHaveBeenCalled()
   })
 
+  it("rechaza si HOY ya hay actividad real (racha nueva ya empezada)", async () => {
+    // El usuario hizo un examen hoy y cobró D1=+5 → empezó nueva racha.
+    // Restaurar la vieja ahora rompería la economía (no podemos pagar
+    // retroactivamente D? cuando ya cobró D1). El server defends.
+    authMocks.getCurrentUser.mockResolvedValue(mkUser({ streakRestoreCredits: 2 }))
+    dbMocks.examAttempt.findMany.mockResolvedValue(attemptsAt(0, -2))
+    const res = await restoreStreakAction()
+    expect(res).toEqual({
+      ok: false,
+      error: "La racha no se puede restaurar ahora mismo",
+    })
+    expect(dbMocks.user.updateMany).not.toHaveBeenCalled()
+  })
+
   it("rechaza si streakRestoredUntil ya es ayer (no se puede re-restaurar)", async () => {
     const yesterday = new Date()
     yesterday.setHours(0, 0, 0, 0)
