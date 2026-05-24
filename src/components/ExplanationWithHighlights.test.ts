@@ -46,4 +46,28 @@ describe("splitWithHighlights", () => {
     const segs = splitWithHighlights("Solo texto.", [])
     expect(segs).toEqual([{ type: "text", value: "Solo texto." }])
   })
+
+  it("matchea cuando la IA pierde tildes (vias → vías)", () => {
+    const text = "Circular por vías públicas con vehículos a motor."
+    const segs = splitWithHighlights(text, ["circular por vias publicas"])
+    const mark = segs.find((s) => s.type === "mark")
+    expect(mark).toBeDefined()
+    // Mantenemos las tildes ORIGINALES del temario en el subrayado.
+    expect(mark!.value).toBe("Circular por vías públicas")
+  })
+
+  it("matchea cuando la IA añade tildes que no estaban (esta → está)", () => {
+    const text = "Esta señal indica el final del tramo."
+    const segs = splitWithHighlights(text, ["está señal"])
+    const mark = segs.find((s) => s.type === "mark")
+    expect(mark).toBeDefined()
+    expect(mark!.value).toBe("Esta señal")
+  })
+
+  it("combina case + tildes (VÍAS PÚBLICAS → vias publicas)", () => {
+    const text = "Se prohíbe en VÍAS PÚBLICAS sin autorización."
+    const segs = splitWithHighlights(text, ["vias publicas"])
+    const mark = segs.find((s) => s.type === "mark")
+    expect(mark!.value).toBe("VÍAS PÚBLICAS")
+  })
 })

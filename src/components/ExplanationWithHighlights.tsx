@@ -9,10 +9,15 @@ interface Props {
 
 /**
  * Renderiza `text` envolviendo en <mark className="hl-marker"> los substrings
- * que aparecen en `highlights`. El matching es CASE-INSENSITIVE — la IA a
- * veces baja una "P" inicial a minúscula al copiar la frase del temario, y
- * exigir case-sensitive haría que el highlight desapareciera. Lo subrayado
- * preserva el casing original del `text`, no el del `highlight`.
+ * que aparecen en `highlights`. El matching es CASE-INSENSITIVE y también
+ * insensible a TILDES — la IA a veces baja una "P" inicial a minúscula o
+ * pierde una tilde al copiar la frase del temario, y exigir match exacto
+ * haría que el highlight desapareciera. Lo subrayado preserva el casing y
+ * las tildes originales del `text`, no las del `highlight`.
+ *
+ * Trade-off de quitar tildes: "está" y "esta" se vuelven equivalentes para
+ * la búsqueda. En la práctica del temario DGT no genera problemas
+ * (la frase contigua sigue mostrándose con su tilde original).
  *
  * Cada highlight se anima como si lo subrayara un rotulador amarillo de
  * izquierda a derecha (medio-lento).
@@ -51,21 +56,50 @@ export function ExplanationWithHighlights({ text, highlights }: Props) {
 
 export type Segment = { type: "text" | "mark"; value: string }
 
+/**
+ * Normaliza una cadena para búsqueda tolerante: NFC → NFD → strip de
+ * combining marks (U+0300–U+036F) → lowercase. Para texto español típico
+ * en NFC, la longitud en codepoints se preserva (cada precompuesto con
+ * tilde se reemplaza por su letra base, sin combinable separado).
+ *
+ * Regex construida con new RegExp + escapes \u para evitar problemas con
+ * editores/renderizadores que se comen los combining marks invisibles
+ * en literales /…/ — el comportamiento es el mismo que /[̀-ͯ]/g.
+ */
+const COMBINING_MARKS_RE = new RegExp("[\\u0300-\\u036f]", "g")
+
+function normalizeForSearch(s: string): string {
+  return s
+    .normalize("NFC")
+    .normalize("NFD")
+    .replace(COMBINING_MARKS_RE, "")
+    .toLowerCase()
+}
+
 export function splitWithHighlights(text: string, highlights: string[]): Segment[] {
   if (!highlights.length) return [{ type: "text", value: text }]
 
-  // Hacemos todas las búsquedas en lowercase para tolerar los desajustes de
-  // mayúsculas que comete la IA al copiar frases del temario. Pero los
+  // Hacemos todas las búsquedas en lowercase + sin tildes para tolerar los
+  // desajustes que comete la IA al copiar frases del temario. Pero los
   // índices y `text.slice()` finales usan el texto original — así el
-  // <mark> muestra el casing del temario, no el del modelo.
-  const textLower = text.toLowerCase()
+  // <mark> muestra el casing y las tildes del temario, no las del modelo.
+  //
+  // SAFEGUARD: la normalización solo es 1:1 (en codepoints) si el texto
+  // original ya está en NFC y solo perdemos diacríticos combinables. Si la
+  // longitud cambia tras normalizar, los índices no mapean al original y
+  // caemos al matching simple (case-insensitive, sin quitar tildes).
+  const textNormalized = normalizeForSearch(text)
+  const safeForDiacritics = textNormalized.length === text.length
+  const textKey = safeForDiacritics ? textNormalized : text.toLowerCase()
+  const normalizePhrase = (s: string) =>
+    safeForDiacritics ? normalizeForSearch(s) : s.toLowerCase()
 
-  // Filtrar highlights: deben existir en el texto (case-insensitive) y no estar vacíos
+  // Filtrar highlights: deben existir en el texto (normalizado) y no estar vacíos
   const unique = Array.from(
     new Set(
       highlights
         .map((h) => h.trim())
-        .filter((h) => h.length > 0 && textLower.includes(h.toLowerCase()))
+        .filter((h) => h.length > 0 && textKey.includes(normalizePhrase(h)))
     )
   ).sort((a, b) => b.length - a.length) // largos primero
 
@@ -75,12 +109,12 @@ export function splitWithHighlights(text: string, highlights: string[]): Segment
   const ranges: { start: number; end: number }[] = []
 
   for (const phrase of unique) {
-    const phraseLower = phrase.toLowerCase()
+    const phraseKey = normalizePhrase(phrase)
     let from = 0
-    while (from <= text.length - phrase.length) {
-      const idx = textLower.indexOf(phraseLower, from)
+    while (from <= text.length - phraseKey.length) {
+      const idx = textKey.indexOf(phraseKey, from)
       if (idx === -1) break
-      const end = idx + phrase.length
+      const end = idx + phraseKey.length
       // ¿Solapa con un rango existente?
       const overlaps = ranges.some(
         (r) => idx < r.end && end > r.start
