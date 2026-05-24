@@ -19,6 +19,7 @@ import type { ComponentType } from "react"
 import * as art1 from "./cuanto-cuesta-carne-2026"
 import * as art2 from "./cuantos-fallos-teorico-dgt"
 import * as art3 from "./test-adas-dgt"
+import * as art4 from "./lista-dificultad-maniobra-dgt"
 
 export interface RecursoMeta {
   /** Slug URL-safe sin / inicial. Aparece como /recursos/[slug]. */
@@ -46,6 +47,7 @@ export interface RecursoEntry {
 
 // Orden manual: lo más reciente / con mayor valor SEO primero.
 export const RECURSOS: RecursoEntry[] = [
+  { meta: art4.meta, Component: art4.default },
   { meta: art1.meta, Component: art1.default },
   { meta: art2.meta, Component: art2.default },
   { meta: art3.meta, Component: art3.default },
