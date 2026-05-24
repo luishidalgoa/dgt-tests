@@ -11,6 +11,7 @@ import {
   STREAK_DAY_BONUSES,
   buildCycleView,
   computeExamXp,
+  computeRestoreTargetDays,
   computeStreakDayBonus,
   computeStreakStateFromData,
   getLevel,
@@ -437,5 +438,89 @@ describe("computeStreakStateFromData — detección active/frozen/dormant", () =
       now:           NOW,
     })
     expect(s.days).toBe(1)
+  })
+})
+
+describe("computeRestoreTargetDays — qué chips se iluminarán al restaurar", () => {
+  it("dormant + 2 días previos reales (Jue+Vie) → ilumina D1-D3 [caso bug del user]", () => {
+    // Caso real del bug que motivó esta función: hoy y ayer sin actividad,
+    // pero anteayer y hace 3 días sí. Restaurar ayer reconecta la cadena
+    // a 3 días total (frozen, days=3) → buildCycleView marca D1, D2, D3
+    // como earned. Antes no había nada earned → diff = [1, 2, 3].
+    const targets = computeRestoreTargetDays({
+      attemptDates:         [daysAgo(2), daysAgo(3)],
+      currentRestoredUntil: null,
+      now:                  NOW,
+    })
+    expect(targets).toEqual([1, 2, 3])
+  })
+
+  it("dormant + solo anteayer real → cadena de 2, ilumina D1 y D2", () => {
+    const targets = computeRestoreTargetDays({
+      attemptDates:         [daysAgo(2)],
+      currentRestoredUntil: null,
+      now:                  NOW,
+    })
+    expect(targets).toEqual([1, 2])
+  })
+
+  it("dormant sin attempts → restaurar ayer crea cadena de 1, ilumina D1", () => {
+    // Aunque canRestore=false en streak.ts si no hay anteayer real, la
+    // función pura sigue calculando: restoredUntil=ayer hace que la
+    // cadena sea {-1 restored} → days=1 → D1 earned.
+    const targets = computeRestoreTargetDays({
+      attemptDates:         [],
+      currentRestoredUntil: null,
+      now:                  NOW,
+    })
+    expect(targets).toEqual([1])
+  })
+
+  it("ya con restoredUntil=ayer → cadena ya incluye ayer, no hay delta", () => {
+    const targets = computeRestoreTargetDays({
+      attemptDates:         [daysAgo(2)],
+      currentRestoredUntil: midnightDaysAgo(1),
+      now:                  NOW,
+    })
+    expect(targets).toEqual([])
+  })
+
+  it("dormant + 6 días previos reales → cadena de 7, ilumina ciclo completo D1-D7", () => {
+    // Restaurar ayer + 6 previos = 7 días total. buildCycleView con
+    // days=7 marca todos los chips D1-D7 como earned.
+    const targets = computeRestoreTargetDays({
+      attemptDates:         [2, 3, 4, 5, 6, 7].map(daysAgo),
+      currentRestoredUntil: null,
+      now:                  NOW,
+    })
+    expect(targets).toEqual([1, 2, 3, 4, 5, 6, 7])
+  })
+
+  it("dormant + 7 días previos reales → cycle wrap, solo ilumina D1 del nuevo ciclo", () => {
+    // Cadena tras restaurar = 8 días. (8-1) % 7 = 0 → pos=1. El ciclo
+    // visualizador solo muestra el ciclo MÁS RECIENTE, así que solo D1
+    // está earned. La animación NO debe iluminar D2-D7.
+    const targets = computeRestoreTargetDays({
+      attemptDates:         [2, 3, 4, 5, 6, 7, 8].map(daysAgo),
+      currentRestoredUntil: null,
+      now:                  NOW,
+    })
+    expect(targets).toEqual([1])
+  })
+
+  it("hoy con actividad + ayer roto + 2 reales previos → reconecta a cadena de 4, ilumina D2-D4", () => {
+    // Pre-restore: active days=1 (solo hoy). buildCycleView con
+    // claimedToday=false marca D1 como today-pending, no earned.
+    // Post-restore: chain = hoy + ayer_restored + dos previos = 4 días.
+    // buildCycleView frozen... espera, today tiene actividad → active.
+    // active days=4 claimedToday=false → earnedThroughDay=3 (D1-D3),
+    // D4=today-pending.
+    // Diff: D1, D2, D3 son nuevos earned. (D1 pasó de pending → earned).
+    const targets = computeRestoreTargetDays({
+      attemptDates:         [daysAgo(0), daysAgo(2), daysAgo(3)],
+      currentRestoredUntil: null,
+      now:                  NOW,
+    })
+    expect(targets).toEqual([1, 2, 3])
   })
 })

@@ -11,7 +11,7 @@ import { StructuredDataHome } from "@/components/StructuredData"
 import { StreakIcon } from "@/components/StreakIcon"
 import { StreakCycle } from "@/components/StreakCycle"
 import { RestoreStreakButton } from "@/components/RestoreStreakButton"
-import { getLevel, getStreakState } from "@/lib/xp"
+import { computeRestoreTargetDays, getLevel, getStreakState } from "@/lib/xp"
 import { computeStreakState } from "@/lib/streak"
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app"
@@ -151,6 +151,18 @@ export default async function HomePage() {
   // bajo la barra de XP.
   const xpInfo      = getLevel(user.xp)
   const streakInfo  = await getStreakState(user.id)
+
+  // Posiciones del ciclo (1..7) que pasarán a "earned" si el user gasta
+  // un crédito ahora. Lo necesita <RestoreStreakButton> para volar
+  // chispas a esos chips. Si no hay nada que restaurar, queda vacío y
+  // el botón hará fallback sin animación.
+  const cycleDaysToRestore = canRestore
+    ? computeRestoreTargetDays({
+        attemptDates:         weekAttempts.map((a) => a.startedAt),
+        currentRestoredUntil: user.streakRestoredUntil,
+        now,
+      })
+    : []
 
   // Errores pendientes
   const pendingErrors = await db.$queryRaw<{ count: bigint }[]>`
@@ -354,7 +366,10 @@ export default async function HomePage() {
         />
 
         {canRestore && (
-          <RestoreStreakButton credits={user.streakRestoreCredits} />
+          <RestoreStreakButton
+            credits={user.streakRestoreCredits}
+            cycleDaysToRestore={cycleDaysToRestore}
+          />
         )}
 
         <div

@@ -1552,9 +1552,89 @@ body {
 .restore-streak-btn:hover .refresh-icon {
   transform: rotate(60deg);
 }
+
+/* ── Estados durante la animación de restaurar ─────────────────────
+   `is-firing`  → el botón ha sido pulsado, las chispas están en vuelo.
+                  Quitamos el pulse continuo y giramos el icono refresh.
+   `is-leaving` → el server confirmó OK; fade-out + shrink antes de que
+                  React desmonte el componente (canRestore pasa a false). */
+.restore-streak-btn.is-firing {
+  animation: none;
+  pointer-events: none;
+}
+.restore-streak-btn.is-firing .refresh-icon {
+  animation: restoreSpin 0.55s linear infinite;
+}
+@keyframes restoreSpin {
+  to { transform: rotate(360deg); }
+}
+.restore-streak-btn.is-leaving {
+  animation: none;
+  opacity: 0;
+  transform: scale(0.92);
+  transition: opacity 200ms ease, transform 200ms ease;
+  pointer-events: none;
+}
+
+/* Chispa que vuela del botón al chip. Se monta en <body> con
+   position:fixed. El Web Animations API mueve `transform`; las
+   propiedades visuales (gradiente, glow) viven aquí. */
+.restore-spark {
+  position: fixed;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 35% 35%,
+    #fff7ed 0%,
+    #fbbf24 35%,
+    #f97316 65%,
+    rgba(249, 115, 22, 0) 100%
+  );
+  box-shadow:
+    0 0 10px 3px rgba(251, 191, 36, 0.65),
+    0 0 22px 8px rgba(249, 115, 22, 0.35);
+  pointer-events: none;
+  z-index: 10000;
+  will-change: transform, opacity;
+}
+
+/* Cuando una chispa impacta su chip-objetivo, el chip recibe esta clase
+   durante ~800 ms. Flash + scale-bounce + halo radial. La animación
+   funciona sobre cualquier estado del chip (earned/upcoming/today),
+   pero usa importancia limitada vía cubic-bezier para no romper el
+   transform base si lo había. */
+@keyframes chipIgnite {
+  0%   { transform: scale(1); filter: brightness(1); }
+  18%  {
+    transform: scale(1.22);
+    filter: brightness(1.6) saturate(1.4);
+    box-shadow:
+      0 0 0 6px rgba(251, 191, 36, 0.55),
+      0 0 28px 8px rgba(249, 115, 22, 0.45);
+  }
+  55%  {
+    transform: scale(1.04);
+    filter: brightness(1.2);
+    box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.25);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0);
+  }
+}
+[data-cycle-day].is-igniting {
+  animation: chipIgnite 800ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  z-index: 5;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .restore-streak-btn { animation: none; }
   .restore-streak-btn:hover { transform: none; }
+  .restore-streak-btn.is-firing .refresh-icon { animation: none; }
+  .restore-streak-btn.is-leaving { transition: opacity 0.1s linear; }
+  [data-cycle-day].is-igniting { animation: none; }
 }
 
 /* Errors banner */
@@ -1981,3 +2061,4 @@ body {
 details[open] > summary .secret-group-chevron {
   transform: rotate(90deg) !important;
 }
+

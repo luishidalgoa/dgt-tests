@@ -388,6 +388,72 @@ function midnight(d: Date): Date {
 }
 
 /**
+ * Predice qué SLOTS del ciclo de 7 días se iluminarían si el usuario
+ * usara un crédito para restaurar ayer ahora mismo.
+ *
+ * Útil para la UI: la animación del botón de "Restaurar racha" necesita
+ * saber a qué chips del `<StreakCycle>` debe enviar las chispas. Lo
+ * llamamos desde el Server Component (page.tsx) y le pasamos el array
+ * al cliente.
+ *
+ * Implementación: calculamos el `StreakState` antes y después de aplicar
+ * `restoredUntil=ayer`, generamos el `CycleSlot[]` de cada uno vía
+ * `buildCycleView`, y devolvemos las posiciones que pasan de NO-earned a
+ * earned. Eso maneja correctamente el wraparound del ciclo (cadenas
+ * largas que cruzan a un segundo ciclo solo iluminan los slots
+ * efectivamente earned del nuevo ciclo).
+ */
+export function computeRestoreTargetDays(args: {
+  attemptDates: ReadonlyArray<Date>
+  /** Estado actual de `User.streakRestoredUntil`. */
+  currentRestoredUntil: Date | null
+  now: Date
+}): number[] {
+  const { attemptDates, currentRestoredUntil, now } = args
+  const todayMid = midnight(now)
+  const yesterdayMid = new Date(todayMid.getTime() - 86400000)
+
+  const current = computeStreakStateFromData({
+    attemptDates,
+    restoredUntil: currentRestoredUntil,
+    lastBonusAt:   null,
+    now,
+  })
+
+  const restored = computeStreakStateFromData({
+    attemptDates,
+    restoredUntil: yesterdayMid,
+    lastBonusAt:   null,
+    now,
+  })
+
+  // Si la cadena no se extiende, no hay nada que animar.
+  if (restored.days <= current.days) return []
+
+  // Diff entre los chips EARNED del antes y el después. Usamos
+  // claimedToday:false (constante) para que el diff sea independiente
+  // del estado del bonus diario — solo nos importa qué slots pasan a
+  // marcarse como ganados.
+  const beforeSlots = buildCycleView({
+    state:        current.state,
+    days:         current.days,
+    claimedToday: false,
+  })
+  const afterSlots = buildCycleView({
+    state:        restored.state,
+    days:         restored.days,
+    claimedToday: false,
+  })
+
+  const wasEarned = new Set(
+    beforeSlots.filter((s) => s.isEarned).map((s) => s.day),
+  )
+  return afterSlots
+    .filter((s) => s.isEarned && !wasEarned.has(s.day))
+    .map((s) => s.day)
+}
+
+/**
  * Si el usuario tiene racha activa hoy y aún no ha cobrado el bonus
  * diario de racha en este día, lo otorga. Devuelve el `AwardXpResult`
  * resultante o `null` si no aplicaba (ya cobrado hoy, sin racha, etc.).

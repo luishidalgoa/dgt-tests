@@ -136,6 +136,7 @@ export function StreakCycle({ state, days, claimedToday }: StreakCycleProps) {
             <div
               key={slot.day}
               role="listitem"
+              data-cycle-day={slot.day}
               title={
                 isEarnedToday
                   ? `Día ${slot.day} · hoy · +${slot.bonus} XP ganados`
