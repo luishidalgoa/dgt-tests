@@ -221,9 +221,16 @@ export function ExamRunner({
       return
     }
 
+    // "Examen real" = mode normal + cronómetro. Lo necesita el endpoint
+    // para decidir si conceder XP base por examen (solo en exámenes
+    // reales). Práctica desde un test, /temas o /test-errores no da XP
+    // base — solo el bonus diario de racha si el modo cuenta para stats.
+    const isRealExam = mode === "normal" && timeLimit !== null
+
     const payload: SubmitAttemptPayload = {
       testId: test.id,
       mode,
+      isRealExam,
       answers: questions.map((qu) => ({
         questionId:       qu.id,
         selectedOptionId: answers[qu.id] ?? null,

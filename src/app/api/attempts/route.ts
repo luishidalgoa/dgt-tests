@@ -22,6 +22,11 @@ const submitSchema = z.object({
   testId: z.number().int().nullable(),
   // Ver src/types/exam.ts para la semántica de cada modo.
   mode:   z.enum(["normal", "errores", "errores-refuerzo", "tema"]),
+  // true sii el intento se hizo como EXAMEN REAL (mode normal con
+  // cronómetro de 30 min). Solo en ese caso se concede XP base. Opcional
+  // con default false por compatibilidad con clientes antiguos —
+  // cualquier intento no marcado se trata como práctica.
+  isRealExam: z.boolean().optional().default(false),
   answers: z
     .array(
       z.object({
@@ -54,7 +59,7 @@ export async function POST(req: Request) {
     )
   }
 
-  const { testId, mode, answers } = parsed.data
+  const { testId, mode, answers, isRealExam } = parsed.data
 
   // Validar que el test existe (si se proporciona)
   let categorySlug = ""
@@ -184,26 +189,37 @@ export async function POST(req: Request) {
       : `/historial/${attempt.id}`
 
   // ── XP & nivel ──────────────────────────────────────────────────────
-  // Economía:
-  //   1. Base por examen = max(0, round(15 - 1.5 × errores)). Aplica a
-  //      todos los modos (normal/tema/errores/errores-refuerzo).
-  //   2. Bonus diario de racha (una vez por día, solo si el modo cuenta
-  //      para stats — ver `awardDailyStreakBonusIfDue` y
-  //      `ATTEMPT_STATS_WHERE`): tabla cíclica [5,7,10,15,20,30,50] día
-  //      1..7. Día 8 vuelve al 5, etc.
+  // Economía (dos fuentes independientes):
+  //   1. Base por examen = max(0, round(15 - 1.5 × errores)). SOLO se
+  //      concede cuando es EXAMEN REAL (`isRealExam=true`: modo "normal"
+  //      + cronómetro de 30 min). Práctica desde un test, /temas o
+  //      /test-errores NO da XP base — son repaso.
+  //   2. Bonus diario de racha (una vez por día) si el modo cuenta
+  //      para stats (`awardDailyStreakBonusIfDue` lo decide via
+  //      `ATTEMPT_STATS_WHERE`): tabla cíclica [5,7,10,15,20,30,50].
+  //      Aplica a cualquier examen normal/tema independientemente de
+  //      si fue real o práctica — lo importante es mantener la racha.
   //
   // Si la BBDD falla al otorgar XP NO tumbamos la respuesta — el
   // examen ya está guardado, los puntos son secundarios. Degradamos
   // a XP=0 con nivel fallback.
   let xpReward: AttemptXpReward
   try {
-    const breakdown = computeExamXp({ score, total: answers.length })
+    const breakdown = isRealExam
+      ? computeExamXp({ score, total: answers.length })
+      : []
     const xpAmount  = sumXp(breakdown)
-    const xpResult  = await awardXp(user.id, xpAmount, breakdown[0]?.reason ?? "exam-finish")
+    // Si no hay base que dar (práctica), awardXp con amount=0 es un
+    // no-op y solo nos devuelve el estado actual del nivel.
+    const xpResult  = await awardXp(
+      user.id,
+      xpAmount,
+      breakdown[0]?.reason ?? "exam-finish",
+    )
 
-    // Tras pagar la base, intenta el bonus diario. Si lo paga,
-    // sobreescribe el nivel final con el resultante y añade la línea
-    // al breakdown para que el cliente pueda mostrarla por separado.
+    // Tras pagar la base (si tocaba), intenta el bonus diario. Si lo
+    // paga, sobreescribe el nivel final con el resultante y añade la
+    // línea al breakdown para que el cliente pueda mostrarla.
     let finalState: AwardXpResult = xpResult
     const streakResult = await awardDailyStreakBonusIfDue(user.id)
     if (streakResult) {

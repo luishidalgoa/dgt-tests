@@ -60,6 +60,12 @@ export type AttemptMode = "normal" | "errores" | "errores-refuerzo" | "tema"
 export interface SubmitAttemptPayload {
   testId: number | null
   mode: AttemptMode
+  /** true sii el intento se completó como EXAMEN REAL (modo "normal"
+   *  con cronómetro de 30 min). Solo en ese caso se otorga XP base por
+   *  examen (`computeExamXp`). El bonus diario de racha se concede igual
+   *  para cualquier examen que cuente para stats — eso depende del
+   *  `mode`, no de este flag. */
+  isRealExam: boolean
   answers: {
     questionId: number
     selectedOptionId: number | null
