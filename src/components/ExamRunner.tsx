@@ -15,6 +15,7 @@ import {
 import { QuestionImage } from "@/components/QuestionImage"
 import { AIExplainPanel, type AIResult } from "@/components/AIExplainPanel"
 import { ExplanationWithHighlights } from "@/components/ExplanationWithHighlights"
+import { QuestionReportButton } from "@/components/QuestionReportButton"
 import {
   loadExamState,
   saveExamState,
@@ -463,6 +464,7 @@ export function ExamRunner({
                     </span>
                   )}
                 </h2>
+                <QuestionReportButton questionId={q.id} isGuest={isGuest} />
               </div>
 
               <div className="space-y-2 mt-4">
