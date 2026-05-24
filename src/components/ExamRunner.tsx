@@ -72,6 +72,11 @@ export function ExamRunner({
   const [answers, setAnswers] = useState<Record<number, number | null>>({})
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  // Ref a la última versión de `handleFinish` — necesario para que el
+  // botón DEV pueda dispararlo DESPUÉS de hacer setAnswers (que es
+  // async). Sin esta indirección la closure capturaría el handleFinish
+  // viejo con `answers` vacío.
+  const handleFinishRef = useRef<(() => void) | null>(null)
   const [secondsLeft, setSecondsLeft] = useState<number | null>(timeLimit)
   // En modo práctica (timeLimit===null) corre un cronómetro hacia ARRIBA
   // contando tiempo transcurrido. Reemplaza el "no hay timer" que había
@@ -283,6 +288,35 @@ export function ExamRunner({
     })
   }, [answers, isGuest, mode, questions, router, test.id, test.testNumber, test.category])
 
+  // Sincroniza el ref con la última versión de handleFinish. El cheat
+  // mode dev necesita disparar handleFinish DESPUÉS de setAnswers, y
+  // sin este ref capturaría una versión vieja vía closure. Lo hacemos
+  // en un effect (no en render) para no romper la regla de "no mutar
+  // refs durante render" — siempre corre tras commit.
+  useEffect(() => {
+    handleFinishRef.current = handleFinish
+  })
+
+  /**
+   * DEV ONLY: rellena las respuestas con una opción aleatoria de cada
+   * pregunta y dispara `handleFinish`. Atajo para no tener que rellenar
+   * 30 preguntas a mano al iterar la UI de la bubble XP. El score será
+   * aleatorio (~25% aciertos esperado con 4 opciones) — suficiente para
+   * obtener algo de XP base + el bonus diario, si aplica.
+   */
+  const devAutoFinish = useCallback(() => {
+    if (process.env.NODE_ENV !== "development") return
+    const random: Record<number, number | null> = {}
+    for (const qu of questions) {
+      const idx = Math.floor(Math.random() * qu.options.length)
+      random[qu.id] = qu.options[idx].id
+    }
+    setAnswers(random)
+    // Esperar a que React commit el setAnswers + cree la nueva closure
+    // de handleFinish, luego dispararla vía ref.
+    window.setTimeout(() => handleFinishRef.current?.(), 60)
+  }, [questions])
+
   // ── Temporizador ────────────────────────────────────────────────────────
   // Patrón estándar de countdown: el setTimeout dispara el setSecondsLeft
   // FUERA del render (no es sincrónico, ergo no causa cascadas). El
@@ -385,6 +419,40 @@ export function ExamRunner({
 
   return (
     <div className="space-y-6">
+      {/* ── DEV-only cheat button ─────────────────────────────────────
+          Rellena con respuestas aleatorias y finaliza el examen. Solo
+          aparece en NODE_ENV=development, así que en producción ni
+          siquiera entra al bundle (Next/Turbopack hace tree-shake). */}
+      {process.env.NODE_ENV === "development" && !isPending && (
+        <button
+          type="button"
+          onClick={devAutoFinish}
+          title="DEV: rellena con respuestas aleatorias y dispara finalizar (para iterar la animación XP sin contestar 30 preguntas)"
+          aria-label="Atajo de desarrollo: auto-finalizar examen"
+          style={{
+            position:     "fixed",
+            top:          82,
+            right:        16,
+            zIndex:       9500,
+            background:   "linear-gradient(180deg, #7c3aed, #5b21b6)",
+            color:        "#fff",
+            padding:      "6px 12px",
+            fontSize:     11.5,
+            fontWeight:   800,
+            borderRadius: 8,
+            cursor:       "pointer",
+            border:       "1px solid rgba(255,255,255,0.25)",
+            boxShadow:    "0 6px 16px -6px rgba(124, 58, 237, 0.5)",
+            letterSpacing: "0.02em",
+            display:      "inline-flex",
+            alignItems:   "center",
+            gap:          6,
+          }}
+        >
+          <span aria-hidden="true">⚡</span>
+          DEV · auto-finalizar
+        </button>
+      )}
       {/* Header con progreso y timer */}
       <div className="space-y-2">
         {/*
