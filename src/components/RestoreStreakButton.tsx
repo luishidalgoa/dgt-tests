@@ -64,6 +64,7 @@ export function RestoreStreakButton({ credits }: Props) {
         disabled={isPending}
         aria-label={`Restaurar racha rota — ${intentosLabel} restante${credits === 1 ? "" : "s"}`}
         title={tooltip}
+        className="restore-streak-btn"
         style={{
           display:        "inline-flex",
           alignItems:     "center",
@@ -77,13 +78,11 @@ export function RestoreStreakButton({ credits }: Props) {
           fontSize:       13,
           cursor:         isPending ? "wait" : "pointer",
           alignSelf:      "flex-start",
-          transition:     "background 0.15s, transform 0.1s",
-          boxShadow:      "0 4px 12px -6px rgba(234, 88, 12, 0.35)",
         }}
       >
         {isPending
           ? <Loader2 className="h-4 w-4 animate-spin" />
-          : <RefreshCw className="h-4 w-4" />}
+          : <RefreshCw className="h-4 w-4 refresh-icon" />}
         <span>Restaurar racha</span>
         <span
           style={{

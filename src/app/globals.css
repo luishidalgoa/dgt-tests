@@ -1500,6 +1500,63 @@ body {
   gap: 8px;
 }
 
+/* ── Restore streak button ─────────────────────────────────────────
+   El botón "Restaurar racha (N intentos)" debajo del StreakCycle.
+   Aparece solo cuando canRestore=true. Como es un CTA opcional pero
+   con timing limitado (solo el día siguiente a la rotura) animamos
+   para atraer la atención sin ser molestos:
+     - Pulse continuo de "ripple ring" suave (2.4s loop).
+     - Hover: lift + brillo en sombra + rotación leve del refresh icon.
+     - Active (mousedown): squish hacia abajo.
+   Toda la lógica de aparición/desaparición la decide el padre. */
+@keyframes restoreStreakPulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 0   rgba(249, 115, 22, 0.45),
+      0 4px 12px -6px rgba(234, 88, 12, 0.35);
+  }
+  70% {
+    box-shadow:
+      0 0 0 12px rgba(249, 115, 22, 0),
+      0 4px 12px -6px rgba(234, 88, 12, 0.35);
+  }
+}
+.restore-streak-btn {
+  animation: restoreStreakPulse 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
+}
+.restore-streak-btn:hover {
+  animation: none;
+  transform: translateY(-1px) scale(1.02);
+  background: linear-gradient(180deg, #fff7ed, #fed7aa) !important;
+  box-shadow:
+    0 8px 16px -6px rgba(234, 88, 12, 0.45),
+    0 0 0 4px rgba(249, 115, 22, 0.12);
+}
+.restore-streak-btn:active {
+  transform: scale(0.97);
+  box-shadow: 0 2px 6px -4px rgba(234, 88, 12, 0.45);
+  transition-duration: 0.05s;
+}
+.restore-streak-btn:disabled {
+  animation: none;
+  cursor: wait;
+  opacity: 0.7;
+}
+.restore-streak-btn .refresh-icon {
+  transition: transform 250ms ease;
+}
+.restore-streak-btn:hover .refresh-icon {
+  transform: rotate(60deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .restore-streak-btn { animation: none; }
+  .restore-streak-btn:hover { transform: none; }
+}
+
 /* Errors banner */
 .dash-errors {
   position: relative;
