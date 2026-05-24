@@ -56,6 +56,7 @@ model User {
   partyPlays      PartyPlayer[] @relation("PartyParticipations")
   aiPaid          UserAiPaid[]
   configUpdates   AppConfig[]   @relation("AppConfigUpdates")
+  questionEdits   Question[]    @relation("QuestionEdits")
   aiStatsAnalysis UserAiStatsAnalysis[]
 
   @@map("users")
@@ -118,6 +119,13 @@ model Question {
   aiModel       String?                        // p.ej. "gemini-2.5-flash" — para auditoría/debug
   aiReviewedAt  DateTime?
   aiApproved    Boolean?                       // null = pendiente
+
+  // ── Audit de ediciones manuales desde /admin/questions ────────────
+  //  Solo última edición (igual patrón que AppConfig.updatedAt/updatedBy).
+  //  Null = nunca editada manualmente (es la original importada / IA).
+  lastEditedAt  DateTime?
+  lastEditedBy  Int?
+  lastEditedByUser User?       @relation("QuestionEdits", fields: [lastEditedBy], references: [id], onDelete: SetNull)
 
   options       Option[]
   testQuestions TestQuestion[]

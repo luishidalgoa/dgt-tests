@@ -4,7 +4,7 @@ import { CONFIG_CATALOG, type ConfigEntry, type ConfigCategory } from "@/lib/con
 import { db } from "@/lib/db"
 import { QUESTION_APPROVED_AI_WHERE, QUESTION_PENDING_REVIEW_WHERE } from "@/lib/questions"
 import { ConfigForm } from "./ConfigForm"
-import { Sliders, ToggleLeft, MessageSquareText, Sparkles, ListChecks, ArrowRight } from "lucide-react"
+import { Sliders, ToggleLeft, MessageSquareText, Sparkles, ListChecks, ArrowRight, Pencil } from "lucide-react"
 
 export const dynamic = "force-dynamic"
 
@@ -30,6 +30,7 @@ export default async function AdminPage() {
   // Métricas de paneles secundarios (badge counts)
   const pendingReviewCount = await db.question.count({ where: QUESTION_PENDING_REVIEW_WHERE })
   const approvedAiCount    = await db.question.count({ where: QUESTION_APPROVED_AI_WHERE })
+  const totalQuestions     = await db.question.count()
 
   const groups: { category: ConfigCategory; title: string; icon: React.ReactNode; entries: ConfigEntry[] }[] = [
     {
@@ -70,6 +71,13 @@ export default async function AdminPage() {
           {/* El acceso a /admin/secrets vive en el botón "API keys" del
               nav superior (layout.tsx) — aquí lo eliminamos para no
               duplicar el enlace. */}
+          <AdminLinkCard
+            href="/admin/questions"
+            icon={<Pencil className="h-5 w-5" />}
+            title="Editar preguntas"
+            description="Listado paginado del banco completo con filtros para revisar y corregir el enunciado, las opciones o la explicación de cualquier pregunta."
+            badge={totalQuestions > 0 ? `${totalQuestions} en banco` : undefined}
+          />
           <AdminLinkCard
             href="/admin/review-questions"
             icon={<Sparkles className="h-5 w-5" />}
