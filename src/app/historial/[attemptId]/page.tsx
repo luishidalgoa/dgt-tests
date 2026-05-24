@@ -3,6 +3,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { db } from "@/lib/db"
 import { requireUser } from "@/lib/auth"
+import { isAdmin } from "@/lib/permissions"
 import { imageUrl } from "@/lib/imageUrl"
 import { findManualSectionsForCodes } from "@/lib/manual"
 import { Card, CardContent } from "@/components/ui/card"
@@ -26,6 +27,7 @@ const PASS_THRESHOLD = 0.9
 
 export default async function HistoryDetailPage({ params }: PageProps) {
   const user = await requireUser()
+  const admin = isAdmin(user)
   const { attemptId } = await params
   const id = parseInt(attemptId, 10)
   if (Number.isNaN(id)) notFound()
@@ -151,6 +153,18 @@ export default async function HistoryDetailPage({ params }: PageProps) {
                     {a.question.codigoTema && (
                       <div className="text-xs text-slate-500 font-mono mt-2 text-center">
                         {a.question.codigoTema}
+                      </div>
+                    )}
+                    {admin && (
+                      // Solo admin: id interno de la pregunta para referenciar
+                      // rápido al revisarla en /admin. userSelect:all facilita
+                      // copy/paste del id (click triple selecciona).
+                      <div
+                        className="text-xs text-slate-400 font-mono mt-1 text-center"
+                        title="ID interno (solo visible para admin)"
+                        style={{ userSelect: "all" }}
+                      >
+                        #{a.questionId}
                       </div>
                     )}
                   </div>

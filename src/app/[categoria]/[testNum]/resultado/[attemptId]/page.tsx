@@ -2,6 +2,7 @@ import { notFound } from "next/navigation"
 import Link from "next/link"
 import { db } from "@/lib/db"
 import { requireUser } from "@/lib/auth"
+import { isAdmin } from "@/lib/permissions"
 import { findManualSectionsForCodes } from "@/lib/manual"
 import { Badge } from "@/components/ui/badge"
 import { ManualButton } from "@/components/ManualButton"
@@ -27,6 +28,7 @@ const PASS_THRESHOLD = 0.9   // 90% para aprobar (27/30)
 
 export default async function ResultPage({ params }: PageProps) {
   const user = await requireUser()
+  const admin = isAdmin(user)
   const { categoria, testNum, attemptId } = await params
   const id = parseInt(attemptId, 10)
   if (Number.isNaN(id)) notFound()
@@ -231,6 +233,22 @@ export default async function ResultPage({ params }: PageProps) {
                       style={{ color: "var(--slate-500)", marginTop: 8 }}
                     >
                       {a.question.codigoTema}
+                    </div>
+                  )}
+                  {admin && (
+                    // Solo admin: id interno de la pregunta para depurar /
+                    // referenciar rápido al revisarla. Mismo estilo que el
+                    // codigoTema pero con prefijo `#` para distinguirlo.
+                    <div
+                      className="text-xs text-center font-mono-tabular"
+                      style={{
+                        color:        "var(--slate-400)",
+                        marginTop:    4,
+                        userSelect:   "all",  // facilita copy/paste del id
+                      }}
+                      title="ID interno (solo visible para admin)"
+                    >
+                      #{a.questionId}
                     </div>
                   )}
                 </div>
