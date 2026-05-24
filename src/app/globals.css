@@ -2185,27 +2185,37 @@ details[open] > summary .secret-group-chevron {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 1px;
-  margin: -1px;
+  /* Tap target generoso para mobile (W3C recomienda ≥24×24, Material
+     ≥44×44). Compensamos con margen negativo para que el layout no se
+     altere visualmente. El icono mantiene su tamaño. */
+  padding: 8px;
+  margin: -8px;
   background: transparent;
   border: 0;
   color: var(--slate-400);
   cursor: pointer;
   border-radius: 50%;
   transition: color 150ms ease, background 150ms ease;
+  /* Importante: -webkit-tap-highlight-color para que iOS no pinte el
+     rectángulo gris al tocar. Lo sustituimos por nuestro propio :active. */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 .help-hint__trigger:hover,
-.help-hint__trigger:focus-visible {
+.help-hint__trigger:focus-visible,
+.help-hint__trigger:active {
   color: var(--orange-600);
-  background: rgba(249, 115, 22, 0.08);
+  background: rgba(249, 115, 22, 0.12);
   outline: none;
 }
 .help-hint__popover {
   position: absolute;
-  top: calc(100% + 8px);
+  top: calc(100% + 12px);
   left: 50%;
   transform: translateX(-50%);
-  z-index: 100;
+  /* Por encima de cualquier overlay del dashboard pero por debajo de
+     toasts (10000) y la bubble XP (9000). */
+  z-index: 8500;
   background: var(--slate-700);
   color: #fff;
   padding: 10px 12px;
@@ -2336,6 +2346,7 @@ details[open] > summary .secret-group-chevron {
   .xp-gain-bubble { transition: opacity 0.15s linear; }
   .xp-gain-bubble__bar-fill { transition: width 0.15s linear; }
 }
+
 
 
 
