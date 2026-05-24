@@ -340,3 +340,120 @@ describe("awardDailyStreakBonusIfDue — paga 1 vez por día si racha activa", (
     expect(xpCall?.[0]).toMatchObject({ data: { xp: { increment: 10 } } })
   })
 })
+
+// ────────────────────────────────────────────────────────────────────────
+// Escenario end-to-end del endpoint POST /api/attempts
+// ────────────────────────────────────────────────────────────────────────
+describe("Endpoint flow: examen real first-of-day → awarded = base + bonus", () => {
+  it("primer examen real del día con 1 error → awarded = 14 (base) + 5 (D1 bonus) = 19", async () => {
+    // Caso que reportó el usuario: hace un examen real con 1 error y
+    // espera ver en la animación +19 (no +14). Confirmamos que el flujo
+    // del endpoint (awardXp para base + awardDailyStreakBonusIfDue para
+    // el bonus) realmente devuelve la suma combinada al cliente.
+
+    // Estado inicial del usuario en BBDD (simulado).
+    let currentXp = 5
+    let currentLastBonusAt: Date | null = null
+
+    // Mock de findUnique: devuelve flags o xp según qué pida el caller.
+    dbMocks.user.findUnique.mockImplementation(async (args: {
+      where: { id: number }
+      select: { xp?: boolean; lastStreakBonusAt?: boolean; streakRestoredUntil?: boolean }
+    }) => {
+      if (args.select.lastStreakBonusAt) {
+        return { lastStreakBonusAt: currentLastBonusAt, streakRestoredUntil: null }
+      }
+      if (args.select.xp) {
+        return { xp: currentXp }
+      }
+      return null
+    })
+
+    // Mock de findMany: el examen recién creado es el único de hoy.
+    // Sin nada en yesterday → chain length = 1 → bonus D1 = 5.
+    dbMocks.examAttempt.findMany.mockResolvedValue([
+      { startedAt: new Date() },
+    ])
+
+    // Mock de update: distingue entre update de xp y de lastStreakBonusAt
+    // y mantiene el estado simulado coherente.
+    dbMocks.user.update.mockImplementation(async (args: {
+      where: { id: number }
+      data: { xp?: { increment: number }; lastStreakBonusAt?: Date }
+    }) => {
+      if (args.data.xp) {
+        currentXp += args.data.xp.increment
+        return { xp: currentXp }
+      }
+      if (args.data.lastStreakBonusAt) {
+        currentLastBonusAt = args.data.lastStreakBonusAt
+        return { lastStreakBonusAt: currentLastBonusAt }
+      }
+      return {}
+    })
+
+    // ── Replica el flujo del endpoint POST /api/attempts ──
+    // 1. computeExamXp con score=29/total=30 → 1 error → 14 base
+    // (Importado por nombre — si fallara, el test no compila.)
+    const { computeExamXp, sumXp } = await import("./xp")
+    const breakdown = computeExamXp({ score: 29, total: 30 })
+    expect(sumXp(breakdown)).toBe(14)
+
+    // 2. awardXp con la base
+    const xpResult = await awardXp(1, 14, "exam-finish")
+    expect(xpResult.oldXp).toBe(5)
+    expect(xpResult.newXp).toBe(19)
+
+    // 3. awardDailyStreakBonusIfDue para el bonus diario
+    const streakResult = await awardDailyStreakBonusIfDue(1)
+    expect(streakResult).not.toBeNull()
+    expect(streakResult!.oldXp).toBe(19)
+    expect(streakResult!.newXp).toBe(24)
+
+    // 4. Calcular awarded como hace el endpoint: finalState.newXp - xpResult.oldXp
+    const finalState = streakResult ?? xpResult
+    const awarded = finalState.newXp - xpResult.oldXp
+    expect(awarded).toBe(19)
+
+    // 5. Verificar que el state simulado quedó consistente
+    expect(currentXp).toBe(24)
+    expect(currentLastBonusAt).not.toBeNull()
+  })
+
+  it("examen real cuando bonus ya cobrado hoy → awarded = solo base (sin bonus duplicado)", async () => {
+    // Si el bonus ya se pagó hoy (claimedToday=true), awardDailyStreakBonusIfDue
+    // devuelve null y awarded incluye solo la base. Idempotencia del bonus.
+    let currentXp = 10
+    const today8am = new Date()
+    today8am.setHours(8, 0, 0, 0)
+
+    dbMocks.user.findUnique.mockImplementation(async (args: {
+      select: { lastStreakBonusAt?: boolean }
+    }) => {
+      if (args.select.lastStreakBonusAt) {
+        return { lastStreakBonusAt: today8am, streakRestoredUntil: null }
+      }
+      return null
+    })
+    dbMocks.examAttempt.findMany.mockResolvedValue([{ startedAt: new Date() }])
+    dbMocks.user.update.mockImplementation(async (args: {
+      data: { xp?: { increment: number } }
+    }) => {
+      if (args.data.xp) {
+        currentXp += args.data.xp.increment
+        return { xp: currentXp }
+      }
+      return {}
+    })
+
+    const xpResult = await awardXp(1, 14, "exam-finish")
+    expect(xpResult.newXp).toBe(24)
+
+    const streakResult = await awardDailyStreakBonusIfDue(1)
+    expect(streakResult).toBeNull() // ya cobrado hoy
+
+    const finalState = streakResult ?? xpResult
+    const awarded = finalState.newXp - xpResult.oldXp
+    expect(awarded).toBe(14) // solo base, sin bonus duplicado
+  })
+})
