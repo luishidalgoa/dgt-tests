@@ -294,8 +294,9 @@ export default async function HomePage() {
 
         {/* Mini-bloque de nivel + barra de progreso a próximo nivel.
             Cuando el usuario está en MAX_LEVEL, nextLevelXp = null → no
-            mostramos barra, solo el badge "Nivel máximo". */}
-        <div className="dash-xp" style={{ marginTop: 10, marginBottom: 12 }}>
+            mostramos barra, solo el badge "Nivel máximo".
+            Paleta: sobre .dash-streak blanco. Texto slate, fill naranja. */}
+        <div className="dash-xp" style={{ marginTop: 4, marginBottom: 14 }}>
           <div
             style={{
               display:        "flex",
@@ -303,14 +304,20 @@ export default async function HomePage() {
               justifyContent: "space-between",
               fontSize:       12.5,
               fontWeight:     700,
-              color:          "rgba(255,255,255,0.92)",
+              color:          "var(--slate-700)",
               marginBottom:   6,
             }}
           >
             <span>
               Nivel {xpInfo.level} · {xpInfo.label}
             </span>
-            <span style={{ fontFamily: "var(--font-mono)", opacity: 0.85 }}>
+            <span
+              style={{
+                fontFamily: "var(--font-mono)",
+                color:      "var(--slate-500)",
+                fontWeight: 600,
+              }}
+            >
               {xpInfo.nextLevelXp === null
                 ? `${user.xp} XP · MAX`
                 : `${user.xp} / ${xpInfo.nextLevelXp} XP`}
@@ -319,7 +326,7 @@ export default async function HomePage() {
           <div
             style={{
               height:       6,
-              background:   "rgba(255,255,255,0.18)",
+              background:   "var(--slate-200)",
               borderRadius: 999,
               overflow:     "hidden",
             }}
@@ -333,7 +340,7 @@ export default async function HomePage() {
               style={{
                 width:      `${xpInfo.progressPct}%`,
                 height:     "100%",
-                background: "linear-gradient(90deg, #FFD24A, #FF7A1A)",
+                background: "linear-gradient(90deg, var(--orange-500), var(--orange-600))",
                 transition: "width 400ms ease",
               }}
             />

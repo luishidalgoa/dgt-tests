@@ -42,7 +42,7 @@ export function RestoreStreakButton({ credits }: Props) {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 12 }}>
       <button
         type="button"
         onClick={handleClick}
@@ -52,16 +52,17 @@ export function RestoreStreakButton({ credits }: Props) {
           display:        "inline-flex",
           alignItems:     "center",
           gap:            6,
-          padding:        "6px 12px",
-          borderRadius:   8,
-          border:         "1px solid rgba(255,255,255,0.35)",
-          background:     "rgba(255,255,255,0.18)",
-          color:          "#fff",
+          padding:        "7px 14px",
+          borderRadius:   10,
+          border:         "1px solid var(--orange-500)",
+          background:     "linear-gradient(180deg, #fff, #fff7ed)",
+          color:          "var(--orange-600)",
           fontWeight:     700,
           fontSize:       13,
           cursor:         isPending ? "wait" : "pointer",
           alignSelf:      "flex-start",
-          transition:     "background 0.15s",
+          transition:     "background 0.15s, transform 0.1s",
+          boxShadow:      "0 4px 12px -6px rgba(234, 88, 12, 0.35)",
         }}
       >
         {isPending
@@ -72,7 +73,7 @@ export function RestoreStreakButton({ credits }: Props) {
       {error && (
         <span
           role="alert"
-          style={{ fontSize: 12, color: "#fee2e2", fontWeight: 600 }}
+          style={{ fontSize: 12, color: "var(--red-500)", fontWeight: 600 }}
         >
           {error}
         </span>
