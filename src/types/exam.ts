@@ -73,7 +73,8 @@ export interface SubmitAttemptPayload {
 }
 
 /** Recompensa de XP devuelta tras finalizar un intento. Permite al cliente
- *  mostrar el toast de level-up sin tener que volver a llamar al servidor. */
+ *  mostrar el toast de level-up + la animación de gain sin tener que
+ *  volver a llamar al servidor. */
 export interface AttemptXpReward {
   /** Total de XP otorgado en este intento (suma del breakdown). */
   awarded: number
@@ -90,6 +91,15 @@ export interface AttemptXpReward {
   iconPath: string
   /** Etiqueta legible del nivel nuevo, p.ej. "Llama estable". */
   levelLabel: string
+  /** XP del usuario ANTES de este intento. Necesario para animar la
+   *  barra de progreso desde el valor previo al nuevo. */
+  prevXp: number
+  /** XP total DESPUÉS de aplicar awarded. */
+  newXp: number
+  /** Umbral del siguiente nivel (null si está al máximo). */
+  nextLevelXp: number | null
+  /** Progreso al siguiente nivel en porcentaje (0..100). */
+  progressPct: number
 }
 
 export interface SubmitAttemptResponse {

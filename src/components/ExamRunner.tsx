@@ -250,9 +250,25 @@ export function ExamRunner({
         }
         const data = (await res.json()) as SubmitAttemptResponse
         clearExamState()
-        // Sonner persiste el toast entre navegaciones porque el <Toaster>
-        // está montado en el root layout. El push() siguiente cambia la
-        // página pero el toast sigue visible en el resultado/historial.
+        // Si hubo XP, guardamos los datos en sessionStorage para que
+        // <XpGainBubble> (montado en el layout) los lea tras la
+        // navegación y dispare la animación de pelotitas + barra.
+        // sessionStorage sobrevive el router.push() y se consume y
+        // borra una sola vez en el cliente.
+        if (data.xp?.awarded > 0) {
+          try {
+            sessionStorage.setItem("dgt:xp-gain", JSON.stringify(data.xp))
+          } catch {
+            // Si sessionStorage no está disponible (modo incógnito raro)
+            // caemos al toast simple como fallback.
+            toast.success(`+${data.xp.awarded} XP`, {
+              description: `Nivel ${data.xp.newLevel} · ${data.xp.levelLabel}`,
+              duration: 3500,
+            })
+          }
+        }
+        // El level-up sigue mostrándose como toast prominente además
+        // de la animación de la barra — es un evento celebratorio.
         if (data.xp?.leveledUp) {
           toast.success(
             `¡Subes a nivel ${data.xp.newLevel}! · ${data.xp.levelLabel}`,
@@ -261,11 +277,6 @@ export function ExamRunner({
               duration: 6000,
             },
           )
-        } else if (data.xp?.awarded > 0) {
-          toast.success(`+${data.xp.awarded} XP`, {
-            description: `Nivel ${data.xp.newLevel} · ${data.xp.levelLabel}`,
-            duration: 3500,
-          })
         }
         router.push(data.redirectUrl)
       } catch (err) {

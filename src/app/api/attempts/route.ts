@@ -228,13 +228,17 @@ export async function POST(req: Request) {
     }
 
     xpReward = {
-      awarded:   finalState.newXp - xpResult.oldXp,
+      awarded:     finalState.newXp - xpResult.oldXp,
       breakdown,
-      leveledUp: finalState.newLevel > xpResult.oldLevel,
-      oldLevel:  xpResult.oldLevel,
-      newLevel:  finalState.newLevel,
-      iconPath:  finalState.levelInfo.iconPath,
-      levelLabel: finalState.levelInfo.label,
+      leveledUp:   finalState.newLevel > xpResult.oldLevel,
+      oldLevel:    xpResult.oldLevel,
+      newLevel:    finalState.newLevel,
+      iconPath:    finalState.levelInfo.iconPath,
+      levelLabel:  finalState.levelInfo.label,
+      prevXp:      xpResult.oldXp,
+      newXp:       finalState.newXp,
+      nextLevelXp: finalState.levelInfo.nextLevelXp,
+      progressPct: finalState.levelInfo.progressPct,
     }
   } catch (err) {
     // No tumbar la respuesta — el cliente vería el examen como "no
@@ -242,13 +246,17 @@ export async function POST(req: Request) {
     console.error("[xp] failed to award XP for attempt", attempt.id, err)
     const fallbackLevel = getLevel(0)
     xpReward = {
-      awarded:    0,
-      breakdown:  [],
-      leveledUp:  false,
-      oldLevel:   fallbackLevel.level,
-      newLevel:   fallbackLevel.level,
-      iconPath:   fallbackLevel.iconPath,
-      levelLabel: fallbackLevel.label,
+      awarded:     0,
+      breakdown:   [],
+      leveledUp:   false,
+      oldLevel:    fallbackLevel.level,
+      newLevel:    fallbackLevel.level,
+      iconPath:    fallbackLevel.iconPath,
+      levelLabel:  fallbackLevel.label,
+      prevXp:      0,
+      newXp:       0,
+      nextLevelXp: fallbackLevel.nextLevelXp,
+      progressPct: fallbackLevel.progressPct,
     }
   }
 
