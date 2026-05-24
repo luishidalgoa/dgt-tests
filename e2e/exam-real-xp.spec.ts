@@ -36,9 +36,11 @@ test("examen real con botón DEV cierra el flujo y dispara la bubble si hay XP",
 
   await page.goto("/permiso-b/1?mode=examen")
 
-  // El botón DEV solo existe en NODE_ENV=development. Si no aparece, el
-  // dev server está corriendo en prod o el build de Next podó la rama.
-  const devBtn = page.getByRole("button", { name: /auto-finalizar/i })
+  // Las pills DEV solo existen en NODE_ENV=development. Si no aparecen,
+  // el dev server está en prod o el build de Next podó la rama.
+  // Clickamos "100%" para garantizar base XP máxima (15) — score
+  // determinista, test robusto frente a aleatoriedad.
+  const devBtn = page.getByRole("button", { name: "100%", exact: true })
   await expect(devBtn).toBeVisible({ timeout: 10_000 })
   await devBtn.click()
 

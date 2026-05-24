@@ -298,20 +298,48 @@ export function ExamRunner({
   })
 
   /**
-   * DEV ONLY: rellena las respuestas con una opción aleatoria de cada
-   * pregunta y dispara `handleFinish`. Atajo para no tener que rellenar
-   * 30 preguntas a mano al iterar la UI de la bubble XP. El score será
-   * aleatorio (~25% aciertos esperado con 4 opciones) — suficiente para
-   * obtener algo de XP base + el bonus diario, si aplica.
+   * DEV ONLY: rellena las respuestas con un `targetCorrect` exacto de
+   * aciertos (el resto, errores) y dispara `handleFinish`. Atajo para
+   * iterar la UI de la bubble XP sin contestar 30 preguntas y forzando
+   * scores conocidos (100%, 27/30, 50%, 0%).
+   *
+   * Requiere que el server haya shipeado `correctOptionId` por pregunta
+   * (lo hace cuando NODE_ENV=development, ver page.tsx → sendSolutions).
+   * Si por alguna razón no está, cae a "primera opción" como wrong y
+   * "primera opción" como correct — score impredecible, pero al menos
+   * no peta.
    */
-  const devAutoFinish = useCallback(() => {
+  const devFinishWithScore = useCallback((targetCorrect: number) => {
     if (process.env.NODE_ENV !== "development") return
-    const random: Record<number, number | null> = {}
-    for (const qu of questions) {
-      const idx = Math.floor(Math.random() * qu.options.length)
-      random[qu.id] = qu.options[idx].id
+    // Decidimos QUÉ índices serán correctos via shuffle Fisher-Yates de
+    // las posiciones [0, n). Los primeros `targetCorrect` indices del
+    // shuffle marcamos como correctas. Así el score = targetCorrect
+    // exacto, no aproximado.
+    const indices = questions.map((_, i) => i)
+    for (let i = indices.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[indices[i], indices[j]] = [indices[j], indices[i]]
     }
-    setAnswers(random)
+    const correctIdxSet = new Set(indices.slice(0, targetCorrect))
+
+    const next: Record<number, number | null> = {}
+    questions.forEach((qu, i) => {
+      const correctId = qu.correctOptionId ?? null
+      if (correctIdxSet.has(i)) {
+        // Acierto: elige la opción correcta si la sabemos; si no, una
+        // cualquiera (mejor que dejar null).
+        next[qu.id] = correctId ?? qu.options[0]?.id ?? null
+      } else {
+        // Fallo: elige una opción que NO sea la correcta. Si no sabemos
+        // cuál es la correcta, escoge una al azar y asume que cuenta.
+        const wrongOpts = correctId != null
+          ? qu.options.filter((o) => o.id !== correctId)
+          : qu.options
+        const pick = wrongOpts[Math.floor(Math.random() * wrongOpts.length)]
+        next[qu.id] = pick?.id ?? null
+      }
+    })
+    setAnswers(next)
     // Esperar a que React commit el setAnswers + cree la nueva closure
     // de handleFinish, luego dispararla vía ref.
     window.setTimeout(() => handleFinishRef.current?.(), 60)
@@ -419,39 +447,60 @@ export function ExamRunner({
 
   return (
     <div className="space-y-6">
-      {/* ── DEV-only cheat button ─────────────────────────────────────
-          Rellena con respuestas aleatorias y finaliza el examen. Solo
-          aparece en NODE_ENV=development, así que en producción ni
-          siquiera entra al bundle (Next/Turbopack hace tree-shake). */}
+      {/* ── DEV-only cheat pills ──────────────────────────────────────
+          Botonera flotante con 4 atajos: cada pill rellena con un score
+          exacto y dispara finalizar. Solo aparece en NODE_ENV=development,
+          así que en producción ni siquiera entra al bundle (Next/Turbopack
+          hace tree-shake por la rama if). El cálculo del score depende de
+          que el server haya shipeado `correctOptionId` por pregunta, lo
+          cual también gateamos por NODE_ENV server-side. */}
       {process.env.NODE_ENV === "development" && !isPending && (
-        <button
-          type="button"
-          onClick={devAutoFinish}
-          title="DEV: rellena con respuestas aleatorias y dispara finalizar (para iterar la animación XP sin contestar 30 preguntas)"
-          aria-label="Atajo de desarrollo: auto-finalizar examen"
+        <div
+          role="group"
+          aria-label="Atajos DEV: forzar score y finalizar"
           style={{
             position:     "fixed",
             top:          82,
             right:        16,
             zIndex:       9500,
-            background:   "linear-gradient(180deg, #7c3aed, #5b21b6)",
-            color:        "#fff",
-            padding:      "6px 12px",
-            fontSize:     11.5,
-            fontWeight:   800,
-            borderRadius: 8,
-            cursor:       "pointer",
-            border:       "1px solid rgba(255,255,255,0.25)",
-            boxShadow:    "0 6px 16px -6px rgba(124, 58, 237, 0.5)",
-            letterSpacing: "0.02em",
             display:      "inline-flex",
-            alignItems:   "center",
             gap:          6,
+            padding:      "4px 4px",
+            borderRadius: 10,
+            background:   "rgba(15, 23, 42, 0.92)",
+            border:       "1px solid rgba(255,255,255,0.12)",
+            boxShadow:    "0 10px 24px -10px rgba(0,0,0,0.55)",
+            backdropFilter: "blur(6px)",
           }}
         >
-          <span aria-hidden="true">⚡</span>
-          DEV · auto-finalizar
-        </button>
+          {([
+            { label: "100%", target: questions.length,     bg: "#16a34a" }, // verde
+            { label: "27/30", target: Math.max(questions.length - 3, 0), bg: "#0ea5e9" }, // azul
+            { label: "50%",  target: Math.floor(questions.length / 2), bg: "#f59e0b" }, // amber
+            { label: "0%",   target: 0,                    bg: "#ef4444" }, // rojo
+          ] as const).map(({ label, target, bg }) => (
+            <button
+              key={label}
+              type="button"
+              onClick={() => devFinishWithScore(target)}
+              title={`DEV: forzar ${target}/${questions.length} aciertos y finalizar`}
+              style={{
+                background:   bg,
+                color:        "#fff",
+                padding:      "5px 9px",
+                fontSize:     11,
+                fontWeight:   800,
+                borderRadius: 6,
+                cursor:       "pointer",
+                border:       "1px solid rgba(255,255,255,0.18)",
+                letterSpacing: "0.02em",
+                lineHeight:   1,
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       )}
       {/* Header con progreso y timer */}
       <div className="space-y-2">
