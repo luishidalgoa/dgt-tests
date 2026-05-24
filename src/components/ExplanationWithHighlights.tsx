@@ -9,8 +9,13 @@ interface Props {
 
 /**
  * Renderiza `text` envolviendo en <mark className="hl-marker"> los substrings
- * que aparecen en `highlights` (case-sensitive). Cada highlight se anima como
- * si lo subrayara un rotulador amarillo de izquierda a derecha (medio-lento).
+ * que aparecen en `highlights`. El matching es CASE-INSENSITIVE — la IA a
+ * veces baja una "P" inicial a minúscula al copiar la frase del temario, y
+ * exigir case-sensitive haría que el highlight desapareciera. Lo subrayado
+ * preserva el casing original del `text`, no el del `highlight`.
+ *
+ * Cada highlight se anima como si lo subrayara un rotulador amarillo de
+ * izquierda a derecha (medio-lento).
  *
  * Algoritmo: ordenamos los highlights por longitud descendente y vamos
  * partiendo el texto en segmentos, evitando solapamientos.
@@ -44,17 +49,23 @@ export function ExplanationWithHighlights({ text, highlights }: Props) {
   )
 }
 
-type Segment = { type: "text" | "mark"; value: string }
+export type Segment = { type: "text" | "mark"; value: string }
 
-function splitWithHighlights(text: string, highlights: string[]): Segment[] {
+export function splitWithHighlights(text: string, highlights: string[]): Segment[] {
   if (!highlights.length) return [{ type: "text", value: text }]
 
-  // Filtrar highlights: deben existir en el texto y no estar vacíos
+  // Hacemos todas las búsquedas en lowercase para tolerar los desajustes de
+  // mayúsculas que comete la IA al copiar frases del temario. Pero los
+  // índices y `text.slice()` finales usan el texto original — así el
+  // <mark> muestra el casing del temario, no el del modelo.
+  const textLower = text.toLowerCase()
+
+  // Filtrar highlights: deben existir en el texto (case-insensitive) y no estar vacíos
   const unique = Array.from(
     new Set(
       highlights
         .map((h) => h.trim())
-        .filter((h) => h.length > 0 && text.includes(h))
+        .filter((h) => h.length > 0 && textLower.includes(h.toLowerCase()))
     )
   ).sort((a, b) => b.length - a.length) // largos primero
 
@@ -64,9 +75,10 @@ function splitWithHighlights(text: string, highlights: string[]): Segment[] {
   const ranges: { start: number; end: number }[] = []
 
   for (const phrase of unique) {
+    const phraseLower = phrase.toLowerCase()
     let from = 0
     while (from <= text.length - phrase.length) {
-      const idx = text.indexOf(phrase, from)
+      const idx = textLower.indexOf(phraseLower, from)
       if (idx === -1) break
       const end = idx + phrase.length
       // ¿Solapa con un rango existente?
