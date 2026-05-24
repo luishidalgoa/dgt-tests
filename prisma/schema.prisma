@@ -124,11 +124,37 @@ model Question {
   answers       Answer[]
   partyAnswers  PartyAnswer[]
   aiPaid        UserAiPaid[]
+  reports       QuestionReport[]
 
   @@index([tier])
   // Acelera el filtro "preguntas visibles a usuario" en /temas, /test-errores, etc.
   @@index([aiGenerated, aiApproved])
   @@map("questions")
+}
+
+// ── Incidencia reportada por un usuario sobre una pregunta ───────────────
+// El usuario (logueado o guest) puede señalar que una pregunta tiene errata,
+// imagen rota, explicación errónea, etc. Las reports entran como "pending"
+// y un admin las revisa desde /admin/reports.
+//
+// `type` es enum-like a nivel aplicación (validado por zod en el endpoint).
+// `status` flujo: pending → reviewed | fixed | dismissed.
+model QuestionReport {
+  id          Int       @id @default(autoincrement())
+  questionId  Int
+  userId      Int?                                          // null = guest
+  guestEmail  String?                                       // opcional, solo guests
+  type        String                                        // ver REPORT_TYPES en src/lib/questionReports.ts
+  comment     String?
+  status      String    @default("pending")                 // pending | reviewed | fixed | dismissed
+  createdAt   DateTime  @default(now())
+  reviewedAt  DateTime?
+  reviewedBy  Int?                                          // admin que lo revisó
+  question    Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([questionId])
+  @@map("question_reports")
 }
 
 // ── Relación N:M Test ↔ Question con orden ───────────────────────────────
