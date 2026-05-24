@@ -2113,11 +2113,14 @@ details[open] > summary .secret-group-chevron {
    .xp-spark y animadas con Web Animations API desde el componente. */
 .xp-gain-bubble {
   position: fixed;
-  top: 70px;
-  right: 18px;
+  /* Anclada justo DEBAJO del navbar (altura 72px + 6px de aire). En
+     desktop coincide aproximadamente con el borde derecho del grupo
+     avatar + tokens + ajustes. */
+  top: 78px;
+  right: 16px;
   z-index: 9000;
   min-width: 240px;
-  max-width: 320px;
+  max-width: 340px;
   padding: 12px 14px 11px;
   border-radius: 14px;
   background: linear-gradient(180deg, #fff7ed 0%, #ffedd5 100%);
@@ -2130,6 +2133,19 @@ details[open] > summary .secret-group-chevron {
     opacity 250ms ease,
     transform 250ms cubic-bezier(0.34, 1.4, 0.64, 1);
   font-family: var(--font-inter);
+}
+
+/* Mobile (≤640px): ancho completo con márgenes laterales mínimos. El
+   navbar es más compacto en mobile así que reducimos también el top.
+   `max-width: none` y `min-width: 0` para que respire en 320-380px. */
+@media (max-width: 640px) {
+  .xp-gain-bubble {
+    top: 70px;
+    left: 12px;
+    right: 12px;
+    max-width: none;
+    min-width: 0;
+  }
 }
 .xp-gain-bubble[data-phase="exit"] {
   transition:
@@ -2219,6 +2235,7 @@ details[open] > summary .secret-group-chevron {
   .xp-gain-bubble { transition: opacity 0.15s linear; }
   .xp-gain-bubble__bar-fill { transition: width 0.15s linear; }
 }
+
 
 
 
