@@ -11,6 +11,7 @@ import { BottomTabs } from "@/components/BottomTabs"
 import { UserNotifications } from "@/components/UserNotifications"
 import { CookieConsent } from "@/components/CookieConsent"
 import { AnalyticsScript } from "@/components/AnalyticsScript"
+import { RegisterServiceWorker } from "@/components/RegisterServiceWorker"
 import { MaintenancePage } from "@/components/MaintenancePage"
 import { hasFullAccess } from "@/lib/permissions"
 import { Toaster } from "sonner"
@@ -104,6 +105,16 @@ export const metadata: Metadata = {
   // clicables con tinte azul que rompen el diseño.
   formatDetection: {
     telephone: false,
+  },
+
+  // ── PWA / "Add to home screen" ──────────────────────────────────────
+  // iOS Safari ignora manifest.webmanifest casi entero — necesita estos
+  // meta tags propios para que la app se instale bien en home screen y
+  // se abra en modo standalone (sin la barra del navegador).
+  appleWebApp: {
+    capable:    true,
+    statusBarStyle: "default",
+    title:      "DGT Tests",
   },
 }
 
@@ -235,6 +246,7 @@ export default async function RootLayout({
         </footer>
         <CookieConsent />
         <AnalyticsScript />
+        <RegisterServiceWorker />
         {/* Toaster global de sonner — los componentes cliente disparan
             toasts con `import { toast } from "sonner"` y se muestran aquí. */}
         <Toaster richColors position="top-right" closeButton />
