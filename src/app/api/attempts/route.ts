@@ -3,6 +3,7 @@ import { z } from "zod"
 import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
 import type { AttemptXpReward, SubmitAttemptResponse } from "@/types/exam"
+import { ATTEMPT_STATS_WHERE } from "@/lib/stats"
 import {
   awardDailyStreakBonusIfDue,
   awardXp,
@@ -11,6 +12,11 @@ import {
   sumXp,
   type AwardXpResult,
 } from "@/lib/xp"
+import {
+  computeStreakDaysOnly,
+  awardStreakCreditIfMilestone,
+  MAX_RESTORE_CREDITS,
+} from "@/lib/streak"
 
 const submitSchema = z.object({
   testId: z.number().int().nullable(),
@@ -116,6 +122,61 @@ export async function POST(req: Request) {
 
     return created
   })
+
+  // ── Racha: si este examen ha cruzado un múltiplo de 7 días consecutivos
+  //    de racha (7, 14, 21...), +1 crédito de restauración (cap MAX).
+  //    Solo cuenta si `mode` es de los que entran en estadísticas, igual
+  //    que la racha del dashboard. Fallar este bloque no debe romper la
+  //    respuesta del attempt — el examen ya se guardó.
+  if (mode === "normal" || mode === "tema") {
+    try {
+      const now = new Date()
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 86_400_000)
+      // Trae los attempts de los últimos 7 días incluyendo el recién
+      // creado y calcula el streak antes/después.
+      const recent = await db.examAttempt.findMany({
+        where: {
+          userId:     user.id,
+          finishedAt: { not: null },
+          startedAt:  { gte: sevenDaysAgo },
+          ...ATTEMPT_STATS_WHERE,
+        },
+        select: { id: true, startedAt: true },
+      })
+      const allDates = recent.map(a => a.startedAt)
+      // Streak ANTES: quita el attempt recién creado.
+      const datesBefore = recent
+        .filter(a => a.id !== attempt.id)
+        .map(a => a.startedAt)
+      const oldStreak = computeStreakDaysOnly(
+        datesBefore,
+        user.streakRestoredUntil,
+        now,
+      )
+      const newStreak = computeStreakDaysOnly(
+        allDates,
+        user.streakRestoredUntil,
+        now,
+      )
+      const newCredits = awardStreakCreditIfMilestone(
+        oldStreak,
+        newStreak,
+        user.streakRestoreCredits,
+      )
+      if (newCredits !== user.streakRestoreCredits) {
+        await db.user.update({
+          where: { id: user.id },
+          data:  {
+            streakRestoreCredits: Math.min(newCredits, MAX_RESTORE_CREDITS),
+          },
+        })
+      }
+    } catch (err) {
+      // No bloqueamos la respuesta del POST por un fallo de racha.
+      // Sentry recoge el error vía el wrapper del client de Prisma.
+      console.warn("[streak] award credit failed:", err)
+    }
+  }
 
   const redirectUrl =
     validTestId !== null && testNumber !== null

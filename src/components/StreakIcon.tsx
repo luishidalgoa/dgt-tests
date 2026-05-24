@@ -3,12 +3,10 @@ import { getLevel } from "@/lib/xp"
 
 /**
  * Estado visual del icono:
- *   - "active":   racha viva (mostrar el icono del nivel a color)
- *   - "frozen":   tenía racha pero hoy aún no se ha hecho nada — la
- *                 mostraremos congelada (tinte azul / hielo). El task
- *                 paralelo "Restaurar racha rota + fuego congelado"
- *                 conectará la lógica de cuándo aplicar este estado;
- *                 aquí solo dejamos el hook visual listo.
+ *   - "active":   racha viva (mostrar el icono del nivel a color).
+ *   - "frozen":   tenía racha pero hoy aún no se ha hecho nada — se
+ *                 renderiza el asset "congelado" (lvl-N-freeze.png) si
+ *                 existe, o se aplica un filtro CSS azul como fallback.
  *   - "dormant":  el usuario no tiene racha (siempre lvl-0).
  *
  * Por defecto = "active". Renderiza el PNG correspondiente al nivel
@@ -27,6 +25,9 @@ interface StreakIconProps {
   state?: StreakIconState
   /** Clase CSS adicional para envolver el contenedor. */
   className?: string
+  /** Aria-label override. Si no se pasa, se genera uno descriptivo a
+   *  partir del nivel y el estado. */
+  ariaLabel?: string
 }
 
 export function StreakIcon({
@@ -34,6 +35,7 @@ export function StreakIcon({
   size = 36,
   state = "active",
   className,
+  ariaLabel,
 }: StreakIconProps) {
   // En estado "dormant" siempre mostramos lvl-0 independientemente del XP
   // — visualmente el usuario está "sin racha activa".
@@ -54,6 +56,7 @@ export function StreakIcon({
   const stateLabel =
     state === "frozen"  ? " (congelada)" :
     state === "dormant" ? " (apagada)"   : ""
+  const computedLabel = `Icono de racha — nivel ${info.level} (${info.label})${stateLabel}`
 
   return (
     <span
@@ -68,7 +71,7 @@ export function StreakIcon({
         transition:     "filter 200ms ease",
       }}
       title={`Nivel ${info.level} · ${info.label}${stateLabel}`}
-      aria-label={`Icono de racha — nivel ${info.level} (${info.label})${stateLabel}`}
+      aria-label={ariaLabel ?? computedLabel}
     >
       <Image
         src={iconSrc}

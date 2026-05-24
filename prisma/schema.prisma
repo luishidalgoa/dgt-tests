@@ -59,6 +59,18 @@ model User {
   /// la medianoche local del usuario (servidor en realidad) para no
   /// pagar el bonus más de una vez por día. NULL = nunca recibido.
   lastStreakBonusAt DateTime?
+  // ── Racha: créditos de restauración ─────────────────────────────
+  /// Créditos disponibles para restaurar una racha rota. Empieza en 1
+  /// al crear cuenta; +1 cada vez que el usuario completa una semana
+  /// entera (7 días consecutivos). Tope 5. Ver src/lib/streak.ts.
+  streakRestoreCredits Int      @default(1)
+  /// Si el user gastó un crédito para restaurar la racha tras una
+  /// rotura, este campo guarda la fecha (medianoche local) del día
+  /// "ayer" que se restauró — el cálculo de racha lo cuenta como
+  /// hecho aunque no haya attempts ese día. Una restauración cubre
+  /// UN día roto; vuelve a null en cuanto el user pasa por una nueva
+  /// rotura sin restaurar. Ver src/lib/streak.ts.
+  streakRestoredUntil  DateTime?
   attempts        ExamAttempt[]
   hostedParties   Party[]       @relation("HostedParties")
   partyPlays      PartyPlayer[] @relation("PartyParticipations")

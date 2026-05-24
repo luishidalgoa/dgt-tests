@@ -279,11 +279,16 @@ export interface StreakState {
  * Una sola query a BBDD. Diseñada para llamarse desde Server Components
  * (dashboard) — no usar dentro del finish-exam (ahí ya pagamos vía
  * `awardDailyStreakBonusIfDue`).
+ *
+ * Respeta `User.streakRestoredUntil` (créditos de restauración, ver
+ * src/lib/streak.ts): un día restaurado cuenta como día con actividad
+ * para mantener la racha viva — el usuario ya "pagó" ese día con un
+ * crédito.
  */
 export async function getStreakState(userId: number): Promise<StreakState> {
   const user = await db.user.findUnique({
     where:  { id: userId },
-    select: { lastStreakBonusAt: true },
+    select: { lastStreakBonusAt: true, streakRestoredUntil: true },
   })
 
   const todayMid = new Date()
@@ -311,32 +316,44 @@ export async function getStreakState(userId: number): Promise<StreakState> {
     daysWithAttempt.add(dayDelta)
   }
 
-  if (daysWithAttempt.has(0)) {
+  // Día restaurado vía crédito (si lo hay). Cuenta como día con actividad
+  // para el cálculo de la cadena. Asumimos siempre el día restaurado
+  // está en el pasado (no se puede restaurar el futuro) y es uno solo.
+  const restoredDayDelta = user?.streakRestoredUntil
+    ? Math.floor((midnight(user.streakRestoredUntil).getTime() - todayMid.getTime()) / 86400000)
+    : null
+
+  const hasActivity = (d: number): boolean =>
+    daysWithAttempt.has(d) || d === restoredDayDelta
+
+  if (hasActivity(0)) {
     // ACTIVE: cuenta consecutivos desde hoy hacia atrás.
     let days = 0
     for (let d = 0; d > -365; d--) {
-      if (daysWithAttempt.has(d)) days++
+      if (hasActivity(d)) days++
       else break
     }
     return { state: "active", days, claimedToday }
   }
 
-  if (daysWithAttempt.has(-1)) {
+  if (hasActivity(-1)) {
     // FROZEN: hay racha hasta ayer pero no hoy. Cuenta desde ayer.
     let days = 0
     for (let d = -1; d > -365; d--) {
-      if (daysWithAttempt.has(d)) days++
+      if (hasActivity(d)) days++
       else break
     }
-    // `claimedToday` se mantiene como false-via-derivación: si HOY no
-    // hay actividad, no se ha podido pagar el bonus diario hoy. (La
-    // columna de BBDD podría estar a hoy si el cron de zona horaria
-    // se desfasa, pero el caso es marginal y la UI seguirá siendo
-    // coherente.)
     return { state: "frozen", days, claimedToday: false }
   }
 
   return { state: "dormant", days: 0, claimedToday: false }
+}
+
+/** Helper interno: devuelve la medianoche local del Date dado sin mutarlo. */
+function midnight(d: Date): Date {
+  const m = new Date(d)
+  m.setHours(0, 0, 0, 0)
+  return m
 }
 
 /**

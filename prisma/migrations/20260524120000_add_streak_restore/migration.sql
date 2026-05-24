@@ -1,0 +1,21 @@
+-- Sistema de restauración de racha (Fase: streak revamp 2026-05-24).
+--
+-- streakRestoreCredits  → créditos disponibles para "salvar" una racha rota.
+--                          Empieza en 1 al crear cuenta, +1 cada semana
+--                          consecutiva completada (7 días seguidos), tope 5.
+--                          La lógica de incremento vive en src/lib/streak.ts
+--                          (awardStreakCredit), llamada desde
+--                          /api/attempts POST tras finalizar un examen.
+--
+-- streakRestoredUntil   → si el user gastó un crédito para restaurar el
+--                          día "ayer" tras una rotura, guarda esa fecha
+--                          (medianoche local del día restaurado). El
+--                          cálculo de racha en el dashboard lo cuenta
+--                          como hecho. Una restauración cubre UN día roto:
+--                          en cuanto el user vuelve a romper la racha sin
+--                          gastar otro crédito, este campo se reciclea.
+--
+-- Nota SQLite: usamos DEFAULT 1 directo. Los usuarios ya existentes en
+-- BBDD reciben 1 crédito de gracia (el mismo que recibe una cuenta nueva).
+ALTER TABLE "users" ADD COLUMN "streakRestoreCredits" INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE "users" ADD COLUMN "streakRestoredUntil" DATETIME;
