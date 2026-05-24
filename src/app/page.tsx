@@ -268,7 +268,7 @@ export default async function HomePage() {
           <h3>Actividad esta semana</h3>
           <StreakIcon
             xp={user.xp}
-            size={40}
+            size={56}
             state={streakInfo.state}
             ariaLabel={
               streakInfo.state === "frozen"
