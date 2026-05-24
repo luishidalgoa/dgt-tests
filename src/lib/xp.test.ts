@@ -1,10 +1,19 @@
 /**
- * Tests puros sobre los helpers de XP. NO toca BBDD — `awardXp` y
- * `awardWeeklyStreakBonusIfDue` son integraciones y se cubrirán aparte.
+ * Tests puros sobre los helpers de XP. NO toca BBDD — `awardXp`,
+ * `awardDailyStreakBonusIfDue` y `getCurrentStreakLength` son
+ * integraciones y se cubrirán aparte.
  */
 
 import { describe, it, expect } from "vitest"
-import { LEVELS, MAX_LEVEL, getLevel, computeExamXp, sumXp } from "./xp"
+import {
+  LEVELS,
+  MAX_LEVEL,
+  STREAK_DAY_BONUSES,
+  computeExamXp,
+  computeStreakDayBonus,
+  getLevel,
+  sumXp,
+} from "./xp"
 
 describe("getLevel", () => {
   it("XP = 0 → nivel 0 con barra al 0%", () => {
@@ -62,49 +71,76 @@ describe("getLevel", () => {
   })
 })
 
-describe("computeExamXp", () => {
-  it("examen normal terminado, mal aprobado → solo +10", () => {
-    const items = computeExamXp({ mode: "normal", score: 20, total: 30 })
-    expect(items).toEqual([{ reason: "exam-finish", amount: 10 }])
-    expect(sumXp(items)).toBe(10)
+describe("computeExamXp — base 15, -1.5 por error", () => {
+  it("examen perfecto (0 errores) → 15 XP", () => {
+    const items = computeExamXp({ score: 30, total: 30 })
+    expect(items).toEqual([{ reason: "exam-finish", amount: 15 }])
+    expect(sumXp(items)).toBe(15)
   })
 
-  it("examen normal aprobado (27/30) → +10 +20", () => {
-    const items = computeExamXp({ mode: "normal", score: 27, total: 30 })
-    expect(sumXp(items)).toBe(30)
-    expect(items.map((i) => i.reason)).toEqual(["exam-finish", "exam-pass"])
+  it("aprobado mínimo (27/30 → 3 errores) → round(15 - 4.5) = 11 XP", () => {
+    // 15 - 1.5*3 = 10.5 → Math.round = 11 (round-half-up)
+    expect(sumXp(computeExamXp({ score: 27, total: 30 }))).toBe(11)
   })
 
-  it("examen normal perfecto (30/30) → +10 +50 (NO pasa por aprobado)", () => {
-    const items = computeExamXp({ mode: "normal", score: 30, total: 30 })
-    expect(sumXp(items)).toBe(60)
-    expect(items.map((i) => i.reason)).toEqual(["exam-finish", "exam-perfect"])
+  it("1 error → round(15 - 1.5) = 14 XP", () => {
+    // 13.5 → Math.round = 14 (round-half-up)
+    expect(sumXp(computeExamXp({ score: 29, total: 30 }))).toBe(14)
   })
 
-  it("examen de tema con N != 30 NO concede bonus de aprobado/perfecto", () => {
-    // Test de tema con 10 preguntas, todas correctas — solo +10 base.
-    const items = computeExamXp({ mode: "tema", score: 10, total: 10 })
-    expect(sumXp(items)).toBe(10)
-    expect(items.map((i) => i.reason)).toEqual(["exam-finish"])
+  it("2 errores → 12 XP", () => {
+    expect(sumXp(computeExamXp({ score: 28, total: 30 }))).toBe(12)
   })
 
-  it("modo errores → +5 fijo, sin bonus de aprobado aunque saque 30/30", () => {
-    const items = computeExamXp({ mode: "errores", score: 30, total: 30 })
-    expect(items).toEqual([{ reason: "exam-errores", amount: 5 }])
+  it("10 errores → 0 XP (clamp en cero)", () => {
+    expect(sumXp(computeExamXp({ score: 20, total: 30 }))).toBe(0)
   })
 
-  it("modo errores-refuerzo idéntico al modo errores", () => {
-    const items = computeExamXp({ mode: "errores-refuerzo", score: 5, total: 30 })
-    expect(items).toEqual([{ reason: "exam-errores", amount: 5 }])
+  it("examen catastrófico (30 errores) → 0 XP, sin negativo", () => {
+    expect(sumXp(computeExamXp({ score: 0, total: 30 }))).toBe(0)
   })
 
-  it("frontera 26 vs 27 — 26 no aprueba, 27 sí", () => {
-    expect(sumXp(computeExamXp({ mode: "normal", score: 26, total: 30 }))).toBe(10)
-    expect(sumXp(computeExamXp({ mode: "normal", score: 27, total: 30 }))).toBe(30)
+  it("aplica también a tests de tema con N != 30", () => {
+    // Test de 10 preguntas, 1 error: 15 - 1.5 = 13.5 → 14
+    expect(sumXp(computeExamXp({ score: 9, total: 10 }))).toBe(14)
+    // Test de 10 preguntas, todas mal: 15 - 15 = 0
+    expect(sumXp(computeExamXp({ score: 0, total: 10 }))).toBe(0)
   })
 
-  it("frontera 29 vs 30 — 29 da aprobado, 30 da perfecto", () => {
-    expect(sumXp(computeExamXp({ mode: "normal", score: 29, total: 30 }))).toBe(30)
-    expect(sumXp(computeExamXp({ mode: "normal", score: 30, total: 30 }))).toBe(60)
+  it("score > total (caso anómalo) se trata como 0 errores → 15 XP", () => {
+    // No deberíamos llegar aquí, pero defensive: max(0, total-score)
+    expect(sumXp(computeExamXp({ score: 35, total: 30 }))).toBe(15)
+  })
+})
+
+describe("computeStreakDayBonus — ciclo de 7 días", () => {
+  it("día 0 o negativo → 0 XP", () => {
+    expect(computeStreakDayBonus(0)).toBe(0)
+    expect(computeStreakDayBonus(-1)).toBe(0)
+    expect(computeStreakDayBonus(Number.NaN)).toBe(0)
+  })
+
+  it("primeros 7 días siguen la tabla [5,7,10,15,20,30,50]", () => {
+    expect(computeStreakDayBonus(1)).toBe(5)
+    expect(computeStreakDayBonus(2)).toBe(7)
+    expect(computeStreakDayBonus(3)).toBe(10)
+    expect(computeStreakDayBonus(4)).toBe(15)
+    expect(computeStreakDayBonus(5)).toBe(20)
+    expect(computeStreakDayBonus(6)).toBe(30)
+    expect(computeStreakDayBonus(7)).toBe(50)
+  })
+
+  it("día 8 vuelve a 5 (loop), día 9 a 7, día 14 a 50, día 15 a 5", () => {
+    expect(computeStreakDayBonus(8)).toBe(5)
+    expect(computeStreakDayBonus(9)).toBe(7)
+    expect(computeStreakDayBonus(14)).toBe(50)
+    expect(computeStreakDayBonus(15)).toBe(5)
+    expect(computeStreakDayBonus(21)).toBe(50)
+    expect(computeStreakDayBonus(22)).toBe(5)
+  })
+
+  it("la tabla expuesta como constante coincide con los valores spec'd", () => {
+    expect(Array.from(STREAK_DAY_BONUSES)).toEqual([5, 7, 10, 15, 20, 30, 50])
+    expect(STREAK_DAY_BONUSES.reduce((a, b) => a + b, 0)).toBe(137)
   })
 })

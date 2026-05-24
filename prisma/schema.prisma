@@ -55,10 +55,10 @@ model User {
   /// XP acumulado. El nivel se deriva de aquí en src/lib/xp.ts:getLevel.
   /// Se incrementa al finalizar exámenes (ver awardXp).
   xp              Int           @default(0)
-  /// Fecha del último bonus de "7 días seguidos" otorgado. Se usa para
-  /// evitar pagar el bonus más de una vez por semana. NULL = nunca
-  /// recibido.
-  lastWeekStreakBonusAt DateTime?
+  /// Fecha del último bonus diario de racha otorgado. Se compara contra
+  /// la medianoche local del usuario (servidor en realidad) para no
+  /// pagar el bonus más de una vez por día. NULL = nunca recibido.
+  lastStreakBonusAt DateTime?
   attempts        ExamAttempt[]
   hostedParties   Party[]       @relation("HostedParties")
   partyPlays      PartyPlayer[] @relation("PartyParticipations")

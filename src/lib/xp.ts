@@ -1,13 +1,17 @@
 /**
  * Gamificación: XP + niveles.
  *
- * El usuario acumula XP al finalizar exámenes (ver `computeExamXp`) y al
- * mantener rachas (`awardWeeklyStreakBonusIfDue`). De ese contador se
- * deriva un nivel 0..6 que controla qué icono de racha se muestra en el
- * dashboard (lvl-0 = llama apagada, lvl-6 = fénix).
+ * Economía:
+ *   - Base por examen: `max(0, round(15 - 1.5 × errores))`. Aplica a
+ *     CUALQUIER modo (normal, tema, errores, errores-refuerzo). Premia
+ *     la precisión por encima del simple "haber finalizado".
+ *   - Bonus diario de racha (una sola vez por día, en el primer examen
+ *     que cuente para stats): ciclo [5, 7, 10, 15, 20, 30, 50] indexado
+ *     por la longitud actual de la racha. Día 8 vuelve a 5 (loop), día 9
+ *     a 7, etc. Si rompes la racha vuelves a empezar por día 1.
  *
- * Niveles y umbrales son geométricos (~2.5×) para que la progresión se
- * sienta acelerada al principio y se vuelva un objetivo a medio plazo:
+ * El nivel se deriva del XP acumulado vía `getLevel`. Tabla geométrica
+ * 0..6:
  *
  *    Lvl  XP requerido   Asset
  *    ──   ────────────   ─────────────
@@ -108,62 +112,62 @@ export function getLevel(xp: number): LevelInfo {
 
 // ── Cálculo de XP por examen ────────────────────────────────────────────
 
-export type XpReason =
-  | "exam-finish"
-  | "exam-pass"
-  | "exam-perfect"
-  | "exam-errores"
-  | "streak-7days"
+export type XpReason = "exam-finish" | "streak-day"
 
 export interface XpLineItem {
   reason: XpReason
   amount: number
 }
 
+/** Base XP por examen, antes de penalizar errores. */
+export const EXAM_BASE_XP = 15
+/** XP que pierde el usuario por cada error. Multiplicado por nº errores
+ *  y restado de `EXAM_BASE_XP`. Se redondea al integer más cercano y se
+ *  clava a 0 (no hay XP negativo). */
+export const EXAM_ERROR_PENALTY = 1.5
+
 /**
- * Calcula el XP a otorgar tras finalizar un intento, según modo y nota.
+ * Calcula el XP base por finalizar un intento.
  *
- *   - mode in {normal, tema}:
- *       +10 siempre (haber finalizado)
- *       +20 si score ≥ 27 y total === 30  (aprobado examen DGT)
- *       +50 si score === 30 y total === 30 (perfecto)
- *   - mode in {errores, errores-refuerzo}:
- *       +5 (refuerzo de fallos)
+ *   amount = max(0, round(15 - 1.5 × errores))
  *
- * Devuelve el desglose para poder mostrarlo al usuario.
+ * Aplica a CUALQUIER modo. Pasar 0 errores = 15 XP, 1 = 14, 2 = 12,
+ * 3 = 11, ... 10 = 0. Es la única fuente de XP por "ejercicio" — la
+ * antigua tabla de +10/+20/+50 fue reemplazada por esta fórmula.
+ *
+ * Devuelve un único line-item para consistencia con la implementación
+ * antigua y para permitir un breakdown legible en la UI.
  */
 export function computeExamXp(args: {
-  mode: string
   score: number
   total: number
 }): XpLineItem[] {
-  const { mode, score, total } = args
-  const items: XpLineItem[] = []
-
-  if (mode === "errores" || mode === "errores-refuerzo") {
-    items.push({ reason: "exam-errores", amount: 5 })
-    return items
-  }
-
-  // normal / tema
-  items.push({ reason: "exam-finish", amount: 10 })
-
-  // Bonus de aprobado/perfecto solo cuando el examen es de 30 preguntas
-  // (el formato oficial DGT). Tests de tema con N≠30 no aplican.
-  if (total === 30) {
-    if (score === 30) {
-      items.push({ reason: "exam-perfect", amount: 50 })
-    } else if (score >= 27) {
-      items.push({ reason: "exam-pass", amount: 20 })
-    }
-  }
-
-  return items
+  const { score, total } = args
+  const errors = Math.max(0, total - score)
+  const amount = Math.max(0, Math.round(EXAM_BASE_XP - EXAM_ERROR_PENALTY * errors))
+  return [{ reason: "exam-finish", amount }]
 }
 
 /** Suma total del desglose. */
 export function sumXp(items: ReadonlyArray<XpLineItem>): number {
   return items.reduce((acc, i) => acc + i.amount, 0)
+}
+
+// ── Bonus diario de racha ──────────────────────────────────────────────
+
+/** Bonuses por día de racha consecutiva. Indexado por día - 1 (día 1
+ *  = índice 0). Si la racha sobrepasa la tabla, vuelve al principio. */
+export const STREAK_DAY_BONUSES: ReadonlyArray<number> = [5, 7, 10, 15, 20, 30, 50] as const
+
+/**
+ * Devuelve el bonus de XP que corresponde a `streakDays` (días seguidos
+ * con ≥1 examen que cuenta, incluyendo hoy). El día 8 vuelve a 5 puntos,
+ * el día 9 a 7, y así sucesivamente. `streakDays ≤ 0` devuelve 0.
+ */
+export function computeStreakDayBonus(streakDays: number): number {
+  if (!Number.isFinite(streakDays) || streakDays <= 0) return 0
+  const idx = (Math.floor(streakDays) - 1) % STREAK_DAY_BONUSES.length
+  return STREAK_DAY_BONUSES[idx]
 }
 
 // ── Otorgar XP ──────────────────────────────────────────────────────────
@@ -236,70 +240,88 @@ export async function awardXp(
   }
 }
 
-// ── Bonus por racha de 7 días ──────────────────────────────────────────
-
-const STREAK_BONUS_AMOUNT = 30
-const STREAK_BONUS_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+// ── Cálculo de racha + bonus diario ─────────────────────────────────────
 
 /**
- * Comprueba si el usuario tiene 7+ días seguidos con al menos 1 examen
- * "que cuenta" terminado hasta hoy. Si sí y no ha cobrado este bonus en
- * los últimos 7 días, otorga +30 XP y actualiza `lastWeekStreakBonusAt`.
+ * Devuelve la longitud de la racha actual del usuario en días: cuántos
+ * días consecutivos hasta hoy (inclusive) tiene al menos 1 examen que
+ * cuente para stats (mode normal/tema, ver `ATTEMPT_STATS_WHERE`).
  *
- * Devuelve el resultado de `awardXp` si pagó, o `null` si no aplicaba.
+ * Si hoy NO tiene ningún examen, devuelve 0. Si tiene ≥1 hoy pero ayer
+ * no, devuelve 1. Etc.
  */
-export async function awardWeeklyStreakBonusIfDue(
-  userId: number,
-): Promise<AwardXpResult | null> {
-  const user = await db.user.findUnique({
-    where:  { id: userId },
-    select: { lastWeekStreakBonusAt: true },
-  })
-  if (!user) return null
-
-  // ¿Ya cobró bonus dentro de la ventana de 7 días? Si sí, salir barato.
-  if (user.lastWeekStreakBonusAt) {
-    const sinceMs = Date.now() - user.lastWeekStreakBonusAt.getTime()
-    if (sinceMs < STREAK_BONUS_WINDOW_MS) return null
-  }
-
-  // Comprueba racha real: 7 días consecutivos terminando hoy con ≥1
-  // intento "que cuenta" (normal/tema, no errores).
-  const hasStreak = await hasSevenDayStreak(userId)
-  if (!hasStreak) return null
-
-  // Marca primero la fecha (evita doble-cobro en race) y luego paga.
-  await db.user.update({
-    where: { id: userId },
-    data:  { lastWeekStreakBonusAt: new Date() },
-  })
-  return awardXp(userId, STREAK_BONUS_AMOUNT, "streak-7days")
-}
-
-/** True si el usuario tiene ≥7 días consecutivos (incluyendo hoy) con
- *  al menos 1 attempt válido para stats. */
-async function hasSevenDayStreak(userId: number): Promise<boolean> {
+export async function getCurrentStreakLength(userId: number): Promise<number> {
   const todayMid = new Date()
   todayMid.setHours(0, 0, 0, 0)
-  const sevenDaysAgo = new Date(todayMid.getTime() - 6 * 86400000) // 6 días atrás + hoy = 7
+  // Miramos 60 días atrás como margen. La racha de un usuario activo
+  // será mucho menor, y si supera los 60 días seguidos haciendo tests
+  // pues ya es campeón.
+  const lookback = new Date(todayMid.getTime() - 60 * 86400000)
 
   const attempts = await db.examAttempt.findMany({
     where: {
       userId,
       finishedAt: { not: null },
-      startedAt:  { gte: sevenDaysAgo },
+      startedAt:  { gte: lookback },
       ...ATTEMPT_STATS_WHERE,
     },
     select: { startedAt: true },
   })
-  if (attempts.length === 0) return false
+  if (attempts.length === 0) return 0
 
-  // Mapa día (0..6 desde hace-6-días) → ¿hubo attempt?
-  const dayHas = new Array(7).fill(false) as boolean[]
+  // Set de días "tiene examen", representado como delta en días desde
+  // medianoche de hoy (0 = hoy, -1 = ayer, -2 = anteayer, ...).
+  const daysWithAttempt = new Set<number>()
   for (const a of attempts) {
-    const t = a.startedAt.getTime()
-    const dayIdx = Math.floor((t - sevenDaysAgo.getTime()) / 86400000)
-    if (dayIdx >= 0 && dayIdx < 7) dayHas[dayIdx] = true
+    const dayDelta = Math.floor((a.startedAt.getTime() - todayMid.getTime()) / 86400000)
+    daysWithAttempt.add(dayDelta)
   }
-  return dayHas.every(Boolean)
+
+  // Cuenta consecutivos retrocediendo desde hoy.
+  let streak = 0
+  for (let d = 0; d > -365; d--) {
+    if (daysWithAttempt.has(d)) streak++
+    else break
+  }
+  return streak
+}
+
+/**
+ * Si el usuario tiene racha activa hoy y aún no ha cobrado el bonus
+ * diario de racha en este día, lo otorga. Devuelve el `AwardXpResult`
+ * resultante o `null` si no aplicaba (ya cobrado hoy, sin racha, etc.).
+ *
+ * Diseñado para llamarse DESPUÉS de crear el ExamAttempt — para que la
+ * query de `getCurrentStreakLength` ya incluya el examen recién
+ * terminado y considere "hoy" como día con actividad.
+ */
+export async function awardDailyStreakBonusIfDue(
+  userId: number,
+): Promise<AwardXpResult | null> {
+  const user = await db.user.findUnique({
+    where:  { id: userId },
+    select: { lastStreakBonusAt: true },
+  })
+  if (!user) return null
+
+  const todayMid = new Date()
+  todayMid.setHours(0, 0, 0, 0)
+
+  // ¿Ya cobró bonus HOY? Comparar contra medianoche local.
+  if (user.lastStreakBonusAt && user.lastStreakBonusAt.getTime() >= todayMid.getTime()) {
+    return null
+  }
+
+  const streak = await getCurrentStreakLength(userId)
+  if (streak <= 0) return null
+
+  const bonus = computeStreakDayBonus(streak)
+  if (bonus <= 0) return null
+
+  // Marca primero la fecha (evita doble-cobro en race) y luego paga.
+  await db.user.update({
+    where: { id: userId },
+    data:  { lastStreakBonusAt: new Date() },
+  })
+  return awardXp(userId, bonus, "streak-day")
 }

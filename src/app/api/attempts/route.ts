@@ -4,7 +4,7 @@ import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
 import type { AttemptXpReward, SubmitAttemptResponse } from "@/types/exam"
 import {
-  awardWeeklyStreakBonusIfDue,
+  awardDailyStreakBonusIfDue,
   awardXp,
   computeExamXp,
   getLevel,
@@ -123,25 +123,31 @@ export async function POST(req: Request) {
       : `/historial/${attempt.id}`
 
   // ── XP & nivel ──────────────────────────────────────────────────────
-  // Otorga XP por finalizar (con bonus de aprobado/perfecto) y, si
-  // procede, el bonus semanal por racha de 7 días. El "nivel final"
-  // que se muestra al cliente es el último estado después de aplicar
-  // ambos. Los errores de DB aquí NO deben tumbar la respuesta del
-  // examen — son extras, así que los degradamos a 0 XP.
+  // Economía:
+  //   1. Base por examen = max(0, round(15 - 1.5 × errores)). Aplica a
+  //      todos los modos (normal/tema/errores/errores-refuerzo).
+  //   2. Bonus diario de racha (una vez por día, solo si el modo cuenta
+  //      para stats — ver `awardDailyStreakBonusIfDue` y
+  //      `ATTEMPT_STATS_WHERE`): tabla cíclica [5,7,10,15,20,30,50] día
+  //      1..7. Día 8 vuelve al 5, etc.
+  //
+  // Si la BBDD falla al otorgar XP NO tumbamos la respuesta — el
+  // examen ya está guardado, los puntos son secundarios. Degradamos
+  // a XP=0 con nivel fallback.
   let xpReward: AttemptXpReward
   try {
-    const breakdown = computeExamXp({ mode, score, total: answers.length })
+    const breakdown = computeExamXp({ score, total: answers.length })
     const xpAmount  = sumXp(breakdown)
     const xpResult  = await awardXp(user.id, xpAmount, breakdown[0]?.reason ?? "exam-finish")
 
-    // Tras el examen, intenta cobrar el bonus de racha. Si lo paga,
-    // sobreescribe el nivel final con el resultante. Mantiene el
-    // breakdown para que el cliente pueda mostrar las dos líneas.
+    // Tras pagar la base, intenta el bonus diario. Si lo paga,
+    // sobreescribe el nivel final con el resultante y añade la línea
+    // al breakdown para que el cliente pueda mostrarla por separado.
     let finalState: AwardXpResult = xpResult
-    const streakResult = await awardWeeklyStreakBonusIfDue(user.id)
+    const streakResult = await awardDailyStreakBonusIfDue(user.id)
     if (streakResult) {
       finalState = streakResult
-      breakdown.push({ reason: "streak-7days", amount: streakResult.newXp - streakResult.oldXp })
+      breakdown.push({ reason: "streak-day", amount: streakResult.newXp - streakResult.oldXp })
     }
 
     xpReward = {
