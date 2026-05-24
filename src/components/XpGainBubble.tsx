@@ -42,6 +42,12 @@ export function XpGainBubble() {
   )
   const sparkContainerRef = useRef<HTMLDivElement>(null)
   const timersRef = useRef<number[]>([])
+  // Offset desde el borde derecho de la viewport. Lo medimos en cada
+  // entrada midiendo el grupo derecho del navbar (`.nav-right`) para
+  // que la bubble quede alineada con el borde derecho del avatar/menu
+  // en lugar de pegada al borde de la pantalla. En mobile (≤640px) el
+  // CSS gana (max-width:none + left/right:12) y este valor se ignora.
+  const [rightOffset, setRightOffset] = useState<number | null>(null)
 
   // Detecta nuevo XP en sessionStorage en cada cambio de ruta (incluido
   // el primer mount tras el redirect post-examen).
@@ -70,7 +76,19 @@ export function XpGainBubble() {
     for (const t of timersRef.current) window.clearTimeout(t)
     timersRef.current = []
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // Medir el grupo derecho del navbar para alinear la bubble en el
+    // eje X. Si no existe (rutas sin navbar), usar fallback 16px.
+    const navRight = document.querySelector<HTMLElement>(".nav-right")
+    if (navRight) {
+      const rect = navRight.getBoundingClientRect()
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setRightOffset(window.innerWidth - rect.right)
+    } else {
+       
+      setRightOffset(null)
+    }
+
+     
     setData(parsed)
      
     setPhase("enter")
@@ -137,6 +155,11 @@ export function XpGainBubble() {
       style={{
         opacity:   enteringOrExiting ? 0 : 1,
         transform: enteringOrExiting ? "translateY(-8px) scale(0.96)" : "none",
+        // Si medimos el nav-right, alineamos con su borde derecho.
+        // Usamos max(16, offset) para no acercarse demasiado al borde
+        // si el nav está muy a la izquierda. En mobile la media query
+        // sobreescribe esto con !important via left/right=12.
+        ...(rightOffset !== null ? { right: `${Math.max(16, rightOffset)}px` } : {}),
       }}
     >
       <div className="xp-gain-bubble__head">

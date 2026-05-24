@@ -2159,15 +2159,95 @@ details[open] > summary .secret-group-chevron {
 /* Mobile (≤640px): ancho completo con márgenes laterales mínimos. El
    navbar es más compacto en mobile así que reducimos también el top.
    `max-width: none` y `min-width: 0` para que respire en 320-380px. */
+/* En mobile el componente cliente puede setear `right` inline para
+   alinear con el nav-right en desktop. Forzamos los valores mobile con
+   !important para que la media query siempre gane en viewports
+   estrechos, independientemente del style inline. */
 @media (max-width: 640px) {
   .xp-gain-bubble {
-    top: 70px;
-    left: 12px;
-    right: 12px;
-    max-width: none;
-    min-width: 0;
+    top: 70px !important;
+    left: 12px !important;
+    right: 12px !important;
+    max-width: none !important;
+    min-width: 0 !important;
   }
 }
+
+/* ── Helper hint (icono "?" con tooltip/popover) ───────────────────
+   Patrón consistente para clarificar términos de UI sin ocupar
+   espacio. Trigger pequeño y discreto; popover oscuro al hacer click. */
+.help-hint {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.help-hint__trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px;
+  margin: -1px;
+  background: transparent;
+  border: 0;
+  color: var(--slate-400);
+  cursor: pointer;
+  border-radius: 50%;
+  transition: color 150ms ease, background 150ms ease;
+}
+.help-hint__trigger:hover,
+.help-hint__trigger:focus-visible {
+  color: var(--orange-600);
+  background: rgba(249, 115, 22, 0.08);
+  outline: none;
+}
+.help-hint__popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  background: var(--slate-700);
+  color: #fff;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+  width: max-content;
+  max-width: 260px;
+  text-transform: none;
+  letter-spacing: 0;
+  box-shadow:
+    0 12px 24px -10px rgba(0, 0, 0, 0.4),
+    0 4px 8px -4px rgba(0, 0, 0, 0.2);
+  cursor: text;
+  user-select: text;
+}
+.help-hint__popover::before {
+  content: "";
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-bottom-color: var(--slate-700);
+}
+/* En viewports estrechos, el popover puede salirse por la derecha.
+   `right: 0` y reposicionar el arrow para alinearlo con el trigger. */
+@media (max-width: 480px) {
+  .help-hint__popover {
+    left: auto;
+    right: 0;
+    transform: none;
+    max-width: calc(100vw - 40px);
+  }
+  .help-hint__popover::before {
+    left: auto;
+    right: 8px;
+    transform: none;
+  }
+}
+
 .xp-gain-bubble[data-phase="exit"] {
   transition:
     opacity 320ms ease,
@@ -2256,6 +2336,7 @@ details[open] > summary .secret-group-chevron {
   .xp-gain-bubble { transition: opacity 0.15s linear; }
   .xp-gain-bubble__bar-fill { transition: width 0.15s linear; }
 }
+
 
 
 

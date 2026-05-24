@@ -1,5 +1,6 @@
 import { buildCycleView, STREAK_DAY_BONUSES, type StreakStateKind } from "@/lib/xp"
 import { Check, Snowflake } from "lucide-react"
+import { HelpHint } from "@/components/HelpHint"
 
 interface StreakCycleProps {
   state: StreakStateKind
@@ -81,7 +82,16 @@ export function StreakCycle({ state, days, claimedToday }: StreakCycleProps) {
             aria-hidden="true"
           />
         )}
-        Ciclo de racha · {dayInCycle}/7
+        <span>Ciclo de racha · {dayInCycle}/7</span>
+        <HelpHint
+          text={
+            "Por cada día que mantengas la racha haciendo al menos un " +
+            "examen ganas XP extra. La cantidad crece a lo largo de la " +
+            "semana (D1:+5, D2:+7, D3:+10, D4:+15, D5:+20, D6:+30, D7:+50) " +
+            "y vuelve a empezar el día 8. Si rompes la racha, vuelves a D1."
+          }
+          ariaLabel="Qué es el ciclo de racha"
+        />
       </div>
 
       <div
