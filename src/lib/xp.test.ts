@@ -12,9 +12,34 @@ import {
   buildCycleView,
   computeExamXp,
   computeStreakDayBonus,
+  computeStreakStateFromData,
   getLevel,
   sumXp,
 } from "./xp"
+
+/** Crea un Date en una fecha dada manteniendo zona local. */
+const dateAt = (y: number, m: number, d: number, h = 12): Date =>
+  new Date(y, m - 1, d, h)
+
+/** Fecha base para los tests de racha: 24 mayo 2026 a las 14:00 (mediodía). */
+const NOW = dateAt(2026, 5, 24, 14)
+
+/** Construye un attempt fictício en un delta de días respecto a NOW.
+ *  -1 = ayer, -7 = hace una semana. La hora se fija a las 10am para que
+ *  midnight(NOW) - 86400000 == midnight(daysAgo(1)) sin ambigüedad. */
+const daysAgo = (n: number): Date => {
+  const t = new Date(NOW)
+  t.setDate(t.getDate() - n)
+  t.setHours(10, 0, 0, 0)
+  return t
+}
+/** Medianoche local de N días atrás (para restoredUntil). */
+const midnightDaysAgo = (n: number): Date => {
+  const t = new Date(NOW)
+  t.setDate(t.getDate() - n)
+  t.setHours(0, 0, 0, 0)
+  return t
+}
 
 describe("getLevel", () => {
   it("XP = 0 → nivel 0 con barra al 0%", () => {
@@ -208,5 +233,209 @@ describe("buildCycleView — visualización del ciclo de 7 días", () => {
   it("cada slot tiene el bonus correcto correspondiente a su posición", () => {
     const slots = buildCycleView({ state: "dormant", days: 0, claimedToday: false })
     expect(slots.map((s) => s.bonus)).toEqual([5, 7, 10, 15, 20, 30, 50])
+  })
+})
+
+describe("computeStreakStateFromData — detección active/frozen/dormant", () => {
+  // ── DORMANT ──────────────────────────────────────────────────────
+  it("dormant: sin attempts → state=dormant, days=0", () => {
+    const s = computeStreakStateFromData({
+      attemptDates:  [],
+      restoredUntil: null,
+      lastBonusAt:   null,
+      now:           NOW,
+    })
+    expect(s).toEqual({ state: "dormant", days: 0, claimedToday: false })
+  })
+
+  it("dormant: attempts hace 3+ días (ni hoy ni ayer) → dormant", () => {
+    const s = computeStreakStateFromData({
+      attemptDates:  [daysAgo(3), daysAgo(5), daysAgo(10)],
+      restoredUntil: null,
+      lastBonusAt:   null,
+      now:           NOW,
+    })
+    expect(s.state).toBe("dormant")
+    expect(s.days).toBe(0)
+  })
+
+  // ── ACTIVE ───────────────────────────────────────────────────────
+  it("active: solo hoy → days=1, claimedToday según lastBonusAt", () => {
+    const s = computeStreakStateFromData({
+      attemptDates:  [daysAgo(0)],
+      restoredUntil: null,
+      lastBonusAt:   null,
+      now:           NOW,
+    })
+    expect(s.state).toBe("active")
+    expect(s.days).toBe(1)
+    expect(s.claimedToday).toBe(false)
+  })
+
+  it("active: claimedToday=true cuando lastBonusAt es hoy", () => {
+    const s = computeStreakStateFromData({
+      attemptDates:  [daysAgo(0)],
+      restoredUntil: null,
+      lastBonusAt:   new Date(NOW.getTime() - 60_000), // hace 1 min, hoy
+      now:           NOW,
+    })
+    expect(s.claimedToday).toBe(true)
+  })
+
+  it("active: claimedToday=false cuando lastBonusAt es ayer", () => {
+    const s = computeStreakStateFromData({
+      attemptDates:  [daysAgo(0), daysAgo(1)],
+      restoredUntil: null,
+      lastBonusAt:   daysAgo(1),
+      now:           NOW,
+    })
+    expect(s.state).toBe("active")
+    expect(s.claimedToday).toBe(false)
+  })
+
+  it("active: hoy + 6 días consecutivos → days=7 (ciclo completo)", () => {
+    const s = computeStreakStateFromData({
+      attemptDates:  [0, 1, 2, 3, 4, 5, 6].map(daysAgo),
+      restoredUntil: null,
+      lastBonusAt:   NOW,
+      now:           NOW,
+    })
+    expect(s.state).toBe("active")
+    expect(s.days).toBe(7)
+  })
+
+  it("active: hoy + 13 días seguidos → days=14 (segundo ciclo)", () => {
+    const s = computeStreakStateFromData({
+      attemptDates:  Array.from({ length: 14 }, (_, i) => daysAgo(i)),
+      restoredUntil: null,
+      lastBonusAt:   NOW,
+      now:           NOW,
+    })
+    expect(s.days).toBe(14)
+  })
+
+  it("active: cadena se rompe en hueco intermedio → cuenta solo desde hoy hasta el gap", () => {
+    // Hoy, ayer, anteayer, GAP, -4, -5
+    const s = computeStreakStateFromData({
+      attemptDates:  [daysAgo(0), daysAgo(1), daysAgo(2), daysAgo(4), daysAgo(5)],
+      restoredUntil: null,
+      lastBonusAt:   null,
+      now:           NOW,
+    })
+    expect(s.state).toBe("active")
+    expect(s.days).toBe(3) // 0, -1, -2
+  })
+
+  // ── FROZEN ───────────────────────────────────────────────────────
+  it("frozen: solo ayer → state=frozen, days=1, claimedToday=false", () => {
+    const s = computeStreakStateFromData({
+      attemptDates:  [daysAgo(1)],
+      restoredUntil: null,
+      lastBonusAt:   null,
+      now:           NOW,
+    })
+    expect(s.state).toBe("frozen")
+    expect(s.days).toBe(1)
+    expect(s.claimedToday).toBe(false)
+  })
+
+  it("frozen: ayer + 4 días previos → days=5", () => {
+    const s = computeStreakStateFromData({
+      attemptDates:  [1, 2, 3, 4, 5].map(daysAgo),
+      restoredUntil: null,
+      lastBonusAt:   null,
+      now:           NOW,
+    })
+    expect(s.state).toBe("frozen")
+    expect(s.days).toBe(5)
+  })
+
+  it("frozen: lastBonusAt 'de hoy' se ignora si no hay actividad real hoy", () => {
+    // Caso defensivo: la BBDD podría tener un lastBonusAt fantasma por
+    // desfase horario, pero si HOY no hay attempt, claimedToday=false.
+    const s = computeStreakStateFromData({
+      attemptDates:  [daysAgo(1)],
+      restoredUntil: null,
+      lastBonusAt:   NOW,
+      now:           NOW,
+    })
+    expect(s.state).toBe("frozen")
+    expect(s.claimedToday).toBe(false)
+  })
+
+  // ── RESTORED DAYS ────────────────────────────────────────────────
+  it("active: hoy + ayer restaurado + anteayer real → days=3", () => {
+    const s = computeStreakStateFromData({
+      attemptDates:  [daysAgo(0), daysAgo(2)],
+      restoredUntil: midnightDaysAgo(1),
+      lastBonusAt:   null,
+      now:           NOW,
+    })
+    expect(s.state).toBe("active")
+    expect(s.days).toBe(3) // 0, -1 restored, -2
+  })
+
+  it("frozen: ayer SOLO restaurado (sin attempt real ese día) → days=1", () => {
+    const s = computeStreakStateFromData({
+      attemptDates:  [],
+      restoredUntil: midnightDaysAgo(1),
+      lastBonusAt:   null,
+      now:           NOW,
+    })
+    expect(s.state).toBe("frozen")
+    expect(s.days).toBe(1)
+  })
+
+  it("active: ayer restaurado pero anteayer NO existe → days=2 (rompe en -2)", () => {
+    // Hoy + ayer restaurado, pero -2 sin actividad → la cadena rompe
+    const s = computeStreakStateFromData({
+      attemptDates:  [daysAgo(0)],
+      restoredUntil: midnightDaysAgo(1),
+      lastBonusAt:   null,
+      now:           NOW,
+    })
+    expect(s.state).toBe("active")
+    expect(s.days).toBe(2)
+  })
+
+  it("restoredUntil de hace 5 días NO cierra hueco de los últimos 3 días", () => {
+    // Hoy y ayer existen, hace 2/3/4 días NO, hace 5 días restaurado.
+    // El restore solo cubre 1 día, no rellena 3 huecos consecutivos.
+    const s = computeStreakStateFromData({
+      attemptDates:  [daysAgo(0), daysAgo(1)],
+      restoredUntil: midnightDaysAgo(5),
+      lastBonusAt:   null,
+      now:           NOW,
+    })
+    expect(s.state).toBe("active")
+    expect(s.days).toBe(2) // cadena se rompe en -2 (sin actividad ni restore)
+  })
+
+  it("active: día restaurado coincide con día que también tiene attempt (no rompe)", () => {
+    // Caso patológico: alguien gastó un crédito en un día que SÍ tenía
+    // attempt. No debe contar doble, pero tampoco romper la cadena.
+    const s = computeStreakStateFromData({
+      attemptDates:  [daysAgo(0), daysAgo(1)],
+      restoredUntil: midnightDaysAgo(1), // mismo día que un attempt real
+      lastBonusAt:   null,
+      now:           NOW,
+    })
+    expect(s.state).toBe("active")
+    expect(s.days).toBe(2)
+  })
+
+  // ── EDGE: attempts del mismo día se deduplican ──────────────────
+  it("varios attempts el mismo día cuentan como 1 día de racha", () => {
+    const s = computeStreakStateFromData({
+      attemptDates:  [
+        new Date(NOW.getTime()),                    // hoy 14:00
+        new Date(NOW.getTime() - 60_000),           // hoy 13:59
+        new Date(NOW.getTime() - 3_600_000),        // hoy 13:00
+      ],
+      restoredUntil: null,
+      lastBonusAt:   null,
+      now:           NOW,
+    })
+    expect(s.days).toBe(1)
   })
 })

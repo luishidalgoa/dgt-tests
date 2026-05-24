@@ -275,15 +275,82 @@ export interface StreakState {
 }
 
 /**
- * Calcula el estado canónico de racha del usuario para la UI.
- * Una sola query a BBDD. Diseñada para llamarse desde Server Components
- * (dashboard) — no usar dentro del finish-exam (ahí ya pagamos vía
+ * Versión PURA del cálculo de estado de racha. Recibe ya los datos
+ * resueltos (attempts + flags del user + "ahora" inyectable) y devuelve
+ * el `StreakState`. No toca BBDD ni `new Date()` directamente, lo que
+ * permite testear edge cases sin mockear Prisma ni el reloj.
+ *
+ * Reglas:
+ *   - ACTIVE  si hoy hay actividad (un attempt real O día restaurado).
+ *   - FROZEN  si hoy NO hay actividad pero ayer sí.
+ *   - DORMANT si ni hoy ni ayer hay actividad.
+ *
+ *   "Día restaurado" = `restoredUntil` (medianoche local) coincide con
+ *   un delta concreto. Cuenta como día con actividad para mantener la
+ *   cadena viva.
+ */
+export function computeStreakStateFromData(args: {
+  attemptDates:  ReadonlyArray<Date>
+  restoredUntil: Date | null
+  lastBonusAt:   Date | null
+  now:           Date
+}): StreakState {
+  const { attemptDates, restoredUntil, lastBonusAt, now } = args
+  const todayMid = midnight(now)
+
+  const claimedToday = !!lastBonusAt
+    && lastBonusAt.getTime() >= todayMid.getTime()
+
+  // Set de días con examen, indexado por delta-en-días desde hoy
+  // (0 = hoy, -1 = ayer, ...).
+  const daysWithAttempt = new Set<number>()
+  for (const d of attemptDates) {
+    const dayDelta = Math.floor((d.getTime() - todayMid.getTime()) / 86400000)
+    daysWithAttempt.add(dayDelta)
+  }
+
+  // Día restaurado vía crédito (si lo hay). Cuenta como día con actividad
+  // para el cálculo de la cadena. Asumimos siempre el día restaurado
+  // está en el pasado (no se puede restaurar el futuro) y es uno solo.
+  const restoredDayDelta = restoredUntil
+    ? Math.floor((midnight(restoredUntil).getTime() - todayMid.getTime()) / 86400000)
+    : null
+
+  const hasActivity = (d: number): boolean =>
+    daysWithAttempt.has(d) || d === restoredDayDelta
+
+  if (hasActivity(0)) {
+    let days = 0
+    for (let d = 0; d > -365; d--) {
+      if (hasActivity(d)) days++
+      else break
+    }
+    return { state: "active", days, claimedToday }
+  }
+
+  if (hasActivity(-1)) {
+    let days = 0
+    for (let d = -1; d > -365; d--) {
+      if (hasActivity(d)) days++
+      else break
+    }
+    // `claimedToday` se fuerza a false porque hoy no hay actividad: no
+    // se ha podido pagar el bonus diario, incluso si la BBDD tuviera
+    // un lastBonusAt de hoy por desfase de zona horaria.
+    return { state: "frozen", days, claimedToday: false }
+  }
+
+  return { state: "dormant", days: 0, claimedToday: false }
+}
+
+/**
+ * Wrapper async: lee de BBDD lo necesario y delega en
+ * `computeStreakStateFromData`. Diseñado para Server Components
+ * (dashboard). No usar dentro del finish-exam (ahí ya pagamos vía
  * `awardDailyStreakBonusIfDue`).
  *
  * Respeta `User.streakRestoredUntil` (créditos de restauración, ver
- * src/lib/streak.ts): un día restaurado cuenta como día con actividad
- * para mantener la racha viva — el usuario ya "pagó" ese día con un
- * crédito.
+ * src/lib/streak.ts).
  */
 export async function getStreakState(userId: number): Promise<StreakState> {
   const user = await db.user.findUnique({
@@ -291,11 +358,8 @@ export async function getStreakState(userId: number): Promise<StreakState> {
     select: { lastStreakBonusAt: true, streakRestoredUntil: true },
   })
 
-  const todayMid = new Date()
-  todayMid.setHours(0, 0, 0, 0)
-  const claimedToday = !!user?.lastStreakBonusAt
-    && user.lastStreakBonusAt.getTime() >= todayMid.getTime()
-
+  const now = new Date()
+  const todayMid = midnight(now)
   // Miramos 60 días atrás. Más allá no nos importa para la racha actual.
   const lookback = new Date(todayMid.getTime() - 60 * 86400000)
   const attempts = await db.examAttempt.findMany({
@@ -308,45 +372,12 @@ export async function getStreakState(userId: number): Promise<StreakState> {
     select: { startedAt: true },
   })
 
-  // Set de días con examen, indexado por delta-en-días desde hoy
-  // (0 = hoy, -1 = ayer, ...).
-  const daysWithAttempt = new Set<number>()
-  for (const a of attempts) {
-    const dayDelta = Math.floor((a.startedAt.getTime() - todayMid.getTime()) / 86400000)
-    daysWithAttempt.add(dayDelta)
-  }
-
-  // Día restaurado vía crédito (si lo hay). Cuenta como día con actividad
-  // para el cálculo de la cadena. Asumimos siempre el día restaurado
-  // está en el pasado (no se puede restaurar el futuro) y es uno solo.
-  const restoredDayDelta = user?.streakRestoredUntil
-    ? Math.floor((midnight(user.streakRestoredUntil).getTime() - todayMid.getTime()) / 86400000)
-    : null
-
-  const hasActivity = (d: number): boolean =>
-    daysWithAttempt.has(d) || d === restoredDayDelta
-
-  if (hasActivity(0)) {
-    // ACTIVE: cuenta consecutivos desde hoy hacia atrás.
-    let days = 0
-    for (let d = 0; d > -365; d--) {
-      if (hasActivity(d)) days++
-      else break
-    }
-    return { state: "active", days, claimedToday }
-  }
-
-  if (hasActivity(-1)) {
-    // FROZEN: hay racha hasta ayer pero no hoy. Cuenta desde ayer.
-    let days = 0
-    for (let d = -1; d > -365; d--) {
-      if (hasActivity(d)) days++
-      else break
-    }
-    return { state: "frozen", days, claimedToday: false }
-  }
-
-  return { state: "dormant", days: 0, claimedToday: false }
+  return computeStreakStateFromData({
+    attemptDates:  attempts.map((a) => a.startedAt),
+    restoredUntil: user?.streakRestoredUntil ?? null,
+    lastBonusAt:   user?.lastStreakBonusAt ?? null,
+    now,
+  })
 }
 
 /** Helper interno: devuelve la medianoche local del Date dado sin mutarlo. */
