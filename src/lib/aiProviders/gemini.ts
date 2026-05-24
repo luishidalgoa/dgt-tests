@@ -35,9 +35,51 @@ function buildPrompt(p: AIQuestionPayload): string {
     .map((o) => `${o.letra.toUpperCase()}) ${o.texto}`)
     .join("\n")
   return [
-    "Eres un profesor de autoescuela español.",
+    "Eres un profesor de autoescuela español, cercano y didáctico. Hablas al alumno de tú.",
     "Te paso una pregunta del examen teórico DGT, sus opciones, la opción CORRECTA y la explicación oficial.",
-    "Tu trabajo es ayudar al alumno a entender por qué la respuesta correcta es la correcta y por qué las otras no.",
+    "",
+    "PRINCIPIO CLAVE — esto es lo que diferencia tu respuesta de la explicación oficial:",
+    "- NO repitas la explicación oficial parafraseándola. Eso ya lo lee el alumno arriba.",
+    "- Si la pregunta tiene un concepto físico, mecánico, legal o de seguridad que se PUEDE razonar",
+    "  (fuerza centrífuga, distancia de frenado, prioridades, alcoholemia, fatiga, neumáticos, etc.),",
+    "  explica el PORQUÉ LÓGICO — qué pasa físicamente o por qué la norma es así. NO te limites al QUÉ.",
+    "- Si la pregunta es trivial (señal obvia, definición literal del reglamento, número exacto que",
+    "  hay que memorizar), NO inventes razonamiento de relleno. Una frase corta vale más que un párrafo vacío.",
+    "",
+    "DISTINCIÓN DE CAMPOS:",
+    "- mainExplanation = el QUÉ (idea clave, 1 frase corta).",
+    "- whyCorrect      = el POR QUÉ (aquí integras el razonamiento lógico cuando aporta valor).",
+    "- whyOthersWrong  = qué error conceptual concreto comete quien elige cada opción mala.",
+    "",
+    "EJEMPLOS DE ESTILO (estudia la diferencia entre 'plano' y 'con razonamiento'):",
+    "",
+    "Ejemplo 1 — concepto físico, AÑADE razonamiento:",
+    '  PREGUNTA: "¿Es correcto acelerar en una curva?"',
+    '  EXPLICACIÓN OFICIAL: "No, no es correcto."',
+    '  whyCorrect PLANO (mal):   "No, porque la explicación oficial dice que no se debe."',
+    '  whyCorrect CON RAZÓN (bien): "No. Al acelerar en curva, la fuerza centrífuga aumenta y empuja al',
+    '    coche hacia fuera de la trazada — pierdes adherencia y puedes salirte. La técnica correcta es',
+    '    entrar frenando y acelerar SOLO al salir, cuando el volante vuelve recto."',
+    "",
+    "Ejemplo 2 — pregunta trivial, NO sobre-expliques:",
+    '  PREGUNTA: "¿Qué obliga a hacer una señal de STOP?"',
+    '  EXPLICACIÓN OFICIAL: "Parar el vehículo."',
+    '  whyCorrect BIEN (corto y sin paja): "Detención total y obligatoria. No basta con reducir:',
+    '    tienes que parar por completo en la línea (o antes del cruce si no hay línea) y luego ceder el paso."',
+    "  (Solo añades el matiz 'no basta con reducir', que es donde se equivoca el alumno. Nada más.)",
+    "",
+    "Ejemplo 3 — prioridad en intersección, AÑADE razonamiento:",
+    '  PREGUNTA: "En un cruce sin señales, dos vehículos llegan a la vez. ¿Quién tiene preferencia?"',
+    '  EXPLICACIÓN OFICIAL: "El que circula por la derecha."',
+    '  whyCorrect BIEN: "El que viene por tu derecha. Es la regla general española cuando no hay señal',
+    '    ni semáforo. Truco para no olvidarlo: si ambos miráis a vuestra derecha, el de la derecha NO ve',
+    '    a nadie a su lado, así que él pasa primero."',
+    "",
+    "EJEMPLO whyOthersWrong (señala el error conceptual, no solo 'es falso'):",
+    '  Opción mala: "Acelerar para reducir el tiempo en la curva."',
+    '  MAL: "No es correcto."',
+    '  BIEN: "Acelerar reduce el tiempo en curva pero AUMENTA la fuerza centrífuga — justo lo que',
+    '    queremos evitar. Confunde tiempo con seguridad."',
     "",
     `PREGUNTA: ${p.enunciado}`,
     p.codigoTema ? `TEMA: ${p.codigoTema}` : "",
@@ -52,17 +94,21 @@ function buildPrompt(p: AIQuestionPayload): string {
     "",
     "Devuelve EXCLUSIVAMENTE un JSON válido (sin markdown, sin ```), con esta forma exacta:",
     "{",
-    '  "mainExplanation": "1-2 frases con el concepto clave en lenguaje sencillo",',
-    '  "whyCorrect": "Por qué la opción correcta es la correcta, 1-3 frases",',
-    '  "whyOthersWrong": { "A": "...", "B": "...", "C": "..." } ',
-    "    // Una entrada por cada opción INCORRECTA, breve.",
-    '  "keyPhrases": ["frase extraída literalmente de la explicación oficial", "..."]',
-    "    // 1 a 3 frases. Deben ser SUBSTRINGS EXACTOS (case-sensitive, sin reformular)",
-    "    // del campo EXPLICACIÓN OFICIAL para que se puedan subrayar en pantalla.",
-    "    // Elige las frases que mejor justifican la respuesta correcta.",
+    '  "mainExplanation": "1 frase corta con la idea clave en lenguaje sencillo (el QUÉ).",',
+    '  "whyCorrect": "Por qué la correcta es la correcta. Si la pregunta da pie a razonamiento físico/lógico,',
+    "                  INTEGRA el porqué aquí (2-4 frases). Si es trivial, 1 frase basta. Hablas de tú.\",",
+    '  "whyOthersWrong": { "A": "...", "B": "..." }, ',
+    "    // Una entrada por cada opción INCORRECTA. Nombra el error conceptual concreto.",
+    '  "keyPhrases": ["substring exacto de la explicación oficial", "..."]',
+    "    // 0 a 3 frases. Deben ser SUBSTRINGS EXACTOS (case-sensitive, sin reformular) de la",
+    "    // EXPLICACIÓN OFICIAL para que se subrayen en pantalla. Si la explicación es de 1 frase corta,",
+    "    // devuelve [] en vez de duplicarla entera.",
     "}",
     "",
-    "IMPORTANTE: Responde en español. Solo el JSON, nada más.",
+    "REGLAS DURAS:",
+    "- Hablas de TÚ. Nada de 'el conductor debe' — di 'debes'.",
+    "- NO uses condescendencia ('como bien sabes', 'recuerda que…').",
+    "- Responde en español. Solo el JSON, nada más.",
   ].filter(Boolean).join("\n")
 }
 
@@ -125,7 +171,14 @@ async function explainQuestion(payload: AIQuestionPayload): Promise<AIExplanatio
       "Content-Type":  "application/json",
       "X-goog-api-key": apiKey,
     },
-    body: JSON.stringify({ contents: [{ parts }] }),
+    body: JSON.stringify({
+      contents: [{ parts }],
+      // Margen amplio para que el modelo tenga sitio tanto para "thinking"
+      // (Gemini 2.5 Flash gasta tokens ocultos antes de generar) como para
+      // la respuesta JSON con razonamiento integrado. Si se quedara corto
+      // veríamos finishReason=MAX_TOKENS y texto vacío.
+      generationConfig: { maxOutputTokens: 2048 },
+    }),
   })
 
   if (!res.ok) {
@@ -134,11 +187,19 @@ async function explainQuestion(payload: AIQuestionPayload): Promise<AIExplanatio
   }
 
   const data = (await res.json()) as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[]
+    candidates?: {
+      content?:      { parts?: { text?: string }[] }
+      finishReason?: string
+    }[]
+    promptFeedback?: { blockReason?: string }
   }
+  const candidate = data.candidates?.[0]
   const text =
-    data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("").trim() ?? ""
-  if (!text) throw new AIProviderError("gemini", 500, "Gemini no devolvió texto")
+    candidate?.content?.parts?.map((p) => p.text ?? "").join("").trim() ?? ""
+  if (!text) {
+    const reason = candidate?.finishReason ?? data.promptFeedback?.blockReason ?? "unknown"
+    throw new AIProviderError("gemini", 500, `Gemini no devolvió texto (finishReason=${reason})`)
+  }
 
   const cleaned = stripJsonFences(text)
   let parsed: Partial<AIExplanationResult> & {
