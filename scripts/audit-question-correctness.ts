@@ -14,7 +14,9 @@
  * disparó la sospecha).
  *
  * Uso:
- *   npx tsx --env-file=.env scripts/audit-question-correctness.ts
+ *   npm run questions:audit
+ *
+ * (equivalente a: `tsx --env-file=.env scripts/audit-question-correctness.ts`)
  *
  * Implementación: tres queries planas + join en memoria. Evita el
  * panic de Prisma 6.19.3 + libsql con includes anidados (ver commit

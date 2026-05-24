@@ -258,6 +258,14 @@ const CATEGORIES: Category[] = [
         description: "Etiqueta preguntas con tier FREE/PRO según reglas",
       },
       {
+        name:        "questions:audit",
+        description: "Audita Turso prod: detecta preguntas donde la opción oficial (isCorrect=true) NO coincide con la más seleccionada por los usuarios. Solo lectura.",
+        examples: [
+          "npm run questions:audit",
+          "# Detalle extra: vuelca también el desglose completo de la pregunta #1583",
+        ],
+      },
+      {
         name:        "dev:prepare-test-user",
         description: "Crea un user de test limpio (para flujos E2E)",
       },

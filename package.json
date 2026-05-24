@@ -34,6 +34,7 @@
     "attempts:cleanup-orphan": "tsx --env-file=.env scripts/cleanup-orphan-attempts.ts",
     "user-ai-paid:backfill": "tsx --env-file=.env scripts/backfill-user-ai-paid.ts",
     "questions:tag-tiers": "tsx --env-file=.env scripts/tag-question-tiers.ts",
+    "questions:audit": "tsx --env-file=.env scripts/audit-question-correctness.ts",
     "stripe:check": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/test-stripe.ts",
     "stripe:sync-user": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/sync-subscription-from-stripe.ts",
     "stripe:setup-test": "tsx --env-file=.env.local scripts/setup-stripe-test.ts",
