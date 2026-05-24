@@ -40,31 +40,38 @@ export function StreakIcon({
   const effectiveXp = state === "dormant" ? 0 : xp
   const info        = getLevel(effectiveXp)
 
-  // Estado "frozen": tinte azul + saturación baja. Cuando la otra tarea
-  // implemente el sistema de racha real, podrá pasar state="frozen" sin
-  // tocar este componente.
+  // Estado "frozen": preferimos el asset dedicado (lvl-N-freeze.png) si
+  // existe para este nivel. Si aún no se ha generado lo simulamos con
+  // un filtro CSS azul sobre el icono base — así la UI sigue funcionando
+  // mientras los assets se van añadiendo.
+  const useFrozenAsset = state === "frozen" && info.frozenIconPath !== null
+  const iconSrc = useFrozenAsset ? info.frozenIconPath! : info.iconPath
   const filter =
-    state === "frozen"
+    state === "frozen" && !useFrozenAsset
       ? "saturate(0.4) hue-rotate(180deg) brightness(0.95)"
       : undefined
+
+  const stateLabel =
+    state === "frozen"  ? " (congelada)" :
+    state === "dormant" ? " (apagada)"   : ""
 
   return (
     <span
       className={className}
       style={{
-        display:      "inline-flex",
-        alignItems:   "center",
+        display:        "inline-flex",
+        alignItems:     "center",
         justifyContent: "center",
-        width:        size,
-        height:       size,
+        width:          size,
+        height:         size,
         filter,
-        transition:   "filter 200ms ease",
+        transition:     "filter 200ms ease",
       }}
-      title={`Nivel ${info.level} · ${info.label}`}
-      aria-label={`Icono de racha — nivel ${info.level} (${info.label})`}
+      title={`Nivel ${info.level} · ${info.label}${stateLabel}`}
+      aria-label={`Icono de racha — nivel ${info.level} (${info.label})${stateLabel}`}
     >
       <Image
-        src={info.iconPath}
+        src={iconSrc}
         alt=""
         width={size}
         height={size}

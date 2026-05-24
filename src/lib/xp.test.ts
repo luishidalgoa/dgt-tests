@@ -9,6 +9,7 @@ import {
   LEVELS,
   MAX_LEVEL,
   STREAK_DAY_BONUSES,
+  buildCycleView,
   computeExamXp,
   computeStreakDayBonus,
   getLevel,
@@ -142,5 +143,70 @@ describe("computeStreakDayBonus — ciclo de 7 días", () => {
   it("la tabla expuesta como constante coincide con los valores spec'd", () => {
     expect(Array.from(STREAK_DAY_BONUSES)).toEqual([5, 7, 10, 15, 20, 30, 50])
     expect(STREAK_DAY_BONUSES.reduce((a, b) => a + b, 0)).toBe(137)
+  })
+})
+
+describe("buildCycleView — visualización del ciclo de 7 días", () => {
+  it("dormant: 0 ganados, día 1 marcado como hoy (pendiente)", () => {
+    const slots = buildCycleView({ state: "dormant", days: 0, claimedToday: false })
+    expect(slots).toHaveLength(7)
+    expect(slots.filter((s) => s.isEarned)).toHaveLength(0)
+    const todays = slots.filter((s) => s.isToday)
+    expect(todays).toHaveLength(1)
+    expect(todays[0].day).toBe(1)
+    expect(todays[0].bonus).toBe(5)
+  })
+
+  it("active día 4 con bonus cobrado: días 1-4 earned, día 4 también es hoy", () => {
+    const slots = buildCycleView({ state: "active", days: 4, claimedToday: true })
+    expect(slots.filter((s) => s.isEarned).map((s) => s.day)).toEqual([1, 2, 3, 4])
+    const todays = slots.filter((s) => s.isToday)
+    expect(todays).toHaveLength(1)
+    expect(todays[0].day).toBe(4)
+    expect(todays[0].isEarned).toBe(true)
+  })
+
+  it("active día 4 SIN cobrar (transitorio): días 1-3 earned, día 4 = hoy pendiente", () => {
+    const slots = buildCycleView({ state: "active", days: 4, claimedToday: false })
+    expect(slots.filter((s) => s.isEarned).map((s) => s.day)).toEqual([1, 2, 3])
+    const todays = slots.filter((s) => s.isToday)
+    expect(todays).toHaveLength(1)
+    expect(todays[0].day).toBe(4)
+    expect(todays[0].isEarned).toBe(false)
+  })
+
+  it("frozen con 3 días hasta ayer: 1-3 earned, día 4 marcado como hoy pendiente", () => {
+    const slots = buildCycleView({ state: "frozen", days: 3, claimedToday: false })
+    expect(slots.filter((s) => s.isEarned).map((s) => s.day)).toEqual([1, 2, 3])
+    const todays = slots.filter((s) => s.isToday)
+    expect(todays).toHaveLength(1)
+    expect(todays[0].day).toBe(4)
+    expect(todays[0].bonus).toBe(15)
+    expect(todays[0].isEarned).toBe(false)
+  })
+
+  it("frozen con ciclo completo (7 días): 7 earned, ningún chip de hoy en este ciclo", () => {
+    const slots = buildCycleView({ state: "frozen", days: 7, claimedToday: false })
+    expect(slots.filter((s) => s.isEarned)).toHaveLength(7)
+    expect(slots.filter((s) => s.isToday)).toHaveLength(0)
+  })
+
+  it("active día 8 (loop): vuelve al día 1 del nuevo ciclo", () => {
+    const slots = buildCycleView({ state: "active", days: 8, claimedToday: true })
+    expect(slots.filter((s) => s.isEarned).map((s) => s.day)).toEqual([1])
+    expect(slots.find((s) => s.isToday)?.day).toBe(1)
+    expect(slots.find((s) => s.isToday)?.bonus).toBe(5)
+  })
+
+  it("active día 14 (final segundo ciclo): los 7 earned, el último es hoy", () => {
+    const slots = buildCycleView({ state: "active", days: 14, claimedToday: true })
+    expect(slots.filter((s) => s.isEarned)).toHaveLength(7)
+    expect(slots.find((s) => s.isToday)?.day).toBe(7)
+    expect(slots.find((s) => s.isToday)?.bonus).toBe(50)
+  })
+
+  it("cada slot tiene el bonus correcto correspondiente a su posición", () => {
+    const slots = buildCycleView({ state: "dormant", days: 0, claimedToday: false })
+    expect(slots.map((s) => s.bonus)).toEqual([5, 7, 10, 15, 20, 30, 50])
   })
 })

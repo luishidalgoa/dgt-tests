@@ -9,7 +9,8 @@ import { DashStatsAnalysis, type StatsAnalysisResult, type AnalysisHistoryItem }
 import { MAX_HISTORY_ITEMS } from "@/lib/aiStatsAnalysis"
 import { StructuredDataHome } from "@/components/StructuredData"
 import { StreakIcon } from "@/components/StreakIcon"
-import { getLevel } from "@/lib/xp"
+import { StreakCycle } from "@/components/StreakCycle"
+import { getLevel, getStreakState } from "@/lib/xp"
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app"
 
@@ -147,18 +148,16 @@ export default async function HomePage() {
   }
   const weekTotal = last7.reduce((acc, d) => acc + d.count, 0)
   const dailyAvg = weekTotal / 7
-  // Racha de días consecutivos hasta hoy con al menos 1 examen
-  let streakDays = 0
-  for (let i = last7.length - 1; i >= 0; i--) {
-    if (last7[i].count > 0) streakDays++
-    else break
-  }
   const maxDay = Math.max(1, ...last7.map((d) => d.count))
 
   // ── XP & nivel ────────────────────────────────────────────────────
   // El icono "🔥" del bloque "Actividad esta semana" se sustituye por el
   // asset del nivel actual derivado de user.xp (ver src/lib/xp.ts).
-  const xpInfo = getLevel(user.xp)
+  // El estado de racha (active/frozen/dormant) decide si el icono se
+  // pinta normal, congelado o apagado, y el ciclo de bonus se muestra
+  // bajo la barra de XP.
+  const xpInfo      = getLevel(user.xp)
+  const streakInfo  = await getStreakState(user.id)
 
   // Errores pendientes
   const pendingErrors = await db.$queryRaw<{ count: bigint }[]>`
@@ -274,7 +273,7 @@ export default async function HomePage() {
       <section className="dash-streak">
         <div className="dash-streak-head">
           <h3>Actividad esta semana</h3>
-          <StreakIcon xp={user.xp} size={40} />
+          <StreakIcon xp={user.xp} size={40} state={streakInfo.state} />
         </div>
         <h2>
           <b>{dailyAvg.toFixed(1)}</b> {dailyAvg === 1 ? "test/día" : "tests/día"}
@@ -282,7 +281,11 @@ export default async function HomePage() {
         <p className="sub">
           {weekTotal === 0
             ? "Aún no has hecho ningún test esta semana"
-            : `${weekTotal} en los últimos 7 días${streakDays > 1 ? ` · racha de ${streakDays} días` : ""}`}
+            : `${weekTotal} en los últimos 7 días${
+                streakInfo.state === "active"  && streakInfo.days > 1 ? ` · racha de ${streakInfo.days} días` :
+                streakInfo.state === "frozen"  && streakInfo.days > 0 ? ` · racha de ${streakInfo.days} días congelada` :
+                ""
+              }`}
         </p>
 
         {/* Mini-bloque de nivel + barra de progreso a próximo nivel.
@@ -332,6 +335,12 @@ export default async function HomePage() {
             />
           </div>
         </div>
+
+        <StreakCycle
+          state={streakInfo.state}
+          days={streakInfo.days}
+          claimedToday={streakInfo.claimedToday}
+        />
 
         <div
           className="dash-days"

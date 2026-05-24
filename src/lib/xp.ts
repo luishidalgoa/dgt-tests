@@ -33,18 +33,26 @@ export interface LevelDef {
   level: number
   minXp: number
   iconPath: string
+  /** Path al asset "congelado" del nivel (llama dentro de un cubo de hielo).
+   *  null = ese nivel aún no tiene asset dedicado → StreakIcon hace
+   *  fallback a un filtro CSS sobre el iconPath base. */
+  frozenIconPath: string | null
   label: string
 }
 
-/** Tabla maestra de niveles. Ordenada ASCendente por `minXp`. */
+/** Tabla maestra de niveles. Ordenada ASCendente por `minXp`.
+ *
+ *  Los `frozenIconPath` se van rellenando a medida que se generan los
+ *  assets. Mientras sean `null` la UI muestra el icono base con un
+ *  filtro azul. */
 export const LEVELS: ReadonlyArray<LevelDef> = [
-  { level: 0, minXp: 0,    iconPath: "/streak/lvl-0.png", label: "Llama apagada" },
-  { level: 1, minXp: 50,   iconPath: "/streak/lvl-1.png", label: "Chispa" },
-  { level: 2, minXp: 150,  iconPath: "/streak/lvl-2.png", label: "Llama pequeña" },
-  { level: 3, minXp: 400,  iconPath: "/streak/lvl-3.png", label: "Llama estable" },
-  { level: 4, minXp: 1000, iconPath: "/streak/lvl-4.png", label: "Llama fuerte" },
-  { level: 5, minXp: 2500, iconPath: "/streak/lvl-5.png", label: "Hoguera intensa" },
-  { level: 6, minXp: 6000, iconPath: "/streak/lvl-6.png", label: "Fénix" },
+  { level: 0, minXp: 0,    iconPath: "/streak/lvl-0.png", frozenIconPath: null,                          label: "Llama apagada" },
+  { level: 1, minXp: 50,   iconPath: "/streak/lvl-1.png", frozenIconPath: "/streak/lvl-1-freeze.png",    label: "Chispa" },
+  { level: 2, minXp: 150,  iconPath: "/streak/lvl-2.png", frozenIconPath: null,                          label: "Llama pequeña" },
+  { level: 3, minXp: 400,  iconPath: "/streak/lvl-3.png", frozenIconPath: null,                          label: "Llama estable" },
+  { level: 4, minXp: 1000, iconPath: "/streak/lvl-4.png", frozenIconPath: null,                          label: "Llama fuerte" },
+  { level: 5, minXp: 2500, iconPath: "/streak/lvl-5.png", frozenIconPath: null,                          label: "Hoguera intensa" },
+  { level: 6, minXp: 6000, iconPath: "/streak/lvl-6.png", frozenIconPath: null,                          label: "Fénix" },
 ] as const
 
 export const MAX_LEVEL = LEVELS[LEVELS.length - 1].level
@@ -56,6 +64,8 @@ export interface LevelInfo {
   label: string
   /** Ruta absoluta del PNG del icono. Lista para `<Image src={...}>`. */
   iconPath: string
+  /** Ruta del asset "congelado" si existe para este nivel, null si no. */
+  frozenIconPath: string | null
   /** Umbral de XP del nivel actual */
   minXp: number
   /** Umbral de XP del siguiente nivel. null si ya está al máximo. */
@@ -85,13 +95,14 @@ export function getLevel(xp: number): LevelInfo {
 
   if (!next) {
     return {
-      level:       current.level,
-      label:       current.label,
-      iconPath:    current.iconPath,
-      minXp:       current.minXp,
-      nextLevelXp: null,
-      xpToNext:    0,
-      progressPct: 100,
+      level:          current.level,
+      label:          current.label,
+      iconPath:       current.iconPath,
+      frozenIconPath: current.frozenIconPath,
+      minXp:          current.minXp,
+      nextLevelXp:    null,
+      xpToNext:       0,
+      progressPct:    100,
     }
   }
 
@@ -100,13 +111,14 @@ export function getLevel(xp: number): LevelInfo {
   const pct      = Math.max(0, Math.min(100, Math.round((into / span) * 100)))
 
   return {
-    level:       current.level,
-    label:       current.label,
-    iconPath:    current.iconPath,
-    minXp:       current.minXp,
-    nextLevelXp: next.minXp,
-    xpToNext:    Math.max(0, next.minXp - safeXp),
-    progressPct: pct,
+    level:          current.level,
+    label:          current.label,
+    iconPath:       current.iconPath,
+    frozenIconPath: current.frozenIconPath,
+    minXp:          current.minXp,
+    nextLevelXp:    next.minXp,
+    xpToNext:       Math.max(0, next.minXp - safeXp),
+    progressPct:    pct,
   }
 }
 
@@ -242,22 +254,45 @@ export async function awardXp(
 
 // ── Cálculo de racha + bonus diario ─────────────────────────────────────
 
-/**
- * Devuelve la longitud de la racha actual del usuario en días: cuántos
- * días consecutivos hasta hoy (inclusive) tiene al menos 1 examen que
- * cuente para stats (mode normal/tema, ver `ATTEMPT_STATS_WHERE`).
+/** Estado de la racha del usuario para mostrar en UI.
  *
- * Si hoy NO tiene ningún examen, devuelve 0. Si tiene ≥1 hoy pero ayer
- * no, devuelve 1. Etc.
+ *   - "active":   hoy ya tiene ≥1 examen que cuenta para stats.
+ *                 `days` = longitud incluyendo hoy.
+ *   - "frozen":   hoy NO tiene examen pero ayer (o algún día más reciente)
+ *                 sí. La racha está "congelada" — si juega hoy se
+ *                 mantiene; si pasa otro día sin actividad se rompe.
+ *                 `days` = longitud HASTA AYER.
+ *   - "dormant":  ni hoy ni el día anterior cuentan. `days` = 0.
  */
-export async function getCurrentStreakLength(userId: number): Promise<number> {
+export type StreakStateKind = "active" | "frozen" | "dormant"
+
+export interface StreakState {
+  state: StreakStateKind
+  /** Días en la racha — incluye hoy si active, hasta ayer si frozen, 0 si dormant. */
+  days: number
+  /** true sii el bonus diario de racha ya se ha pagado en este día. */
+  claimedToday: boolean
+}
+
+/**
+ * Calcula el estado canónico de racha del usuario para la UI.
+ * Una sola query a BBDD. Diseñada para llamarse desde Server Components
+ * (dashboard) — no usar dentro del finish-exam (ahí ya pagamos vía
+ * `awardDailyStreakBonusIfDue`).
+ */
+export async function getStreakState(userId: number): Promise<StreakState> {
+  const user = await db.user.findUnique({
+    where:  { id: userId },
+    select: { lastStreakBonusAt: true },
+  })
+
   const todayMid = new Date()
   todayMid.setHours(0, 0, 0, 0)
-  // Miramos 60 días atrás como margen. La racha de un usuario activo
-  // será mucho menor, y si supera los 60 días seguidos haciendo tests
-  // pues ya es campeón.
-  const lookback = new Date(todayMid.getTime() - 60 * 86400000)
+  const claimedToday = !!user?.lastStreakBonusAt
+    && user.lastStreakBonusAt.getTime() >= todayMid.getTime()
 
+  // Miramos 60 días atrás. Más allá no nos importa para la racha actual.
+  const lookback = new Date(todayMid.getTime() - 60 * 86400000)
   const attempts = await db.examAttempt.findMany({
     where: {
       userId,
@@ -267,23 +302,41 @@ export async function getCurrentStreakLength(userId: number): Promise<number> {
     },
     select: { startedAt: true },
   })
-  if (attempts.length === 0) return 0
 
-  // Set de días "tiene examen", representado como delta en días desde
-  // medianoche de hoy (0 = hoy, -1 = ayer, -2 = anteayer, ...).
+  // Set de días con examen, indexado por delta-en-días desde hoy
+  // (0 = hoy, -1 = ayer, ...).
   const daysWithAttempt = new Set<number>()
   for (const a of attempts) {
     const dayDelta = Math.floor((a.startedAt.getTime() - todayMid.getTime()) / 86400000)
     daysWithAttempt.add(dayDelta)
   }
 
-  // Cuenta consecutivos retrocediendo desde hoy.
-  let streak = 0
-  for (let d = 0; d > -365; d--) {
-    if (daysWithAttempt.has(d)) streak++
-    else break
+  if (daysWithAttempt.has(0)) {
+    // ACTIVE: cuenta consecutivos desde hoy hacia atrás.
+    let days = 0
+    for (let d = 0; d > -365; d--) {
+      if (daysWithAttempt.has(d)) days++
+      else break
+    }
+    return { state: "active", days, claimedToday }
   }
-  return streak
+
+  if (daysWithAttempt.has(-1)) {
+    // FROZEN: hay racha hasta ayer pero no hoy. Cuenta desde ayer.
+    let days = 0
+    for (let d = -1; d > -365; d--) {
+      if (daysWithAttempt.has(d)) days++
+      else break
+    }
+    // `claimedToday` se mantiene como false-via-derivación: si HOY no
+    // hay actividad, no se ha podido pagar el bonus diario hoy. (La
+    // columna de BBDD podría estar a hoy si el cron de zona horaria
+    // se desfasa, pero el caso es marginal y la UI seguirá siendo
+    // coherente.)
+    return { state: "frozen", days, claimedToday: false }
+  }
+
+  return { state: "dormant", days: 0, claimedToday: false }
 }
 
 /**
@@ -292,30 +345,17 @@ export async function getCurrentStreakLength(userId: number): Promise<number> {
  * resultante o `null` si no aplicaba (ya cobrado hoy, sin racha, etc.).
  *
  * Diseñado para llamarse DESPUÉS de crear el ExamAttempt — para que la
- * query de `getCurrentStreakLength` ya incluya el examen recién
- * terminado y considere "hoy" como día con actividad.
+ * query interna ya incluya el examen recién terminado y considere
+ * "hoy" como día con actividad.
  */
 export async function awardDailyStreakBonusIfDue(
   userId: number,
 ): Promise<AwardXpResult | null> {
-  const user = await db.user.findUnique({
-    where:  { id: userId },
-    select: { lastStreakBonusAt: true },
-  })
-  if (!user) return null
+  const status = await getStreakState(userId)
+  if (status.state !== "active") return null
+  if (status.claimedToday) return null
 
-  const todayMid = new Date()
-  todayMid.setHours(0, 0, 0, 0)
-
-  // ¿Ya cobró bonus HOY? Comparar contra medianoche local.
-  if (user.lastStreakBonusAt && user.lastStreakBonusAt.getTime() >= todayMid.getTime()) {
-    return null
-  }
-
-  const streak = await getCurrentStreakLength(userId)
-  if (streak <= 0) return null
-
-  const bonus = computeStreakDayBonus(streak)
+  const bonus = computeStreakDayBonus(status.days)
   if (bonus <= 0) return null
 
   // Marca primero la fecha (evita doble-cobro en race) y luego paga.
@@ -324,4 +364,76 @@ export async function awardDailyStreakBonusIfDue(
     data:  { lastStreakBonusAt: new Date() },
   })
   return awardXp(userId, bonus, "streak-day")
+}
+
+// ── Visualización del ciclo de 7 días ──────────────────────────────────
+
+export interface CycleSlot {
+  /** Posición en el ciclo actual (1..7). */
+  day: number
+  /** XP que se gana ESE día de racha. */
+  bonus: number
+  /** El slot está completo en el ciclo actual (ya se cobró). */
+  isEarned: boolean
+  /** El slot representa HOY (puede ser earned-y-today al mismo tiempo
+   *  cuando el bonus ya se cobró; o solo today cuando está pendiente). */
+  isToday: boolean
+}
+
+/**
+ * Construye la vista de 7 slots del ciclo de racha ACTUAL del usuario.
+ * Función pura — toma el estado de la racha y devuelve qué se debe
+ * pintar. Diseñada para ser tested sin BBDD.
+ *
+ *  - ACTIVE + claimedToday:  el día actual ya está dentro de `earned`,
+ *                            se marca como `isToday` para destacarlo.
+ *  - ACTIVE sin claim:       el día actual es pending; earned = days-1.
+ *                            (No debería ocurrir tras finish-exam, pero
+ *                             si la BBDD del bonus falla quedaríamos
+ *                             aquí — defensivo.)
+ *  - FROZEN:                 todos los `days` están earned. Hoy sería
+ *                            el slot pos+1 dentro del ciclo, marcado
+ *                            como pending. Si el ciclo está completo
+ *                            (pos=7) no hay slot "hoy" en este ciclo.
+ *  - DORMANT:                cero earned, día 1 marcado como `isToday`
+ *                            (= "si juegas hoy esto es lo que ganas").
+ */
+export function buildCycleView(args: {
+  state: StreakStateKind
+  days: number
+  claimedToday: boolean
+}): CycleSlot[] {
+  const { state, days, claimedToday } = args
+
+  let earnedThroughDay = 0   // 0..7
+  let todayDay = 0           // 0 = sin "hoy" en este ciclo, 1..7 = posición
+
+  if (state === "active") {
+    const pos = ((days - 1) % STREAK_DAY_BONUSES.length) + 1
+    if (claimedToday) {
+      earnedThroughDay = pos
+      todayDay = pos
+    } else {
+      earnedThroughDay = Math.max(0, pos - 1)
+      todayDay = pos
+    }
+  } else if (state === "frozen") {
+    const pos = ((days - 1) % STREAK_DAY_BONUSES.length) + 1
+    earnedThroughDay = pos
+    todayDay = pos < STREAK_DAY_BONUSES.length ? pos + 1 : 0
+  } else {
+    // dormant
+    earnedThroughDay = 0
+    todayDay = 1
+  }
+
+  return STREAK_DAY_BONUSES.map((bonus, i): CycleSlot => {
+    const day = i + 1
+    return {
+      day,
+      bonus,
+      isEarned: day <= earnedThroughDay,
+      isToday:  day === todayDay,
+    }
+  })
 }
