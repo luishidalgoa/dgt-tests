@@ -10,6 +10,7 @@ import { Navbar } from "@/components/Navbar"
 import { BottomTabs } from "@/components/BottomTabs"
 import { UserNotifications } from "@/components/UserNotifications"
 import { CookieConsent } from "@/components/CookieConsent"
+import { AnalyticsScript } from "@/components/AnalyticsScript"
 import { MaintenancePage } from "@/components/MaintenancePage"
 import { hasFullAccess } from "@/lib/permissions"
 import { Toaster } from "sonner"
@@ -233,6 +234,7 @@ export default async function RootLayout({
           </Link>
         </footer>
         <CookieConsent />
+        <AnalyticsScript />
         {/* Toaster global de sonner — los componentes cliente disparan
             toasts con `import { toast } from "sonner"` y se muestran aquí. */}
         <Toaster richColors position="top-right" closeButton />

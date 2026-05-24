@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react"
 import { AIExplainPanel, type AIResult } from "@/components/AIExplainPanel"
 import { ExplanationWithHighlights } from "@/components/ExplanationWithHighlights"
+import { trackEvent } from "@/lib/analytics"
 
 const MAX_PER_REVIEW = 5
 const SYNC_EVENT = "dgt:ai-quota-sync"
@@ -92,7 +93,12 @@ export function ResultsAIButton({ attemptId, questionId, explicacion, hasImage, 
             // Tanto cache hit como miss descuentan en server
             sync(Math.max(0, remaining - 1))
           }}
-          onResult={(res) => setAiResult(res)}
+          onResult={(res) => {
+            setAiResult(res)
+            // Analytics: el user pidió un análisis IA. No enviamos contenido
+            // ni questionId (PII relativa) — solo señal agregada.
+            trackEvent("ai_analysis_generated", { hasImage })
+          }}
         />
       </div>
 

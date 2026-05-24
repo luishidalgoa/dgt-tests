@@ -131,7 +131,12 @@ describe("getStreakState — wrapper async sobre la función pura", () => {
   })
 
   it("active con attempts hoy + ayer + restoredUntil null", async () => {
-    const now = Date.now()
+    // Anclamos a mediodía para que `now - 2h` no cruce medianoche y
+    // siga siendo "hoy". Sin esto el test falla cuando vitest corre
+    // entre 00:00–02:00 (la resta pasa al día anterior).
+    const today = new Date()
+    today.setHours(12, 0, 0, 0)
+    const now = today.getTime()
     dbMocks.user.findUnique.mockResolvedValue({
       lastStreakBonusAt:    new Date(now), // hoy → claimedToday=true
       streakRestoredUntil:  null,
@@ -148,7 +153,10 @@ describe("getStreakState — wrapper async sobre la función pura", () => {
   })
 
   it("frozen con attempts solo ayer", async () => {
-    const now = Date.now()
+    // Anclamos a mediodía (ver test anterior — mismo motivo).
+    const today = new Date()
+    today.setHours(12, 0, 0, 0)
+    const now = today.getTime()
     dbMocks.user.findUnique.mockResolvedValue({
       lastStreakBonusAt:    null,
       streakRestoredUntil:  null,

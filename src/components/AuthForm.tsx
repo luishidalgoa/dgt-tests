@@ -4,6 +4,7 @@ import { useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { AtSign, Eye, Lock, User } from "lucide-react"
+import { trackEvent } from "@/lib/analytics"
 
 interface AuthFormProps {
   mode: "login" | "register"
@@ -52,6 +53,9 @@ export function AuthForm({ mode }: AuthFormProps) {
           const body = await res.json().catch(() => ({}))
           throw new Error(body.error ?? "Error en la operación")
         }
+        // Analytics: signup_complete solo en register. Login no se trackea
+        // (no aporta señal de conversión — el user ya tenía cuenta).
+        if (!isLogin) trackEvent("signup_complete")
         router.push(redirectTo)
         router.refresh()
       } catch (err) {

@@ -6,6 +6,7 @@ import { getPendingErrorQuestionIds } from "@/lib/errors"
 import { QUESTION_VISIBLE_WHERE } from "@/lib/questions"
 import { shuffle } from "@/lib/shuffle"
 import { ExamRunner } from "@/components/ExamRunner"
+import { TrackPageView } from "@/components/TrackPageView"
 import { hasFullAccess, getEffectiveTokenQuota } from "@/lib/permissions"
 import { getQuotaStatus } from "@/lib/aiQuota"
 import { Badge } from "@/components/ui/badge"
@@ -99,6 +100,7 @@ export default async function TestErroresPage({ searchParams }: PageProps) {
           </div>
         ) : (
           <div className="card-soft warm" style={{ padding: 28 }}>
+            <TrackPageView event="errors_test_started" />
             <div className="flex items-center justify-between mb-6">
               <div>
                 <div style={{ fontSize: 11.5, color: "var(--slate-500)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>

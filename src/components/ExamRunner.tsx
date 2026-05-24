@@ -24,6 +24,7 @@ import {
   type SavedExamState,
 } from "@/lib/examState"
 import { triggerXpGainAnimation } from "@/lib/xpAnimation"
+import { trackEvent } from "@/lib/analytics"
 import {
   ArrowLeft,
   ArrowRight,
@@ -220,6 +221,14 @@ export function ExamRunner({
 
         sessionStorage.setItem("dgt:guest-result", JSON.stringify(result))
         clearExamState()
+        // Analytics: test_completed (guest). scorePct redondeado a entero
+        // para agrupación. NO enviamos test.id ni questionIds — solo señal
+        // agregada de finalización con score, sin PII ni detalle por test.
+        trackEvent("test_completed", {
+          mode,
+          guest:    true,
+          scorePct: Math.round((score / questions.length) * 100),
+        })
         router.push("/preview-results")
       } catch (err) {
         submittedRef.current = false
@@ -257,6 +266,21 @@ export function ExamRunner({
         }
         const data = (await res.json()) as SubmitAttemptResponse
         clearExamState()
+        // Analytics: test_completed (logueado). Calculamos scorePct local
+        // sin pedir más al server. mode + isRealExam dan señal de qué
+        // tipo de práctica está completando el user.
+        {
+          let correct = 0
+          for (const qu of questions) {
+            const sel = answers[qu.id] ?? null
+            if (qu.correctOptionId !== null && sel === qu.correctOptionId) correct++
+          }
+          trackEvent("test_completed", {
+            mode,
+            isRealExam,
+            scorePct: Math.round((correct / questions.length) * 100),
+          })
+        }
         // Dispara la animación de XP gain (bubble + pelotitas) UNA sola
         // vez con el total combinado base+bonus. La función helper
         // garantiza idempotencia — el endpoint ya devuelve la suma en

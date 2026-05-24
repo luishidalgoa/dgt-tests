@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth"
 import { ChevronLeft, Settings, Sparkles, Crown, Shield, ArrowRight } from "lucide-react"
 import { SettingsForm } from "@/components/SettingsForm"
 import { BillingPortalButton } from "@/components/BillingPortalButton"
+import { TrackPageView } from "@/components/TrackPageView"
 import { AdminRefillTokensButton } from "@/components/AdminRefillTokensButton"
 import { getQuotaStatus } from "@/lib/aiQuota"
 import { hasFullAccess, isAdmin, planLabel } from "@/lib/permissions"
@@ -10,8 +11,15 @@ import { PRO_PRICE_PER_MONTH } from "@/lib/pricing"
 
 export const dynamic = "force-dynamic"
 
-export default async function SettingsPage() {
+interface PageProps {
+  /** ?subscribed=1 cuando Stripe redirige tras checkout exitoso. */
+  searchParams: Promise<{ subscribed?: string }>
+}
+
+export default async function SettingsPage({ searchParams }: PageProps) {
   const user = await requireUser()
+  const { subscribed } = await searchParams
+  const fromSubscriptionSuccess = subscribed === "1"
   const quota = await getQuotaStatus(user.id)
   const plan = planLabel(user)
   const admin = isAdmin(user)
@@ -67,6 +75,11 @@ export default async function SettingsPage() {
 
   return (
     <div>
+      {/* Analytics: subscription_started solo cuando Stripe nos redirigió
+          tras checkout exitoso (?subscribed=1). Sin esa flag no disparamos
+          — visitas normales a /settings son ruido. */}
+      {fromSubscriptionSuccess && <TrackPageView event="subscription_started" />}
+
       <Link href="/" className="back-link">
         <ChevronLeft className="h-4 w-4" />
         Inicio

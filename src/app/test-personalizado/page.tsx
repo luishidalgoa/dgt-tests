@@ -7,6 +7,7 @@ import { QUESTION_VISIBLE_WHERE, SQL_QUESTION_VISIBLE_AND } from "@/lib/question
 import { SQL_ATTEMPT_STATS_AND } from "@/lib/stats"
 import { shuffle } from "@/lib/shuffle"
 import { ExamRunner } from "@/components/ExamRunner"
+import { TrackPageView } from "@/components/TrackPageView"
 import { hasFullAccess, getEffectiveTokenQuota } from "@/lib/permissions"
 import { getQuotaStatus } from "@/lib/aiQuota"
 import { buildStatsContext, type StatsContext } from "@/lib/aiStatsAnalysis"
@@ -118,6 +119,7 @@ export default async function TestPersonalizadoPage({ searchParams }: PageProps)
   if (!requested) {
     return (
       <div>
+        <TrackPageView event="personalized_test_started" />
         <Link href="/" className="back-link"><ChevronLeft className="h-4 w-4" /> Inicio</Link>
         <header className="page-header">
           <div>
