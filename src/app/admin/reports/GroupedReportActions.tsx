@@ -5,37 +5,39 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { toast } from "sonner"
 import { CheckCircle2, Wrench, Ban, Loader2, RotateCw, Pencil } from "lucide-react"
-import { updateReportStatusAction } from "./actions"
+import { bulkUpdateReportsForQuestionAction } from "./actions"
 import type { ReportStatus } from "@/lib/questionReports"
 
 interface Props {
-  reportId:       number
-  questionId:     number
-  currentStatus:  ReportStatus
+  questionId:    number
+  /** Cuántos reports de esta pregunta hay en el filtro actual.
+   *  Sirve para el texto del toast ("Cerrados N reports"). */
+  groupCount:    number
+  currentStatus: ReportStatus
 }
 
 /**
- * Botonera de acciones para una QuestionReport: cambiar status a
- * reviewed / fixed / dismissed (o devolver a pending si se cerró por error).
- * Llama a la server action updateReportStatusAction y muestra toast.
+ * Acciones bulk sobre todos los reports de UNA pregunta que estén en
+ * `currentStatus`. Llama a bulkUpdateReportsForQuestionAction, que
+ * usa updateMany internamente.
  *
- * Conexión con /admin/questions/[id]/edit:
- *   - Botón "Editar pregunta" siempre visible (lleva al editor en otra tab).
- *   - "Marcar fixed" navega automáticamente al editor de la pregunta tras
- *     marcar — porque "fixed" implica que el admin va a corregirla.
+ * Flujo "Marcar fixed": cierra los N a la vez + redirige al editor de
+ * la pregunta — el admin va a corregirla.
  */
-export function ReportActions({ reportId, questionId, currentStatus }: Props) {
+export function GroupedReportActions({ questionId, groupCount, currentStatus }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
-  function update(status: ReportStatus, label: string, opts?: { redirectToEditor?: boolean }) {
+  function bulk(nextStatus: ReportStatus, label: string, opts?: { redirectToEditor?: boolean }) {
     startTransition(async () => {
       const f = new FormData()
-      f.set("id",     String(reportId))
-      f.set("status", status)
-      const res = await updateReportStatusAction(f)
+      f.set("questionId",    String(questionId))
+      f.set("currentStatus", currentStatus)
+      f.set("nextStatus",    nextStatus)
+      const res = await bulkUpdateReportsForQuestionAction(f)
       if (res.ok) {
-        toast.success(label)
+        const suffix = res.count === 1 ? "incidencia" : "incidencias"
+        toast.success(`${label} (${res.count} ${suffix})`)
         if (opts?.redirectToEditor) {
           router.push(`/admin/questions/${questionId}/edit`)
         }
@@ -45,29 +47,27 @@ export function ReportActions({ reportId, questionId, currentStatus }: Props) {
     })
   }
 
-  // Si ya está cerrada, ofrecemos "Reabrir" + un acceso directo al editor
-  // (útil para revisitar la pregunta tras dismiss/fixed por si el admin
-  // quiere terminar de pulir).
+  // Si la card está en estado cerrado (no pending), ofrecemos reabrir.
   if (currentStatus !== "pending") {
     return (
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
         <Link
           href={`/admin/questions/${questionId}/edit`}
           className="btn-secondary"
-          style={{ padding: "6px 10px", fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 5 }}
+          style={btnStyle}
         >
           <Pencil className="h-3.5 w-3.5" />
           Editar pregunta
         </Link>
         <button
           type="button"
-          onClick={() => update("pending", "Reabierta")}
+          onClick={() => bulk("pending", `Reabiertas ${groupCount === 1 ? "" : "las "}incidencias`)}
           disabled={isPending}
           className="btn-secondary"
-          style={{ padding: "6px 10px", fontSize: 12.5 }}
+          style={btnStyle}
         >
           {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCw className="h-3.5 w-3.5" />}
-          Reabrir
+          Reabrir {groupCount > 1 ? `(${groupCount})` : ""}
         </button>
       </div>
     )
@@ -78,51 +78,54 @@ export function ReportActions({ reportId, questionId, currentStatus }: Props) {
       <Link
         href={`/admin/questions/${questionId}/edit`}
         className="btn-secondary"
-        style={{ padding: "6px 10px", fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 5 }}
+        style={btnStyle}
       >
         <Pencil className="h-3.5 w-3.5" />
         Editar pregunta
       </Link>
       <button
         type="button"
-        onClick={() => update("reviewed", "Marcada como revisada")}
+        onClick={() => bulk("reviewed", "Marcadas como revisadas")}
         disabled={isPending}
         className="btn-secondary"
-        style={{ padding: "6px 10px", fontSize: 12.5 }}
+        style={btnStyle}
       >
         <CheckCircle2 className="h-3.5 w-3.5" />
-        Marcar revisado
+        Marcar revisado {groupCount > 1 ? `(${groupCount})` : ""}
       </button>
       <button
         type="button"
-        onClick={() => update("fixed", "Marcada arreglada — abriendo editor", { redirectToEditor: true })}
+        onClick={() => bulk("fixed", "Marcadas arregladas — abriendo editor", { redirectToEditor: true })}
         disabled={isPending}
         className="btn-secondary"
         style={{
-          padding:    "6px 10px",
-          fontSize:   12.5,
+          ...btnStyle,
           background: "rgba(34, 197, 94, 0.08)",
           color:      "var(--green-d, #15803d)",
           border:     "1px solid rgba(34, 197, 94, 0.3)",
         }}
       >
         <Wrench className="h-3.5 w-3.5" />
-        Marcar fixed
+        Marcar fixed {groupCount > 1 ? `(${groupCount})` : ""}
       </button>
       <button
         type="button"
-        onClick={() => update("dismissed", "Descartada")}
+        onClick={() => bulk("dismissed", "Descartadas")}
         disabled={isPending}
         className="btn-secondary"
-        style={{
-          padding:    "6px 10px",
-          fontSize:   12.5,
-          color:      "var(--slate-600)",
-        }}
+        style={{ ...btnStyle, color: "var(--slate-600)" }}
       >
         <Ban className="h-3.5 w-3.5" />
-        Dismiss
+        Dismiss {groupCount > 1 ? `(${groupCount})` : ""}
       </button>
     </div>
   )
+}
+
+const btnStyle: React.CSSProperties = {
+  padding:    "6px 10px",
+  fontSize:   12.5,
+  display:    "inline-flex",
+  alignItems: "center",
+  gap:        5,
 }

@@ -9,7 +9,7 @@ import {
   reportTypeLabel,
   type ReportStatus,
 } from "@/lib/questionReports"
-import { ReportActions } from "./ReportActions"
+import { GroupedReportActions } from "./GroupedReportActions"
 
 export const dynamic = "force-dynamic"
 
@@ -164,132 +164,216 @@ export default async function AdminReportsPage({ searchParams }: PageProps) {
           </p>
         </div>
       ) : (
-        <div style={{ display: "grid", gap: 12 }}>
-          {reports.map((r) => {
-            const cat        = r.question.testQuestions[0]?.test.category
-            const slug       = questionToSlug({ id: r.question.id, enunciado: r.question.enunciado })
-            const questionUrl = cat ? `/preguntas/${cat.slug}/${slug}` : null
-            const user       = r.userId !== null ? userById.get(r.userId) : null
-            const userLabel  = user ? (user.displayName ?? user.username) : "Guest"
-            return (
-              <article
-                key={r.id}
-                className="card-soft"
-                style={{ padding: 18, display: "grid", gap: 10 }}
-              >
-                {/* Cabecera con tipo + fecha + status */}
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <span
-                    style={{
-                      display:      "inline-flex",
-                      alignItems:   "center",
-                      gap:          6,
-                      padding:      "3px 10px",
-                      borderRadius: 999,
-                      background:   "rgba(245, 158, 11, 0.10)",
-                      color:        "var(--amber-d, #92400e)",
-                      fontSize:     11.5,
-                      fontWeight:   800,
-                    }}
-                  >
-                    <AlertTriangle className="h-3.5 w-3.5" />
-                    {reportTypeLabel(r.type)}
-                  </span>
-                  <span style={{ fontSize: 12, color: "var(--slate-500)" }}>
-                    {formatDate(r.createdAt)}
-                  </span>
-                  <span style={{ marginLeft: "auto", fontSize: 11.5, color: "var(--slate-500)", fontWeight: 600 }}>
-                    #{r.id}
-                  </span>
-                </div>
+        (() => {
+          // ── Agrupamos los reports por questionId ─────────────────────
+          // Una sola card por pregunta con N incidencias acumuladas. Los
+          // reports ya vienen ordenados por createdAt DESC, así que la
+          // primera entrada de cada grupo es la más reciente — la usamos
+          // para la fecha mostrada en la cabecera.
+          type ReportRow = typeof reports[number]
+          interface Group {
+            questionId:    number
+            question:      ReportRow["question"]
+            items:         ReportRow[]
+            mostRecentAt:  Date
+            typeCounts:    Map<string, number>
+          }
+          const groupsMap = new Map<number, Group>()
+          for (const r of reports) {
+            const g = groupsMap.get(r.question.id)
+            if (g) {
+              g.items.push(r)
+              g.typeCounts.set(r.type, (g.typeCounts.get(r.type) ?? 0) + 1)
+              if (r.createdAt > g.mostRecentAt) g.mostRecentAt = r.createdAt
+            } else {
+              groupsMap.set(r.question.id, {
+                questionId:   r.question.id,
+                question:     r.question,
+                items:        [r],
+                mostRecentAt: r.createdAt,
+                typeCounts:   new Map([[r.type, 1]]),
+              })
+            }
+          }
+          const groups = Array.from(groupsMap.values())
+            .sort((a, b) => b.mostRecentAt.getTime() - a.mostRecentAt.getTime())
 
-                {/* Enunciado + link a la pregunta */}
-                <div>
-                  {questionUrl ? (
-                    <Link
-                      href={questionUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
+          return (
+            <div style={{ display: "grid", gap: 12 }}>
+              {groups.map((g) => {
+                const cat         = g.question.testQuestions[0]?.test.category
+                const slug        = questionToSlug({ id: g.question.id, enunciado: g.question.enunciado })
+                const questionUrl = cat ? `/preguntas/${cat.slug}/${slug}` : null
+                const count       = g.items.length
+                return (
+                  <article
+                    key={g.questionId}
+                    className="card-soft"
+                    style={{ padding: 18, display: "grid", gap: 10 }}
+                  >
+                    {/* Cabecera: contador grande + tipos distintos + fecha más reciente */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <span
+                        title={count === 1 ? "1 incidencia" : `${count} incidencias acumuladas sobre esta pregunta`}
+                        style={{
+                          display:      "inline-flex",
+                          alignItems:   "center",
+                          gap:          6,
+                          padding:      "3px 10px",
+                          borderRadius: 999,
+                          background:   count > 1 ? "rgba(239, 68, 68, 0.12)" : "rgba(245, 158, 11, 0.10)",
+                          color:        count > 1 ? "var(--red-600)" : "var(--amber-d, #92400e)",
+                          fontSize:     11.5,
+                          fontWeight:   800,
+                        }}
+                      >
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        {count === 1 ? "1 incidencia" : `${count} incidencias`}
+                      </span>
+                      {/* Chips de los tipos distintos */}
+                      {Array.from(g.typeCounts.entries()).map(([type, n]) => (
+                        <span
+                          key={type}
+                          style={{
+                            padding:      "2px 8px",
+                            borderRadius: 999,
+                            background:   "var(--slate-100)",
+                            color:        "var(--slate-700)",
+                            fontSize:     11,
+                            fontWeight:   700,
+                          }}
+                        >
+                          {reportTypeLabel(type)}{n > 1 ? ` ×${n}` : ""}
+                        </span>
+                      ))}
+                      <span style={{ fontSize: 12, color: "var(--slate-500)" }}>
+                        última: {formatDate(g.mostRecentAt)}
+                      </span>
+                      <span style={{ marginLeft: "auto", fontSize: 11.5, color: "var(--slate-500)", fontWeight: 600 }}>
+                        #{g.questionId}
+                      </span>
+                    </div>
+
+                    {/* Enunciado + meta */}
+                    <div>
+                      {questionUrl ? (
+                        <Link
+                          href={questionUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            fontSize:       15,
+                            fontWeight:     700,
+                            color:          "var(--orange-700, #c2410c)",
+                            textDecoration: "none",
+                            lineHeight:     1.4,
+                          }}
+                        >
+                          {g.question.enunciado}
+                        </Link>
+                      ) : (
+                        <span style={{ fontSize: 15, fontWeight: 700, color: "var(--slate-700)" }}>
+                          {g.question.enunciado}
+                        </span>
+                      )}
+                      <div style={{ fontSize: 11.5, color: "var(--slate-500)", marginTop: 4 }}>
+                        Pregunta #{g.question.id}
+                        {g.question.codigoTema && <> · {g.question.codigoTema}</>}
+                        {cat && <> · {cat.name}</>}
+                      </div>
+                    </div>
+
+                    {/* Lista de incidencias individuales del grupo */}
+                    <ul
                       style={{
-                        fontSize:       15,
-                        fontWeight:     700,
-                        color:          "var(--orange-700, #c2410c)",
-                        textDecoration: "none",
-                        lineHeight:     1.4,
+                        margin:       0,
+                        padding:      0,
+                        listStyle:    "none",
+                        display:      "grid",
+                        gap:          8,
+                        borderTop:    "1px dashed var(--slate-200)",
+                        paddingTop:   10,
                       }}
                     >
-                      {r.question.enunciado}
-                    </Link>
-                  ) : (
-                    <span style={{ fontSize: 15, fontWeight: 700, color: "var(--slate-700)" }}>
-                      {r.question.enunciado}
-                    </span>
-                  )}
-                  <div style={{ fontSize: 11.5, color: "var(--slate-500)", marginTop: 4 }}>
-                    Pregunta #{r.question.id}
-                    {r.question.codigoTema && <> · {r.question.codigoTema}</>}
-                    {cat && <> · {cat.name}</>}
-                  </div>
-                </div>
+                      {g.items.map((r) => {
+                        const user      = r.userId !== null ? userById.get(r.userId) : null
+                        const userLabel = user ? (user.displayName ?? user.username) : "Guest"
+                        return (
+                          <li
+                            key={r.id}
+                            style={{
+                              padding:      "8px 12px",
+                              borderRadius: 8,
+                              background:   "var(--slate-50, #f8fafc)",
+                              border:       "1px solid var(--slate-100)",
+                              display:      "grid",
+                              gap:          4,
+                              fontSize:     12.5,
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", color: "var(--slate-600)" }}>
+                              <span style={{ fontWeight: 700, color: "var(--slate-700)" }}>
+                                {reportTypeLabel(r.type)}
+                              </span>
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                                <UserIcon className="h-3 w-3" />
+                                {userLabel}
+                              </span>
+                              {r.guestEmail && (
+                                <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                                  <Mail className="h-3 w-3" />
+                                  <a href={`mailto:${r.guestEmail}`} style={{ color: "var(--slate-600)" }}>
+                                    {r.guestEmail}
+                                  </a>
+                                </span>
+                              )}
+                              <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--slate-400)" }}>
+                                {formatDate(r.createdAt)} · #{r.id}
+                              </span>
+                            </div>
+                            {r.comment && (
+                              <blockquote
+                                style={{
+                                  margin:     0,
+                                  padding:    "4px 0 0 10px",
+                                  borderLeft: "2px solid var(--slate-300)",
+                                  fontSize:   13,
+                                  lineHeight: 1.45,
+                                  color:      "var(--slate-700)",
+                                  whiteSpace: "pre-wrap",
+                                }}
+                              >
+                                {r.comment}
+                              </blockquote>
+                            )}
+                          </li>
+                        )
+                      })}
+                    </ul>
 
-                {/* Comentario (si lo hay) */}
-                {r.comment && (
-                  <blockquote
-                    style={{
-                      margin:       0,
-                      padding:      "10px 14px",
-                      background:   "var(--slate-50, #f8fafc)",
-                      borderLeft:   "3px solid var(--slate-300)",
-                      borderRadius: 8,
-                      fontSize:     13.5,
-                      lineHeight:   1.55,
-                      color:        "var(--slate-700)",
-                      whiteSpace:   "pre-wrap",
-                    }}
-                  >
-                    {r.comment}
-                  </blockquote>
-                )}
-
-                {/* Quién la reportó + acciones */}
-                <div
-                  style={{
-                    display:        "flex",
-                    alignItems:     "center",
-                    justifyContent: "space-between",
-                    gap:            12,
-                    flexWrap:       "wrap",
-                    fontSize:       12.5,
-                    color:          "var(--slate-600)",
-                    borderTop:      "1px solid var(--slate-100)",
-                    paddingTop:     10,
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-                      <UserIcon className="h-3.5 w-3.5" />
-                      {userLabel}
-                    </span>
-                    {r.guestEmail && (
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-                        <Mail className="h-3.5 w-3.5" />
-                        <a href={`mailto:${r.guestEmail}`} style={{ color: "var(--slate-600)" }}>
-                          {r.guestEmail}
-                        </a>
-                      </span>
-                    )}
-                  </div>
-
-                  <ReportActions
-                    reportId={r.id}
-                    questionId={r.question.id}
-                    currentStatus={filterStatus}
-                  />
-                </div>
-              </article>
-            )
-          })}
-        </div>
+                    {/* Acciones bulk sobre todas las incidencias del grupo */}
+                    <div
+                      style={{
+                        display:        "flex",
+                        justifyContent: "flex-end",
+                        gap:            12,
+                        flexWrap:       "wrap",
+                        borderTop:      "1px solid var(--slate-100)",
+                        paddingTop:     10,
+                      }}
+                    >
+                      <GroupedReportActions
+                        questionId={g.questionId}
+                        groupCount={count}
+                        currentStatus={filterStatus}
+                      />
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          )
+        })()
       )}
     </div>
   )

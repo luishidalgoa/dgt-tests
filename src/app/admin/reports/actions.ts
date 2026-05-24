@@ -6,6 +6,7 @@ import { requireAdmin } from "@/lib/adminGuard"
 import { isReportStatus, type ReportStatus } from "@/lib/questionReports"
 
 type ActionResult = { ok: true } | { ok: false; error: string }
+type BulkResult   = { ok: true; count: number } | { ok: false; error: string }
 
 /**
  * Cambia el status de una QuestionReport. El admin es el único que
@@ -40,4 +41,43 @@ export async function updateReportStatusAction(formData: FormData): Promise<Acti
   revalidatePath("/admin/reports")
   revalidatePath("/admin")
   return { ok: true }
+}
+
+/**
+ * Aplica un nuevo status a TODAS las incidencias de una pregunta que
+ * estén actualmente en `currentStatus`. Pensado para el flujo del
+ * dashboard agrupado: el admin ve una card por pregunta con N reports
+ * acumulados, y al pulsar (p.ej.) "Marcar fixed" cierra los N a la vez.
+ *
+ * `currentStatus` permite que la acción sea idempotente respecto al
+ * filtro mostrado: si la card está en la pestaña "Pendiente", solo
+ * cerramos los pending — no tocamos los que ya estaban revisados o
+ * fixed por otro flujo.
+ */
+export async function bulkUpdateReportsForQuestionAction(formData: FormData): Promise<BulkResult> {
+  const admin = await requireAdmin()
+
+  const questionId = Number(formData.get("questionId"))
+  if (!Number.isInteger(questionId) || questionId <= 0) {
+    return { ok: false, error: "questionId inválido" }
+  }
+  const rawCurrent = String(formData.get("currentStatus") ?? "")
+  const rawNext    = String(formData.get("nextStatus") ?? "")
+  if (!isReportStatus(rawCurrent)) return { ok: false, error: `currentStatus '${rawCurrent}' no válido` }
+  if (!isReportStatus(rawNext))    return { ok: false, error: `nextStatus '${rawNext}' no válido` }
+  const currentStatus: ReportStatus = rawCurrent
+  const nextStatus:    ReportStatus = rawNext
+
+  const { count } = await db.questionReport.updateMany({
+    where: { questionId, status: currentStatus },
+    data:  {
+      status:     nextStatus,
+      reviewedAt: nextStatus === "pending" ? null : new Date(),
+      reviewedBy: nextStatus === "pending" ? null : admin.id,
+    },
+  })
+
+  revalidatePath("/admin/reports")
+  revalidatePath("/admin")
+  return { ok: true, count }
 }
