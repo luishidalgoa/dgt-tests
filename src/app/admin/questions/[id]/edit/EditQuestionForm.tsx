@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 import Image from "next/image"
 import { toast } from "sonner"
 import { Save, Loader2, ImageIcon } from "lucide-react"
@@ -17,6 +18,11 @@ interface OptionData {
 
 interface Props {
   questionId: number
+  /** Si está, tras guardar con éxito hacemos router.push() a esa ruta.
+   *  Sirve para volver a /admin/reports cuando el admin llegó al
+   *  editor desde una incidencia reportada (?from=reports). Si es null,
+   *  el form se queda en la misma página tras guardar. */
+  redirectAfterSave?: string | null
   initial: {
     enunciado:   string
     explicacion: string
@@ -31,7 +37,8 @@ interface Props {
  * serializa las opciones a JSON (el form HTML no maneja bien arrays
  * anidados) y llama a updateQuestionAction.
  */
-export function EditQuestionForm({ questionId, initial }: Props) {
+export function EditQuestionForm({ questionId, redirectAfterSave, initial }: Props) {
+  const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [enunciado, setEnunciado]    = useState(initial.enunciado)
   const [explicacion, setExplicacion] = useState(initial.explicacion)
@@ -70,8 +77,18 @@ export function EditQuestionForm({ questionId, initial }: Props) {
       ))
       try {
         const res = await updateQuestionAction(f)
-        if (res.ok) toast.success("Cambios guardados — caché invalidada")
-        else        toast.error(res.error)
+        if (res.ok) {
+          toast.success(
+            redirectAfterSave === "/admin/reports"
+              ? "Cambios guardados — volviendo a incidencias"
+              : "Cambios guardados — caché invalidada"
+          )
+          if (redirectAfterSave) {
+            router.push(redirectAfterSave)
+          }
+        } else {
+          toast.error(res.error)
+        }
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Error inesperado")
       }

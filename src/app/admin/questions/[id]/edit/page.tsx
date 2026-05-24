@@ -9,7 +9,8 @@ import { EditQuestionForm } from "./EditQuestionForm"
 export const dynamic = "force-dynamic"
 
 interface PageProps {
-  params: Promise<{ id: string }>
+  params:       Promise<{ id: string }>
+  searchParams: Promise<{ from?: string }>
 }
 
 /**
@@ -18,9 +19,15 @@ interface PageProps {
  * Carga la pregunta + opciones + nombre de la categoría primaria (para
  * poder ofrecer un enlace "ver en sitio público"). El formulario es
  * cliente y llama a updateQuestionAction.
+ *
+ * Param `from`: cuando se entra al editor desde /admin/reports, el link
+ * añade `?from=reports`. El breadcrumb y el redirect post-guardado se
+ * ajustan a ese contexto para no romper el flujo del admin.
  */
-export default async function EditQuestionPage({ params }: PageProps) {
+export default async function EditQuestionPage({ params, searchParams }: PageProps) {
   const { id: idParam } = await params
+  const { from }        = await searchParams
+  const fromReports     = from === "reports"
   const id = parseInt(idParam, 10)
   if (!Number.isInteger(id) || id <= 0) notFound()
 
@@ -53,9 +60,13 @@ export default async function EditQuestionPage({ params }: PageProps) {
 
   return (
     <div>
-      <Link href="/admin/questions" className="back-link" style={{ marginBottom: 14 }}>
+      <Link
+        href={fromReports ? "/admin/reports" : "/admin/questions"}
+        className="back-link"
+        style={{ marginBottom: 14 }}
+      >
         <ChevronLeft className="h-4 w-4" />
-        Listado de preguntas
+        {fromReports ? "Incidencias reportadas" : "Listado de preguntas"}
       </Link>
 
       <h2 style={{ fontSize: 22, fontWeight: 800, marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
@@ -161,6 +172,7 @@ export default async function EditQuestionPage({ params }: PageProps) {
 
       <EditQuestionForm
         questionId={question.id}
+        redirectAfterSave={fromReports ? "/admin/reports" : null}
         initial={{
           enunciado:   question.enunciado,
           explicacion: question.explicacion,

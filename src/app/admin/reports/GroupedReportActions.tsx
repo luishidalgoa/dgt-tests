@@ -39,7 +39,7 @@ export function GroupedReportActions({ questionId, groupCount, currentStatus }: 
         const suffix = res.count === 1 ? "incidencia" : "incidencias"
         toast.success(`${label} (${res.count} ${suffix})`)
         if (opts?.redirectToEditor) {
-          router.push(`/admin/questions/${questionId}/edit`)
+          router.push(`/admin/questions/${questionId}/edit?from=reports`)
         }
       } else {
         toast.error(res.error)
@@ -52,7 +52,7 @@ export function GroupedReportActions({ questionId, groupCount, currentStatus }: 
     return (
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
         <Link
-          href={`/admin/questions/${questionId}/edit`}
+          href={`/admin/questions/${questionId}/edit?from=reports`}
           className="btn-secondary"
           style={btnStyle}
         >
@@ -76,7 +76,7 @@ export function GroupedReportActions({ questionId, groupCount, currentStatus }: 
   return (
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
       <Link
-        href={`/admin/questions/${questionId}/edit`}
+        href={`/admin/questions/${questionId}/edit?from=reports`}
         className="btn-secondary"
         style={btnStyle}
       >
