@@ -9,6 +9,7 @@ import {
   Tag as TagIcon,
   EyeOff,
   AlertCircle,
+  X,
 } from "lucide-react"
 import { LazyTileImage } from "./LazyTileImage"
 import { imageUrl } from "@/lib/imageUrl"
@@ -576,39 +577,94 @@ npm run images:upload-metadata`}</pre>
       </div>
 
       {/* Estilos responsive — un solo breakpoint a 1024px.
-            ≥ 1024px: sidebar sticky 260px + main grid (layout desktop original)
-            < 1024px: stack vertical + sidebar dentro de <details> colapsable
-                       (el "Filtros y categorías" actúa como botón de toggle)
-          El contenido es <details open> en SSR para que la primera vista en
-          tablet ya muestre los filtros; el usuario puede cerrarlos. */}
+            ≥ 1024px: sidebar sticky 260px + main grid (layout desktop)
+            < 1024px: drawer flotante lateral, abierto/cerrado vía checkbox
+                      (sin JS) con FAB fijo en la esquina + backdrop + close.
+          Truco CSS: `:root:has(.filters-cb:checked)` selecciona la raíz
+          cuando el checkbox está marcado → activa transformaciones en el
+          drawer y muestra el backdrop. Funciona en todos los browsers
+          modernos (:has() soportado desde Chrome 105/Firefox 121/Safari 15.4). */}
       <style dangerouslySetInnerHTML={{ __html: `
+        .filters-cb { position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; }
+        .filters-fab, .filters-backdrop, .filters-close-btn { display: none; }
         .images-bank-layout { display: grid; grid-template-columns: 260px 1fr; gap: 20px; align-items: start; }
         .images-bank-sidebar { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; padding-right: 8px; border-right: 1px solid var(--slate-100); }
-        .images-bank-sidebar-summary { display: none; }
-        .images-bank-sidebar > .images-bank-sidebar-inner { display: block; }
         @media (max-width: 1023px) {
           .images-bank-layout { grid-template-columns: 1fr; }
-          .images-bank-sidebar { position: static; max-height: none; overflow: visible; padding-right: 0; border-right: none; }
-          .images-bank-sidebar > .images-bank-sidebar-inner { display: none; }
-          .images-bank-sidebar[open] > .images-bank-sidebar-inner { display: block; padding-top: 12px; border-top: 1px solid var(--slate-200); margin-top: 10px; }
-          .images-bank-sidebar-summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; background: var(--slate-100); border-radius: 10px; font-size: 13px; font-weight: 700; color: var(--slate-700); cursor: pointer; list-style: none; }
-          .images-bank-sidebar-summary::-webkit-details-marker { display: none; }
-          .images-bank-sidebar-summary::after { content: "▾"; transition: transform 0.2s; font-size: 14px; }
-          .images-bank-sidebar[open] .images-bank-sidebar-summary::after { transform: rotate(180deg); }
+          .filters-fab {
+            display: inline-flex; align-items: center; gap: 8px;
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            z-index: 150;
+            padding: 12px 22px;
+            background: linear-gradient(135deg, var(--orange-500, #f97316), var(--red-600, #dc2626));
+            color: #fff;
+            border-radius: 999px;
+            font-size: 13.5px; font-weight: 800; letter-spacing: 0.02em;
+            box-shadow: 0 14px 28px -10px rgba(220, 38, 38, 0.55), 0 0 0 1px rgba(255,255,255,0.4);
+            cursor: pointer; user-select: none;
+          }
+          .filters-fab:hover { transform: translateX(-50%) translateY(-2px); }
+          .filters-backdrop {
+            position: fixed; inset: 0;
+            background: rgba(15, 23, 42, 0.5);
+            backdrop-filter: blur(2px);
+            z-index: 200;
+            cursor: pointer;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.25s;
+          }
+          .filters-close-btn {
+            display: flex; align-items: center; justify-content: center;
+            position: absolute; top: 12px; right: 12px;
+            width: 36px; height: 36px;
+            border-radius: 999px;
+            background: var(--slate-100); color: var(--slate-700);
+            cursor: pointer; z-index: 2;
+            border: 1px solid var(--slate-200);
+          }
+          .filters-close-btn:hover { background: var(--slate-200); }
+          .images-bank-sidebar {
+            position: fixed; top: 0; left: 0;
+            width: 320px; max-width: 88vw;
+            height: 100vh; max-height: 100vh;
+            background: #fff;
+            z-index: 201;
+            box-shadow: 12px 0 40px rgba(0,0,0,0.25);
+            transform: translateX(-100%);
+            transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow-y: auto;
+            padding: 56px 20px 24px;
+            border-right: none;
+          }
+          /* Drawer abierto (checkbox marcado) */
+          :root:has(.filters-cb:checked) .images-bank-sidebar { transform: translateX(0); }
+          :root:has(.filters-cb:checked) .filters-backdrop { opacity: 1; pointer-events: auto; }
+          /* Bloquear scroll del body cuando el drawer está abierto */
+          :root:has(.filters-cb:checked) body { overflow: hidden; }
         }
       `}} />
+
+      {/* Checkbox oculto que controla el estado del drawer. Junto a sus
+          labels (FAB para abrir, backdrop y close-btn para cerrar) forma
+          un toggle puro CSS — sin estado React, server-rendered, sin JS. */}
+      <input type="checkbox" id="filters-drawer-toggle" className="filters-cb" aria-label="Mostrar/ocultar filtros del banco de imágenes" />
+      <label htmlFor="filters-drawer-toggle" className="filters-backdrop" aria-hidden="true" />
+      <label htmlFor="filters-drawer-toggle" className="filters-fab" role="button" aria-label="Abrir filtros">
+        <TagIcon className="h-4 w-4" />
+        Filtros
+      </label>
 
       {/* Layout 2-columnas: sidebar sticky con filtros + main con grid */}
       <div className="images-bank-layout">
 
         {/* ────────────────────────────────────────────────────────────
-            SIDEBAR (izquierda en desktop, colapsable en móvil)
+            SIDEBAR (sticky en desktop, drawer flotante < 1024px)
             ──────────────────────────────────────────────────────────── */}
-        <details className="images-bank-sidebar" open>
-          <summary className="images-bank-sidebar-summary">
-            <span>Filtros y categorías</span>
-          </summary>
-          <div className="images-bank-sidebar-inner">
+        <aside className="images-bank-sidebar" aria-label="Filtros del banco">
+          {/* Botón cerrar — solo visible en mobile (CSS) */}
+          <label htmlFor="filters-drawer-toggle" className="filters-close-btn" role="button" aria-label="Cerrar filtros">
+            <X className="h-4 w-4" />
+          </label>
           {/* ── Filtros especiales ── */}
           <SidebarHeader>Filtros especiales</SidebarHeader>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 18 }}>
@@ -762,8 +818,7 @@ npm run images:upload-metadata`}</pre>
               )
             })()}
           </div>
-          </div>
-        </details>
+        </aside>
 
         {/* ────────────────────────────────────────────────────────────
             MAIN (derecha) — header + grid sin paginación
