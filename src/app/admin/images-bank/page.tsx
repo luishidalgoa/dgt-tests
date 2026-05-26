@@ -575,26 +575,40 @@ npm run images:upload-metadata`}</pre>
                  value={classification.stats?.averageConfidentPerImage ?? 0} />
       </div>
 
+      {/* Estilos responsive — un solo breakpoint a 1024px.
+            ≥ 1024px: sidebar sticky 260px + main grid (layout desktop original)
+            < 1024px: stack vertical + sidebar dentro de <details> colapsable
+                       (el "Filtros y categorías" actúa como botón de toggle)
+          El contenido es <details open> en SSR para que la primera vista en
+          tablet ya muestre los filtros; el usuario puede cerrarlos. */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        .images-bank-layout { display: grid; grid-template-columns: 260px 1fr; gap: 20px; align-items: start; }
+        .images-bank-sidebar { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; padding-right: 8px; border-right: 1px solid var(--slate-100); }
+        .images-bank-sidebar-summary { display: none; }
+        .images-bank-sidebar > .images-bank-sidebar-inner { display: block; }
+        @media (max-width: 1023px) {
+          .images-bank-layout { grid-template-columns: 1fr; }
+          .images-bank-sidebar { position: static; max-height: none; overflow: visible; padding-right: 0; border-right: none; }
+          .images-bank-sidebar > .images-bank-sidebar-inner { display: none; }
+          .images-bank-sidebar[open] > .images-bank-sidebar-inner { display: block; padding-top: 12px; border-top: 1px solid var(--slate-200); margin-top: 10px; }
+          .images-bank-sidebar-summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; background: var(--slate-100); border-radius: 10px; font-size: 13px; font-weight: 700; color: var(--slate-700); cursor: pointer; list-style: none; }
+          .images-bank-sidebar-summary::-webkit-details-marker { display: none; }
+          .images-bank-sidebar-summary::after { content: "▾"; transition: transform 0.2s; font-size: 14px; }
+          .images-bank-sidebar[open] .images-bank-sidebar-summary::after { transform: rotate(180deg); }
+        }
+      `}} />
+
       {/* Layout 2-columnas: sidebar sticky con filtros + main con grid */}
-      <div style={{
-        display:             "grid",
-        gridTemplateColumns: "260px 1fr",
-        gap:                 20,
-        alignItems:          "start",   // crítico para sticky sidebar
-      }}>
+      <div className="images-bank-layout">
 
         {/* ────────────────────────────────────────────────────────────
-            SIDEBAR (izquierda, sticky + internamente scrollable)
+            SIDEBAR (izquierda en desktop, colapsable en móvil)
             ──────────────────────────────────────────────────────────── */}
-        <aside style={{
-          position:    "sticky",
-          top:         16,
-          maxHeight:   "calc(100vh - 32px)",
-          overflowY:   "auto",
-          paddingRight: 8,
-          // Visual hint de que es scrollable interno
-          borderRight: "1px solid var(--slate-100)",
-        }}>
+        <details className="images-bank-sidebar" open>
+          <summary className="images-bank-sidebar-summary">
+            <span>Filtros y categorías</span>
+          </summary>
+          <div className="images-bank-sidebar-inner">
           {/* ── Filtros especiales ── */}
           <SidebarHeader>Filtros especiales</SidebarHeader>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 18 }}>
@@ -748,7 +762,8 @@ npm run images:upload-metadata`}</pre>
               )
             })()}
           </div>
-        </aside>
+          </div>
+        </details>
 
         {/* ────────────────────────────────────────────────────────────
             MAIN (derecha) — header + grid sin paginación
