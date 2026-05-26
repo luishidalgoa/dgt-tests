@@ -16,6 +16,7 @@ import { MaintenancePage } from "@/components/MaintenancePage"
 import { hasFullAccess } from "@/lib/permissions"
 import { Toaster } from "sonner"
 import { XpGainBubble } from "@/components/XpGainBubble"
+import { StreakDebugPanel } from "@/components/StreakDebugPanel"
 import "./globals.css"
 
 const inter = Inter({
@@ -281,6 +282,10 @@ export default async function RootLayout({
         {/* Bubble efímera de XP gained tras un examen real. Lee
             sessionStorage en cada cambio de ruta y se autodisparara. */}
         <XpGainBubble />
+        {/* Debug-only: panel flotante para inspeccionar todos los iconos
+            de racha en sus 3 estados. Solo admin + solo desktop (CSS
+            @media en el propio componente). */}
+        {isAdmin(user) && <StreakDebugPanel />}
       </body>
     </html>
   )

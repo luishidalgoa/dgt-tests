@@ -1,5 +1,5 @@
 import Image from "next/image"
-import { getLevel } from "@/lib/xp"
+import { getLevel } from "@/lib/xpLevels"
 import { StreakLevelEffect } from "./StreakLevelEffect"
 
 /**
