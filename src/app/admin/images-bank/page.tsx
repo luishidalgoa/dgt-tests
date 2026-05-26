@@ -594,10 +594,11 @@ npm run images:upload-metadata`}</pre>
           .filters-fab {
             display: inline-flex; align-items: center; gap: 8px;
             position: fixed;
-            /* Esquina inferior derecha + safe-area-inset (iOS home indicator,
-               toolbars de extensiones, etc.). Posición estándar FAB Material. */
-            right: 20px;
-            bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+            /* Centrado horizontalmente, elevado lo suficiente para no
+               chocar con la tabbar inferior móvil de la app (Inicio,
+               Competir, Stats, Historial, Más ≈ 64px) + safe-area iOS. */
+            left: 50%; transform: translateX(-50%);
+            bottom: calc(80px + env(safe-area-inset-bottom, 0px));
             z-index: 150;
             padding: 12px 22px;
             background: linear-gradient(135deg, var(--orange-500, #f97316), var(--red-600, #dc2626));
@@ -608,7 +609,7 @@ npm run images:upload-metadata`}</pre>
             cursor: pointer; user-select: none;
             transition: transform 0.15s, box-shadow 0.15s;
           }
-          .filters-fab:hover { transform: translateY(-2px); box-shadow: 0 18px 32px -10px rgba(220, 38, 38, 0.6), 0 0 0 1px rgba(255,255,255,0.4); }
+          .filters-fab:hover { transform: translateX(-50%) translateY(-2px); box-shadow: 0 18px 32px -10px rgba(220, 38, 38, 0.6), 0 0 0 1px rgba(255,255,255,0.4); }
           .filters-backdrop {
             position: fixed; inset: 0;
             background: rgba(15, 23, 42, 0.5);
