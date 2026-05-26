@@ -46,6 +46,10 @@ interface FilterPillBaseProps {
    *  para labels añadidos recientemente (lib `isLabelNew()` decide la
    *  ventana, por defecto 7 días). */
   isNew?:    boolean
+  /** Texto buscable (lowercase). Si presente, se añade como
+   *  `data-tag-search` al elemento root para que TagSearchInput pueda
+   *  filtrar los pills por substring match. */
+  searchText?: string
 }
 
 type FilterPillProps =
@@ -60,8 +64,9 @@ type FilterPillProps =
  *     filtros locales en useState).
  */
 export function FilterPill(props: FilterPillProps) {
-  const { label, count, subCount, active, color, icon, isNew } = props
+  const { label, count, subCount, active, color, icon, isNew, searchText } = props
   const baseStyle = pillBaseStyle(active, color)
+  const dataAttr = searchText ? { "data-tag-search": searchText.toLowerCase() } : {}
 
   const inner = (
     <>
@@ -106,9 +111,9 @@ export function FilterPill(props: FilterPillProps) {
   )
 
   if (props.href) {
-    return <Link href={props.href} style={baseStyle}>{inner}</Link>
+    return <Link href={props.href} style={baseStyle} {...dataAttr}>{inner}</Link>
   }
-  return <button type="button" onClick={props.onClick} style={baseStyle}>{inner}</button>
+  return <button type="button" onClick={props.onClick} style={baseStyle} {...dataAttr}>{inner}</button>
 }
 
 /** Style común para FilterPill — ambas variantes (Link y button). */
@@ -1052,6 +1057,128 @@ export function CardHashUpdater({ sha, children }: { sha: string; children: Reac
       style={{ display: "contents" }}
     >
       {children}
+    </div>
+  )
+}
+
+// ── TagSearchInput ─────────────────────────────────────────────────────
+
+/**
+ * Input de búsqueda que filtra los pills de tag del sidebar en vivo.
+ *
+ * Mecánica: al teclear, buscamos en el DOM todos los elementos con
+ * `[data-tag-search]` (los FilterPill que reciben prop `searchText`)
+ * y aplicamos `display: none` a los que no contengan el query como
+ * substring. Las cabeceras de categoría se ocultan también si todos
+ * sus pills están filtrados — el componente busca el contenedor
+ * inmediato del flex-wrap (su padre) y mira si queda algún pill visible.
+ *
+ * Por qué client-side DOM (vs filtrar en React): el sidebar es un Server
+ * Component server-rendered con la lista completa. Hacerlo client
+ * implicaría pasar todos los tags como prop + re-renderizar en cada
+ * tecla. Esta versión solo modifica `style.display` — sin re-renders
+ * de React. Rápido para los ~120 pills que tenemos.
+ */
+export function TagSearchInput() {
+  const [query, setQuery] = useState("")
+  const inputRef = useRef<HTMLInputElement | null>(null)
+
+  // Aplica el filtro al DOM cada vez que cambia query
+  useEffect(() => {
+    const root = document.querySelector(".images-bank-sidebar")
+    if (!root) return
+    const q = query.trim().toLowerCase()
+
+    const pills = root.querySelectorAll<HTMLElement>("[data-tag-search]")
+    let visibleCount = 0
+    pills.forEach((pill) => {
+      const text = pill.getAttribute("data-tag-search") ?? ""
+      const match = q === "" || text.includes(q)
+      pill.style.display = match ? "" : "none"
+      if (match) visibleCount++
+    })
+
+    // Ocultar cabeceras de categoría cuyas pills estén todas filtradas.
+    // Buscamos los wrappers de categoría — son divs que contienen al
+    // menos un [data-tag-search] descendiente.
+    const categoryHeaders = root.querySelectorAll<HTMLElement>("[data-tag-category]")
+    categoryHeaders.forEach((header) => {
+      const wrapper = header.parentElement
+      if (!wrapper) return
+      const anyVisible = Array.from(wrapper.querySelectorAll<HTMLElement>("[data-tag-search]"))
+        .some((p) => p.style.display !== "none")
+      wrapper.style.display = anyVisible ? "" : "none"
+    })
+
+    // Indicador opcional: mostrar/ocultar "sin resultados" tras input
+    const noResults = root.querySelector<HTMLElement>(".tag-search-noresults")
+    if (noResults) {
+      noResults.style.display = q !== "" && visibleCount === 0 ? "block" : "none"
+    }
+  }, [query])
+
+  return (
+    <div style={{ position: "relative", marginBottom: 10 }}>
+      <input
+        ref={inputRef}
+        type="search"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Buscar tag…"
+        aria-label="Buscar tags"
+        style={{
+          width: "100%",
+          padding: "7px 32px 7px 12px",
+          borderRadius: 8,
+          border: "1px solid var(--slate-300, #cbd5e1)",
+          background: "#fff",
+          fontSize: 12.5,
+          color: "var(--slate-700, #334155)",
+          outline: "none",
+          fontFamily: "inherit",
+          boxSizing: "border-box",
+        }}
+      />
+      {query && (
+        <button
+          type="button"
+          onClick={() => { setQuery(""); inputRef.current?.focus() }}
+          aria-label="Limpiar búsqueda"
+          style={{
+            position: "absolute",
+            right: 6,
+            top: "50%",
+            transform: "translateY(-50%)",
+            border: 0,
+            background: "var(--slate-200, #e2e8f0)",
+            borderRadius: "50%",
+            width: 18,
+            height: 18,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+            color: "var(--slate-600, #475569)",
+            fontSize: 11,
+            lineHeight: 1,
+            padding: 0,
+          }}
+        >
+          ×
+        </button>
+      )}
+      <div
+        className="tag-search-noresults"
+        style={{
+          display: "none",
+          marginTop: 6,
+          fontSize: 11.5,
+          color: "var(--slate-500, #64748b)",
+          fontStyle: "italic",
+        }}
+      >
+        Sin coincidencias
+      </div>
     </div>
   )
 }

@@ -30,7 +30,7 @@ import {
   type ShaAuditData,
   type DisplayEntry,
 } from "./lib"
-import { FilterPill, QualityPill, SortToggle, SidebarHeader, DateDivider, QuestionsListButton, NewImageBadge, SwipeableImageTile, ScrollToHashTarget, CardHashUpdater } from "./BankUi"
+import { FilterPill, QualityPill, SortToggle, SidebarHeader, DateDivider, QuestionsListButton, NewImageBadge, SwipeableImageTile, ScrollToHashTarget, CardHashUpdater, TagSearchInput } from "./BankUi"
 
 export const dynamic = "force-dynamic"
 
@@ -754,8 +754,9 @@ npm run images:upload-metadata`}</pre>
             />
           </div>
 
-          {/* ── Por tag (con sort toggle) ── */}
+          {/* ── Por tag (con búsqueda + sort toggle) ── */}
           <SidebarHeader>Por tag ({totalTagsCount})</SidebarHeader>
+          <TagSearchInput />
           <div style={{ display: "flex", gap: 3, marginBottom: 8 }}>
             <SortToggle
               active={sortDir === "desc"}
@@ -777,7 +778,7 @@ npm run images:upload-metadata`}</pre>
               if (tags.length === 0) return null
               return (
                 <div key={cat}>
-                  <div style={categoryHeaderStyle}>{cat}</div>
+                  <div data-tag-category={cat} style={categoryHeaderStyle}>{cat}</div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                     {tags.map(({ tag, count, confident }) => (
                       <FilterPill
@@ -788,6 +789,7 @@ npm run images:upload-metadata`}</pre>
                         href={buildFilterURL({ tag, sort: sortDir, quality: qualityFilter, gridsort: gridSort })}
                         active={tagFilter === tag}
                         isNew={isLabelNew(tag, discoveredMeta[tag]?.discoveredAt)}
+                        searchText={`${labelEs(tag)} ${tag} ${cat}`}
                       />
                     ))}
                   </div>
@@ -806,7 +808,7 @@ npm run images:upload-metadata`}</pre>
               if (orphans.length === 0) return null
               return (
                 <div>
-                  <div style={categoryHeaderStyle}>Otros (sin metadata)</div>
+                  <div data-tag-category="Otros" style={categoryHeaderStyle}>Otros (sin metadata)</div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                     {orphans.map(([tag, count]) => (
                       <FilterPill
@@ -817,6 +819,7 @@ npm run images:upload-metadata`}</pre>
                         href={buildFilterURL({ tag, sort: sortDir, quality: qualityFilter, gridsort: gridSort })}
                         active={tagFilter === tag}
                         isNew={isLabelNew(tag, discoveredMeta[tag]?.discoveredAt)}
+                        searchText={tag}
                       />
                     ))}
                   </div>
