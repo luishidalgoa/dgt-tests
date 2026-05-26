@@ -1,72 +1,92 @@
 /**
  * Quota mensual de tokens IA por usuario.
  *
- * Cada usuario tiene `aiTokensUsed` (cuántos ha gastado) y `aiTokensMonth`
- * (mes correspondiente a ese contador, formato "YYYY-MM"). Al cambiar de
- * mes natural el contador se resetea automáticamente.
+ * Modelo de renovación (anniversary-based, no calendar-month):
  *
- * El máximo depende del plan: 10 para usuarios FREE, 50 para SUBSCRIBER
+ *   1. FREE que NUNCA fue PRO → renueva en el aniversario mensual de
+ *      `createdAt`. Si el user se registró el día 15, renueva cada día 15.
+ *
+ *   2. PRO activo → renueva el día de billing de Stripe (sincronizado con
+ *      `subscriptionCurrentPeriodEnd`). Webhook `customer.subscription.updated`
+ *      mantiene el campo actualizado.
+ *
+ *   3. Ex-PRO (sub caducada) → renueva en el aniversario mensual de la
+ *      fecha de expiry. Webhook `customer.subscription.deleted` setea la
+ *      primera fecha (expiry + 1 mes).
+ *
+ * Persiste en `User.aiTokensRenewalAt`. Avanza lazy aquí cuando se accede
+ * y la fecha ya pasó (puede haber pasado mucho tiempo sin uso → bucle
+ * hasta encontrar la siguiente fecha futura).
+ *
+ * El máximo depende del plan: 10 para usuarios FREE, 50/60 para SUBSCRIBER
  * y ADMIN. Ver src/lib/permissions.ts.
  */
 
 import { db } from "@/lib/db"
 import { getEffectiveTokenQuota } from "@/lib/permissions"
 import { getAITokensFree, getAITokensPro } from "@/lib/configCatalog"
+import { addOneMonthUtc, advanceUntilFuture, computeInitialRenewal } from "@/lib/tokenRenewal"
 
 export interface AIQuotaStatus {
   used:        number
   max:         number
   remaining:   number
-  month:       string         // "YYYY-MM"
-  /** Fecha en la que se reseteará (1 del mes siguiente, 00:00 UTC). */
-  resetsAt:    string         // ISO
-}
-
-function currentMonthKey(date = new Date()): string {
-  const y = date.getUTCFullYear()
-  const m = String(date.getUTCMonth() + 1).padStart(2, "0")
-  return `${y}-${m}`
-}
-
-function nextMonthResetIso(): string {
-  const now = new Date()
-  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0))
-  return next.toISOString()
+  /** Fecha ISO en la que se reseteará el contador. */
+  resetsAt:    string
 }
 
 /**
- * Devuelve el estado actual de la quota del usuario, reseteando el contador
- * si ha cambiado el mes desde la última actualización.
+ * Devuelve el estado actual de la quota. Si la fecha de renovación ya pasó,
+ * resetea el contador y avanza la fecha al próximo aniversario futuro
+ * (todo en una sola UPDATE atómica).
+ *
+ * Lazy backfill: usuarios pre-existentes con `aiTokensRenewalAt = null`
+ * reciben su fecha calculada al primer acceso, sin necesidad de un job
+ * batch.
  */
 export async function getQuotaStatus(userId: number): Promise<AIQuotaStatus> {
-  const monthKey = currentMonthKey()
   const user = await db.user.findUnique({
     where: { id: userId },
     select: {
-      aiTokensUsed: true,
-      aiTokensMonth: true,
-      role: true,
-      subscriptionStatus: true,
+      aiTokensUsed:                 true,
+      aiTokensRenewalAt:            true,
+      role:                         true,
+      subscriptionStatus:           true,
+      subscriptionCurrentPeriodEnd: true,
+      createdAt:                    true,
     },
   })
   const max = await getEffectiveQuotaForUser(user)
   if (!user) {
-    return { used: 0, max, remaining: max, month: monthKey, resetsAt: nextMonthResetIso() }
+    return { used: 0, max, remaining: max, resetsAt: addOneMonthUtc(new Date()).toISOString() }
   }
-  // Si el mes guardado no coincide, lo reseteamos en disco
-  if (user.aiTokensMonth !== monthKey) {
+
+  const now = new Date()
+  const renewalAt: Date = user.aiTokensRenewalAt ?? computeInitialRenewal(user, now)
+
+  // Si ya pasó → reset + avanzar
+  if (now >= renewalAt) {
+    const next = advanceUntilFuture(renewalAt, now)
     await db.user.update({
       where: { id: userId },
-      data: { aiTokensUsed: 0, aiTokensMonth: monthKey },
+      data:  { aiTokensUsed: 0, aiTokensRenewalAt: next },
     })
-    return { used: 0, max, remaining: max, month: monthKey, resetsAt: nextMonthResetIso() }
+    return { used: 0, max, remaining: max, resetsAt: next.toISOString() }
   }
+
+  // Backfill silencioso si nunca se calculó
+  if (!user.aiTokensRenewalAt) {
+    await db.user.update({
+      where: { id: userId },
+      data:  { aiTokensRenewalAt: renewalAt },
+    })
+  }
+
   return {
     used:      user.aiTokensUsed,
     max,
     remaining: Math.max(0, max - user.aiTokensUsed),
-    month:     monthKey,
-    resetsAt:  nextMonthResetIso(),
+    resetsAt:  renewalAt.toISOString(),
   }
 }
 
@@ -79,7 +99,7 @@ export async function consumeToken(userId: number): Promise<AIQuotaStatus | null
 }
 
 /**
- * Intenta consumir N tokens de golpe (atómicamente, all-or-nothing).
+ * Intenta consumir N tokens (atómicamente, all-or-nothing).
  * Devuelve `null` si al usuario no le quedan N disponibles. Si sí, los
  * incrementa en una sola query y devuelve el estado actualizado.
  *
@@ -96,10 +116,10 @@ export async function consumeTokens(userId: number, n: number): Promise<AIQuotaS
     where: { id: userId },
     data:  { aiTokensUsed: { increment: n } },
     select: {
-      aiTokensUsed: true,
-      aiTokensMonth: true,
-      role: true,
-      subscriptionStatus: true,
+      aiTokensUsed:        true,
+      aiTokensRenewalAt:   true,
+      role:                true,
+      subscriptionStatus:  true,
     },
   })
   const max = await getEffectiveQuotaForUser(updated)
@@ -107,8 +127,7 @@ export async function consumeTokens(userId: number, n: number): Promise<AIQuotaS
     used:      updated.aiTokensUsed,
     max,
     remaining: Math.max(0, max - updated.aiTokensUsed),
-    month:     updated.aiTokensMonth,
-    resetsAt:  nextMonthResetIso(),
+    resetsAt:  (updated.aiTokensRenewalAt ?? new Date()).toISOString(),
   }
 }
 

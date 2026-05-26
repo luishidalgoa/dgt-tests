@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { LogOut, Settings, Sparkles, Crown, Shield } from "lucide-react"
 import { AI_QUOTA_CHANGED_EVENT, type MonthlyQuota } from "@/components/AIExplainPanel"
 import { getPlanBadgeMeta, type Plan } from "@/lib/planLinks"
+import { apiFetch } from "@/lib/apiClient"
 
 interface HeaderUserProps {
   username:           string
@@ -46,7 +47,7 @@ export function HeaderUser({ username, aiTokensRemaining, aiTokensMax, plan }: H
 
   function handleLogout() {
     startTransition(async () => {
-      await fetch("/api/auth/logout", { method: "POST" })
+      await apiFetch("/api/auth/logout", { method: "POST" })
       router.push("/login")
       router.refresh()
     })

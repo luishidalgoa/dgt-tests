@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { db } from "@/lib/db"
 import { getSession } from "@/lib/session"
 import { identifyUserInSentry } from "@/lib/sentryUser"
+import { computeRegistrationRenewal } from "@/lib/tokenRenewal"
 
 const BCRYPT_ROUNDS = 10
 
@@ -66,12 +67,18 @@ export async function createUser(opts: {
   }
 
   const passwordHash = await hashPassword(opts.password)
+  // aiTokensRenewalAt = createdAt + 1 mes desde el inicio. Como `createdAt`
+  // lo asigna Prisma con `@default(now())` y solo se conoce post-INSERT,
+  // anclamos al "ahora" del proceso de registro — la diferencia con el
+  // createdAt real es de milisegundos, irrelevante para una fecha mensual.
+  const now = new Date()
   return db.user.create({
     data: {
       username,
       email,
       passwordHash,
-      displayName: opts.displayName?.trim() || username,
+      displayName:       opts.displayName?.trim() || username,
+      aiTokensRenewalAt: computeRegistrationRenewal(now),
     },
   })
 }

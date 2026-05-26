@@ -18,6 +18,7 @@ import {
   REPORT_TYPES,
   type ReportType,
 } from "@/lib/questionReports"
+import { apiFetch } from "@/lib/apiClient"
 
 interface Props {
   questionId: number
@@ -75,10 +76,13 @@ export function QuestionReportButton({ questionId, isGuest = false, variant = "i
       const payload: Record<string, unknown> = { type }
       if (comment.trim())            payload.comment = comment.trim()
       if (isGuest && email.trim())   payload.guestEmail = email.trim()
-      const res = await fetch(`/api/questions/${questionId}/report`, {
+      const res = await apiFetch(`/api/questions/${questionId}/report`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify(payload),
+        // 400 = validación (comentario demasiado largo, email inválido).
+        // El form ya muestra el error inline — no es un bug.
+        ignoreStatus: [400],
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))

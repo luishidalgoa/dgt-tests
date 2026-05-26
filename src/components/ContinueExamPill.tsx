@@ -29,7 +29,9 @@ export function ContinueExamPill({ fallbackHref, fallbackLabel }: Props) {
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true)
+     
     setSaved(loadExamState())
     // Re-comprobar al volver a la pestaña (por si se finalizó en otra)
     const onFocus = () => setSaved(loadExamState())

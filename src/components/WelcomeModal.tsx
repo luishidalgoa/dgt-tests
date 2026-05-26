@@ -19,6 +19,7 @@ import {
 import { ackNotification } from "@/lib/client-acks"
 import { PRO_PRICE_LABEL } from "@/lib/pricing"
 import { AI_TOKENS_FREE, AI_TOKENS_PRO } from "@/lib/permissions"
+import { apiFetch } from "@/lib/apiClient"
 
 interface Props {
   /** Id de la notificación (siempre "welcome-v1" por ahora). */
@@ -74,7 +75,7 @@ export function WelcomeModal({ notificationId, username }: Props) {
     setErrorPro(null)
     setLoadingPro(true)
     try {
-      const res = await fetch("/api/checkout/session", { method: "POST" })
+      const res = await apiFetch("/api/checkout/session", { method: "POST" })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
         throw new Error(body.error ?? "No se pudo iniciar el checkout")

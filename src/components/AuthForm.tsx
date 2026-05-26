@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { AtSign, Eye, Lock, User } from "lucide-react"
 import { trackEvent } from "@/lib/analytics"
+import { apiFetch } from "@/lib/apiClient"
 
 interface AuthFormProps {
   mode: "login" | "register"
@@ -44,10 +45,14 @@ export function AuthForm({ mode }: AuthFormProps) {
         const payload = isLogin
           ? { identifier, password, remember }
           : { username: identifier, email, password, acceptTerms }
-        const res = await fetch(`/api/auth/${mode}`, {
+        const res = await apiFetch(`/api/auth/${mode}`, {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
           body:    JSON.stringify(payload),
+          // 400 = validación (username corto, email mal). Es flujo normal
+          // del form — el user verá el mensaje y corregirá. No queremos
+          // ruido en Sentry por cada typo.
+          ignoreStatus: [400],
         })
         if (!res.ok) {
           const body = await res.json().catch(() => ({}))

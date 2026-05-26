@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Loader2, LogIn } from "lucide-react"
+import { apiFetch } from "@/lib/apiClient"
 
 const CODE_LENGTH = 6
 const CODE_REGEX  = /^[A-Z0-9]{6}$/
@@ -27,7 +28,12 @@ export function JoinPartyForm() {
     }
     startTransition(async () => {
       try {
-        const res = await fetch(`/api/parties/${clean}`, { method: "GET" })
+        const res = await apiFetch(`/api/parties/${clean}`, {
+          method: "GET",
+          // 404 = código no existe → mostramos el error inline al user,
+          // NO es un bug que reportar a Sentry (los users tipean mal).
+          ignoreStatus: [404],
+        })
         if (res.status === 404) {
           setError("No existe ninguna party con ese código")
           return

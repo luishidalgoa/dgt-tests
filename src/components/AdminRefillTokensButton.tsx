@@ -4,6 +4,7 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Loader2, Shield, Check } from "lucide-react"
 import { AI_QUOTA_CHANGED_EVENT, type MonthlyQuota } from "@/components/AIExplainPanel"
+import { apiFetch } from "@/lib/apiClient"
 
 export function AdminRefillTokensButton() {
   const router = useRouter()
@@ -17,7 +18,7 @@ export function AdminRefillTokensButton() {
     setDone(false)
     setLoading(true)
     try {
-      const res = await fetch("/api/users/me/refill-tokens", { method: "POST" })
+      const res = await apiFetch("/api/users/me/refill-tokens", { method: "POST" })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error ?? "Error al recargar tokens")
       // Emite evento para que el chip del navbar se refresque en vivo

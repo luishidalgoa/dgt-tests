@@ -47,10 +47,22 @@ const editSchema = z.object({
   id:          z.number().int().positive(),
   enunciado:   z.string().min(10),
   explicacion: z.string().min(10),
+  // imagen es nullable en BBDD: null = sin imagen (la pregunta se
+  // muestra solo con texto). Si se pasa, debe ser un filename con ext.
+  // El picker del banco de imágenes siempre devuelve <sha>.<ext>.
+  imagen:      z.string().trim().max(255).nullable(),
   // Las opciones llegan serializadas como JSON en formData porque un
   // form HTML no maneja bien arrays anidados.
   optionsJson: z.string().min(2),
 })
+
+/** Convierte un FormData entry vacío o no-string a null. Util para
+ *  campos opcionales en BBDD (codigoTema, imagen). */
+function emptyToNull(v: FormDataEntryValue | null): string | null {
+  if (typeof v !== "string") return null
+  const t = v.trim()
+  return t.length === 0 ? null : t
+}
 
 const optionSchema = z.object({
   id:        z.number().int().positive(),
@@ -70,6 +82,7 @@ export async function editQuestionAction(formData: FormData): Promise<ActionResu
     id:          Number(formData.get("id")),
     enunciado:   String(formData.get("enunciado") ?? ""),
     explicacion: String(formData.get("explicacion") ?? ""),
+    imagen:      emptyToNull(formData.get("imagen")),
     optionsJson: String(formData.get("optionsJson") ?? ""),
   })
   if (!parsed.success) {
@@ -98,6 +111,7 @@ export async function editQuestionAction(formData: FormData): Promise<ActionResu
       data:  {
         enunciado:   parsed.data.enunciado,
         explicacion: parsed.data.explicacion,
+        imagen:      parsed.data.imagen,
       },
     })
     for (const o of validated) {

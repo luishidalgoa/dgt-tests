@@ -1,0 +1,50 @@
+# Dependencias del clasificador SigLIP. Instálalas en un venv aislado:
+#
+#   python -m venv .venv
+#   # Windows:
+#   .venv\Scripts\activate
+#   # macOS/Linux:
+#   source .venv/bin/activate
+#
+# IMPORTANTE — orden de instalación:
+#
+# Para evitar que pip intente bajar la versión CUDA gigante (~2 GB) cuando
+# NO tienes GPU NVIDIA, instala torch + torchvision PRIMERO con el index
+# de PyTorch CPU. Las dos deben venir del MISMO index para evitar
+# desalineación de versiones binarias:
+#
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+#   pip install -r requirements.txt
+#
+# Si tienes GPU NVIDIA y quieres aprovecharla, omite el --index-url y
+# pip elegirá los wheels con CUDA automáticamente (mucho más pesados).
+#
+# torchvision es necesario para el SiglipImageProcessorFast (preprocess
+# rápido en GPU/CPU). Sin él, transformers cae a la versión slow que
+# falla con SigLIP.
+
+torch>=2.0,<3.0
+torchvision>=0.18
+transformers>=4.40,<5.0
+Pillow>=10.0
+tqdm>=4.66
+# accelerate es opcional pero transformers lo recomienda para device
+# placement automático y mejora la carga del modelo.
+accelerate>=0.26
+# sentencepiece + protobuf — necesarios para el tokenizer de SigLIP (slow
+# tokenizer usa protobuf por debajo de sentencepiece). El fast tokenizer
+# (use_fast=True en classify_siglip.py) los esquiva, pero los dejamos por
+# compat con cualquier modelo SentencePiece-based.
+sentencepiece>=0.2
+protobuf>=4.0
+# aiohttp — necesario solo para find_replacements.py (Bing Visual Search).
+# Si solo vas a usar el classifier, podrías omitirlo.
+aiohttp>=3.9
+# google-genai — SDK oficial nuevo (reemplaza google-generativeai). Opcional:
+# si no está instalado, classify_siglip.py corre sin auto-discovery. Para
+# activarlo necesitas además GEMINI_API_KEY como env var.
+google-genai>=1.0
+# groq — SDK oficial de Groq (Llama 4 Scout multimodal). Funciona como
+# fallback de Gemini en classify_siglip.py: cuotas independientes →
+# robustez ante quota/503 de uno de los dos providers. Opcional.
+groq>=0.11

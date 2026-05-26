@@ -83,6 +83,7 @@ if (process.env.NODE_ENV !== "production") {
     "role",
     "aiTokensUsed",
     "aiTokensMonth",
+    "aiTokensRenewalAt",
     "stripeCustomerId",
     "subscriptionStatus",
     "acknowledgments",

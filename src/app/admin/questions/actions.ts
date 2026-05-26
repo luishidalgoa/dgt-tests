@@ -23,6 +23,9 @@ const editSchema = z.object({
   explicacion: z.string().trim().min(5,  "La explicación debe tener al menos 5 caracteres"),
   codigoTema:  z.string().trim().max(120).nullable(),
   imagen:      z.string().trim().max(255).nullable(),
+  // Coincide con enum `ContentTier` en schema.prisma. Default PRO si
+  // no se manda (compatibilidad con clientes que no lo envíen).
+  tier:        z.enum(["FREE", "PRO"]).default("PRO"),
   // optionsJson: array de { id, texto, isCorrect } serializado a JSON.
   optionsJson: z.string().min(2),
 })
@@ -57,6 +60,7 @@ export async function updateQuestionAction(formData: FormData): Promise<ActionRe
     explicacion: String(formData.get("explicacion") ?? ""),
     codigoTema:  emptyToNull(formData.get("codigoTema")),
     imagen:      emptyToNull(formData.get("imagen")),
+    tier:        String(formData.get("tier") ?? "PRO"),
     optionsJson: String(formData.get("optionsJson") ?? ""),
   })
   if (!parsed.success) {
@@ -105,6 +109,7 @@ export async function updateQuestionAction(formData: FormData): Promise<ActionRe
         explicacion:  parsed.data.explicacion,
         codigoTema:   parsed.data.codigoTema,
         imagen:       parsed.data.imagen,
+        tier:         parsed.data.tier,
         lastEditedAt: new Date(),
         lastEditedBy: admin.id,
       },

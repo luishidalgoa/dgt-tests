@@ -82,6 +82,69 @@ interface Category {
   scripts: ScriptDef[]
 }
 
+// ── Flujos compuestos ──────────────────────────────────────────────
+// Secuencias de comandos que se usan juntos (no son un solo npm script).
+// Se renderizan al final del help como bloques de receta listos para
+// copiar-pegar.
+interface Workflow {
+  title:       string
+  emoji:       string
+  description: string
+  steps:       { cmd: string; comment?: string }[]
+}
+
+const WORKFLOWS: Workflow[] = [
+  {
+    title:       "Primera vez tras clonar el repo",
+    emoji:       "🆕",
+    description: "Setup inicial del clasificador SigLIP (Python + torch + transformers). Solo una vez.",
+    steps: [
+      { cmd: "npm install",                       comment: "deps de Node.js" },
+      { cmd: "npm run images:setup-classifier",   comment: "crea venv, instala torch (CPU) + transformers + resto de deps Python" },
+      { cmd: "npm run images:download-r2",        comment: "baja las imágenes a public/images/ (si no las tienes)" },
+      { cmd: "npm run images:download-metadata",  comment: "baja los JSONs del banco desde R2 a tools/image-audit/" },
+    ],
+  },
+  {
+    title:       "Reanálisis del banco de imágenes (local — SigLIP en tu máquina)",
+    emoji:       "🔁",
+    description: "Ciclo completo cuando reentrenes/clasifiques con nuevo vocabulario o cambios en LABELS. Necesita setup local del classifier.",
+    steps: [
+      { cmd: "npm run images:download-metadata", comment: "baja swipes admin desde prod (no perder trabajo hecho en /admin/images-bank)" },
+      { cmd: "npm run images:classify",          comment: "corre el classifier SigLIP local respetando exclusiones/confirmaciones del admin" },
+      { cmd: "npm run images:upload-metadata",   comment: "publica nuevos JSONs a R2 → prod los lee al instante (sin redeploy)" },
+    ],
+  },
+  {
+    title:       "Reanálisis vía HuggingFace API (sin modelo local)",
+    emoji:       "🤗",
+    description: "Mismo ciclo pero usando la API de HF — sin torch/transformers en local. Más lento pero cero dependencias pesadas. Requiere HF_TOKEN en .env.",
+    steps: [
+      { cmd: "npm run images:download-metadata", comment: "baja swipes admin desde prod" },
+      { cmd: "npm run images:classify-hf",       comment: "clasifica via HF Inference API (≈1-3s/img). Etiquetas de labels.py, igual que el local." },
+      { cmd: "npm run images:upload-metadata",   comment: "publica nuevos JSONs a R2" },
+    ],
+  },
+  {
+    title:       "Migración masiva de imágenes a R2",
+    emoji:       "🚚",
+    description: "Limpieza completa del bucket + re-upload (raro — solo si cambias el esquema de nombres).",
+    steps: [
+      { cmd: "npm run images:clean-r2 -- --apply", comment: "borra todo el bucket (excepto meta/)" },
+      { cmd: "npm run images:upload-r2",            comment: "sube /public/images/ con sus nombres actuales" },
+    ],
+  },
+  {
+    title:       "Subida de cambios local → prod",
+    emoji:       "🚀",
+    description: "Sync de contenido (questions, opciones, tests) preservando datos de usuario, secrets y trabajo admin.",
+    steps: [
+      { cmd: "npm run turso:sync -- --dry-run", comment: "preview de qué se va a INSERT / UPDATE / SKIP" },
+      { cmd: "npm run turso:sync",              comment: "aplica el sync con defaults seguros" },
+    ],
+  },
+]
+
 // ── Catálogo ────────────────────────────────────────────────────────
 
 const CATEGORIES: Category[] = [
@@ -128,7 +191,24 @@ const CATEGORIES: Category[] = [
     emoji: "🌍",
     scripts: [
       { name: "turso:init", description: "Inicializa el schema en la BBDD Turso desde cero" },
-      { name: "turso:sync", description: "Aplica el schema actual de Prisma a Turso" },
+      {
+        name:        "turso:sync",
+        description: "Sincroniza local → Turso preservando datos de usuario, app_config y revisiones admin",
+        args: [
+          { name: "--dry-run",                type: "bool", default: "off", description: "Preview sin escribir (alias: -n)." },
+          { name: "--no-system-data",         type: "bool", default: "off", description: "Skip categories/tests/test_questions/manual_sections." },
+          { name: "--no-questions",           type: "bool", default: "off", description: "Skip questions + options." },
+          { name: "--no-ai-cache",            type: "bool", default: "off", description: "Skip ai_cache_entries." },
+          { name: "--no-admin-protection",    type: "bool", default: "off", description: "⚠ Sobrescribe questions editadas/aprobadas por admin." },
+          { name: "--include-user-data",      type: "bool", default: "off", description: "⚠ Sobrescribe users + exam_attempts + answers en prod." },
+          { name: "--include-app-config",     type: "bool", default: "off", description: "⚠ Sobrescribe secrets de prod con los de local." },
+        ],
+        examples: [
+          "npm run turso:sync                  # default seguro: sistema + questions (con protección) + ai-cache insert-only",
+          "npm run turso:sync -- --dry-run     # preview",
+          "npm run turso:sync -- --no-ai-cache # sync sistema + questions, sin tocar la caché IA",
+        ],
+      },
       {
         name:        "turso:apply-migration",
         description: "Aplica una migración SQL concreta a Turso",
@@ -287,13 +367,112 @@ const CATEGORIES: Category[] = [
     ],
   },
   {
+    title: "Banco de imágenes",
+    emoji: "🖼",
+    scripts: [
+      // ── Sync con R2 (CDN externo) ────────────────────────────────
+      {
+        name:        "images:download-r2",
+        description: "Descarga TODAS las imágenes del bucket R2 → /public/images/ (idempotente)",
+        args: [
+          { name: "FORCE", type: "env=1", default: "off", description: "Redescarga aunque exista local con mismo tamaño." },
+        ],
+        examples: [
+          "npm run images:download-r2",
+          "$env:FORCE = '1'; npm run images:download-r2   # PowerShell — force redescarga",
+        ],
+      },
+      { name: "images:upload-r2",  description: "Sube /public/images/ → bucket R2 (CDN externo, idempotente)" },
+      {
+        name:        "images:clean-r2",
+        description: "Borra TODAS las imágenes del bucket R2 (respeta el prefix meta/)",
+        args: [
+          { name: "--apply", type: "bool", default: "off", description: "Sin esto es dry-run. Pásalo para borrar de verdad." },
+        ],
+        examples: [
+          "npm run images:clean-r2                # preview",
+          "npm run images:clean-r2 -- --apply     # borra de verdad",
+        ],
+      },
+      {
+        name:        "images:upload-metadata",
+        description: "Sube tools/image-audit/*.json → bucket R2 bajo prefix meta/ (publica resultados del classifier)",
+      },
+      {
+        name:        "images:download-metadata",
+        description: "Baja meta/*.json desde R2 → tools/image-audit/ (incluye swipes admin hechos en prod)",
+      },
+
+      // ── Pipeline de análisis / clasificación ────────────────────
+      {
+        name:        "images:setup-classifier",
+        description: "Setup ONE-SHOT del clasificador: crea venv + instala torch/transformers/etc. (idempotente)",
+        examples: [
+          "npm run images:setup-classifier   # tras clonar el repo, antes del primer images:classify",
+        ],
+      },
+      {
+        name:        "images:audit-sha",
+        description: "Audita SHA-256 + cross-ref con Question.imagen → tools/image-audit/sha-audit.json",
+        args: [
+          { name: "IMAGES_DIR",   type: "env=path", default: "public/images",                       description: "Directorio a auditar." },
+          { name: "AUDIT_OUTPUT", type: "env=path", default: "tools/image-audit/sha-audit.json",    description: "Path JSON salida." },
+        ],
+      },
+      {
+        name:        "images:classify-hf",
+        description: "Clasifica via HuggingFace Inference API (sin torch/transformers local). Requiere HF_TOKEN en .env",
+        args: [
+          { name: "--input-dir <path>",  type: "string", default: "public/images",                       description: "Directorio de imgs." },
+          { name: "--output <path>",     type: "string", default: "tools/image-audit/classification.json", description: "JSON output." },
+          { name: "--threshold <N>",     type: "number", default: "0.5",                                  description: "Score mínimo para tag confident." },
+          { name: "--limit <N>",         type: "number", default: "0",                                    description: "Limitar a N imágenes (smoke test)." },
+          { name: "--skip-existing",     type: "bool",   default: "off",                                  description: "Salta SHAs que ya están en el JSON output." },
+        ],
+        examples: [
+          "npm run images:classify-hf -- --limit 10                         # smoke test 10 imgs",
+          "npm run images:classify-hf -- --skip-existing                     # incremental tras añadir nuevas imgs",
+        ],
+      },
+      {
+        name:        "images:classify",
+        description: "Clasifica multi-label con SigLIP + auto-discovery Gemini→Groq fallback (cache embeddings)",
+        args: [
+          { name: "--input-dir <path>",  type: "string",                description: "Carpeta de imgs (default: public/images)." },
+          { name: "--output <path>",     type: "string",                description: "JSON salida (default: tools/image-audit/classification.json)." },
+          { name: "--retry-problematic", type: "bool",   default: "off", description: "Re-procesa solo imgs sin tag confident." },
+          { name: "--retry-no-tags",     type: "bool",   default: "off", description: "Re-procesa solo imgs con 0 tags." },
+          { name: "--no-gemini",         type: "bool",   default: "off", description: "Desactiva Gemini auto-discovery." },
+          { name: "--no-groq",           type: "bool",   default: "off", description: "Desactiva Groq fallback." },
+          { name: "--no-cache",          type: "bool",   default: "off", description: "Desactiva cache de embeddings (re-codifica todo)." },
+          { name: "--no-vocab-check",    type: "bool",   default: "off", description: "Desactiva auto-detección de cambios en LABELS." },
+        ],
+        examples: [
+          "npm run images:classify                            # default: cache + auto-vocab-check",
+          "npm run images:classify -- --retry-problematic",
+          "npm run images:classify -- --no-gemini --no-groq   # solo SigLIP, sin AI fallback",
+        ],
+      },
+      {
+        name:        "images:find-replacements",
+        description: "Reverse image search vía Bing Visual Search API → public/images/candidates/ + candidates.json",
+        args: [
+          { name: "--candidates-per-image <N>", type: "number", default: "5",   description: "Candidatos por imagen origen." },
+          { name: "--limit <N>",                type: "number",                  description: "Procesa solo las primeras N (test)." },
+          { name: "--dry-run",                  type: "bool",   default: "off",  description: "Hace búsquedas pero NO descarga." },
+        ],
+        examples: [
+          "$env:BING_SEARCH_API_KEY = '...'; npm run images:find-replacements -- --limit 5 --dry-run",
+          "npm run images:find-replacements",
+        ],
+      },
+    ],
+  },
+  {
     title: "Datos y mantenimiento",
     emoji: "🛠",
     scripts: [
       { name: "ingest",            description: "Pipeline completo: seed BBDD + copy images + import manual" },
-      { name: "images:copy",       description: "Copia las imágenes del banco de preguntas a /public/images" },
-      { name: "images:upload-r2",  description: "Sube las imágenes a Cloudflare R2 (CDN externo)" },
-      { name: "images:setup-r2",   description: "Configura el bucket R2 (CORS, dominio público, etc.)" },
       {
         name:        "attempts:cleanup-orphan",
         description: "Borra exam_attempts sin answers (intentos abandonados)",
@@ -406,6 +585,18 @@ function printHelp(): void {
           console.log(`   ${c.gray}${"".padEnd(PAD_SCRIPT_NAME)}  ${c.cyan}${ex}${c.reset}`)
         }
       }
+    }
+    console.log()
+  }
+
+  // ── Flujos compuestos ───────────────────────────────────────────
+  console.log(`${c.bold}🧭 Flujos completos${c.reset}`)
+  console.log(`${c.gray}   Recetas multi-comando para tareas que combinan varios scripts.${c.reset}\n`)
+  for (const wf of WORKFLOWS) {
+    console.log(`${c.bold}${wf.emoji}  ${wf.title}${c.reset}`)
+    console.log(`   ${c.gray}${wf.description}${c.reset}`)
+    for (const step of wf.steps) {
+      console.log(`   ${c.cyan}${step.cmd}${c.reset}${step.comment ? `   ${c.gray}# ${step.comment}${c.reset}` : ""}`)
     }
     console.log()
   }

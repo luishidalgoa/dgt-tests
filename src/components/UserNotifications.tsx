@@ -28,9 +28,11 @@ export function UserNotifications({ pendingId, username }: Props) {
   // Hidratamos el flag de localStorage del lado cliente
   useEffect(() => {
     if (!pendingId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSkipLocal(null)
       return
     }
+     
     setSkipLocal(isLocallyAcked(pendingId))
   }, [pendingId])
 

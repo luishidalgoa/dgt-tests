@@ -14,17 +14,25 @@ vi.mock("@/lib/db", () => ({ db: dbMocks }))
 
 import { getQuotaStatus, consumeToken } from "./aiQuota"
 
+// Fecha de renovación en el futuro (no debe disparar reset durante los tests)
+const FUTURE_RENEWAL = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
 const proUser = {
-  aiTokensUsed: 0,
-  aiTokensMonth: new Date().toISOString().slice(0, 7),
-  role: "SUBSCRIBER",
-  subscriptionStatus: "active",
+  aiTokensUsed:                 0,
+  aiTokensMonth:                new Date().toISOString().slice(0, 7),  // legacy, no usado por la nueva lógica
+  aiTokensRenewalAt:            FUTURE_RENEWAL,
+  role:                         "SUBSCRIBER",
+  subscriptionStatus:           "active",
+  subscriptionCurrentPeriodEnd: FUTURE_RENEWAL,
+  createdAt:                    new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
 }
 const freeUser = {
-  aiTokensUsed: 0,
-  aiTokensMonth: new Date().toISOString().slice(0, 7),
-  role: "USER",
-  subscriptionStatus: null,
+  aiTokensUsed:                 0,
+  aiTokensMonth:                new Date().toISOString().slice(0, 7),
+  aiTokensRenewalAt:            FUTURE_RENEWAL,
+  role:                         "USER",
+  subscriptionStatus:           null,
+  subscriptionCurrentPeriodEnd: null,
+  createdAt:                    new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
 }
 
 describe("aiQuota — integración con AppConfig (Fase 92)", () => {

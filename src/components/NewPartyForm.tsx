@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Loader2, Swords } from "lucide-react"
+import { apiFetch } from "@/lib/apiClient"
 
 interface Cat { id: number; name: string; slug: string }
 
@@ -20,7 +21,7 @@ export function NewPartyForm({ categories }: { categories: Cat[] }) {
     setError(null)
     startTransition(async () => {
       try {
-        const res = await fetch("/api/parties", {
+        const res = await apiFetch("/api/parties", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body:    JSON.stringify({ categoryId, totalQuestions: numQuestions }),

@@ -20,14 +20,41 @@ interface PageProps {
  * poder ofrecer un enlace "ver en sitio público"). El formulario es
  * cliente y llama a updateQuestionAction.
  *
- * Param `from`: cuando se entra al editor desde /admin/reports, el link
- * añade `?from=reports`. El breadcrumb y el redirect post-guardado se
- * ajustan a ese contexto para no romper el flujo del admin.
+ * Param `from`: el editor reconoce varios orígenes para ajustar el
+ * breadcrumb y el redirect post-guardado:
+ *   - `?from=reports`      → vuelve a /admin/reports
+ *   - `?from=ai-questions` → vuelve a /admin/ai-questions
+ *   - (ausente)            → se queda en la misma página tras guardar
  */
+function resolveOrigin(from: string | undefined): {
+  href:   string
+  label:  string
+  redirectAfterSave: string | null
+} | null {
+  if (from === "reports") {
+    return {
+      href:              "/admin/reports",
+      label:             "Incidencias reportadas",
+      redirectAfterSave: "/admin/reports",
+    }
+  }
+  if (from === "ai-questions") {
+    return {
+      href:              "/admin/ai-questions",
+      label:             "Preguntas IA aprobadas",
+      redirectAfterSave: "/admin/ai-questions",
+    }
+  }
+  return null
+}
+
 export default async function EditQuestionPage({ params, searchParams }: PageProps) {
   const { id: idParam } = await params
   const { from }        = await searchParams
-  const fromReports     = from === "reports"
+  const origin          = resolveOrigin(from)
+  const backHref        = origin?.href              ?? "/admin/questions"
+  const backLabel       = origin?.label             ?? "Listado de preguntas"
+  const redirectAfterSave = origin?.redirectAfterSave ?? null
   const id = parseInt(idParam, 10)
   if (!Number.isInteger(id) || id <= 0) notFound()
 
@@ -61,12 +88,12 @@ export default async function EditQuestionPage({ params, searchParams }: PagePro
   return (
     <div>
       <Link
-        href={fromReports ? "/admin/reports" : "/admin/questions"}
+        href={backHref}
         className="back-link"
         style={{ marginBottom: 14 }}
       >
         <ChevronLeft className="h-4 w-4" />
-        {fromReports ? "Incidencias reportadas" : "Listado de preguntas"}
+        {backLabel}
       </Link>
 
       <h2 style={{ fontSize: 22, fontWeight: 800, marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
@@ -172,12 +199,13 @@ export default async function EditQuestionPage({ params, searchParams }: PagePro
 
       <EditQuestionForm
         questionId={question.id}
-        redirectAfterSave={fromReports ? "/admin/reports" : null}
+        redirectAfterSave={redirectAfterSave}
         initial={{
           enunciado:   question.enunciado,
           explicacion: question.explicacion,
           codigoTema:  question.codigoTema ?? "",
           imagen:      question.imagen ?? "",
+          tier:        question.tier,
           options:     question.options.map((o) => ({
             id:        o.id,
             letra:     o.letra,

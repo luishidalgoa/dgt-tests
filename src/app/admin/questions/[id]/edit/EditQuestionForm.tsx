@@ -4,10 +4,11 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
 import { toast } from "sonner"
-import { Save, Loader2, ImageIcon } from "lucide-react"
+import { Save, Loader2, ImageIcon, Lock, Unlock } from "lucide-react"
 import { imageUrl } from "@/lib/imageUrl"
 import { updateQuestionAction } from "../../actions"
 import { AISuggestPanel } from "./AISuggestPanel"
+import { ImageBankPickerButton } from "@/app/admin/images-bank/ImageBankPicker"
 
 interface OptionData {
   id:        number
@@ -15,6 +16,11 @@ interface OptionData {
   texto:     string
   isCorrect: boolean
 }
+
+/** Mismo enum que `ContentTier` en Prisma. Mantenido aquí como union
+ *  literal en vez de import porque el cliente no debe arrastrar el
+ *  bundle de Prisma. */
+type Tier = "FREE" | "PRO"
 
 interface Props {
   questionId: number
@@ -28,6 +34,7 @@ interface Props {
     explicacion: string
     codigoTema:  string
     imagen:      string
+    tier:        Tier
     options:     OptionData[]
   }
 }
@@ -44,6 +51,7 @@ export function EditQuestionForm({ questionId, redirectAfterSave, initial }: Pro
   const [explicacion, setExplicacion] = useState(initial.explicacion)
   const [codigoTema, setCodigoTema]  = useState(initial.codigoTema)
   const [imagen, setImagen]          = useState(initial.imagen)
+  const [tier, setTier]              = useState<Tier>(initial.tier)
   const [options, setOptions]        = useState<OptionData[]>(initial.options)
 
   function setCorrect(idx: number) {
@@ -72,6 +80,7 @@ export function EditQuestionForm({ questionId, redirectAfterSave, initial }: Pro
       f.set("explicacion", explicacion)
       f.set("codigoTema", codigoTema)
       f.set("imagen", imagen)
+      f.set("tier", tier)
       f.set("optionsJson", JSON.stringify(
         options.map((o) => ({ id: o.id, texto: o.texto, isCorrect: o.isCorrect }))
       ))
@@ -79,9 +88,9 @@ export function EditQuestionForm({ questionId, redirectAfterSave, initial }: Pro
         const res = await updateQuestionAction(f)
         if (res.ok) {
           toast.success(
-            redirectAfterSave === "/admin/reports"
-              ? "Cambios guardados — volviendo a incidencias"
-              : "Cambios guardados — caché invalidada"
+            redirectAfterSave === "/admin/reports"      ? "Cambios guardados — volviendo a incidencias" :
+            redirectAfterSave === "/admin/ai-questions" ? "Cambios guardados — volviendo a IA aprobadas" :
+                                                          "Cambios guardados — caché invalidada"
           )
           if (redirectAfterSave) {
             router.push(redirectAfterSave)
@@ -120,16 +129,73 @@ export function EditQuestionForm({ questionId, redirectAfterSave, initial }: Pro
         />
       </Field>
 
+      {/* Tier (FREE / PRO) */}
+      <Field
+        label="Acceso (tier)"
+        hint="FREE: visible a usuarios sin suscripción. PRO: requiere suscripción activa (o ser ADMIN). Por defecto las preguntas son PRO; marcar FREE solo las que pertenezcan a los tests gratuitos."
+      >
+        <div style={{ display: "flex", gap: 8 }}>
+          <TierToggle
+            value="FREE"
+            current={tier}
+            onChange={setTier}
+            disabled={isPending}
+            label="Gratuita"
+            description="Visible sin suscripción"
+            icon={<Unlock className="h-3.5 w-3.5" />}
+            color="green"
+          />
+          <TierToggle
+            value="PRO"
+            current={tier}
+            onChange={setTier}
+            disabled={isPending}
+            label="Pro"
+            description="Requiere suscripción"
+            icon={<Lock className="h-3.5 w-3.5" />}
+            color="orange"
+          />
+        </div>
+      </Field>
+
       {/* Imagen */}
       <Field label="Imagen (filename)" hint="Solo el nombre del archivo (p.ej. 320671.png). Se resuelve vía imageUrl() según CDN o /public/images.">
-        <input
-          type="text"
-          value={imagen}
-          onChange={(e) => setImagen(e.target.value)}
-          disabled={isPending}
-          placeholder="320671.png"
-          style={inputStyle}
-        />
+        <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
+          <input
+            type="text"
+            value={imagen}
+            onChange={(e) => setImagen(e.target.value)}
+            disabled={isPending}
+            placeholder="320671.png"
+            style={{ ...inputStyle, flex: 1 }}
+          />
+          <ImageBankPickerButton
+            onSelect={(filename) => setImagen(filename)}
+            disabled={isPending}
+            canWriteTagFeedback
+          />
+          {imagen.trim().length > 0 && (
+            <button
+              type="button"
+              onClick={() => setImagen("")}
+              disabled={isPending}
+              title="Quitar imagen"
+              style={{
+                padding:      "8px 12px",
+                borderRadius: 8,
+                border:       "1.5px solid var(--slate-200)",
+                background:   "#fff",
+                color:        "var(--red-600)",
+                fontWeight:   600,
+                fontSize:     12.5,
+                cursor:       isPending ? "not-allowed" : "pointer",
+                opacity:      isPending ? 0.5 : 1,
+              }}
+            >
+              Quitar
+            </button>
+          )}
+        </div>
         {imagen.trim().length > 0 && (
           <div style={{
             marginTop:    10,
@@ -229,6 +295,78 @@ export function EditQuestionForm({ questionId, redirectAfterSave, initial }: Pro
         </button>
       </div>
     </div>
+  )
+}
+
+/**
+ * Toggle estilo card grande para elegir entre FREE / PRO. Dos botones
+ * exclusivos (radio behavior). Cuando uno está seleccionado se ilumina
+ * con su color semántico (verde=FREE, naranja=PRO).
+ */
+function TierToggle({ value, current, onChange, disabled, label, description, icon, color }: {
+  value:       Tier
+  current:     Tier
+  onChange:    (v: Tier) => void
+  disabled:    boolean
+  label:       string
+  description: string
+  icon:        React.ReactNode
+  color:       "green" | "orange"
+}) {
+  const active = current === value
+  const accent = color === "green" ? "var(--green-d)" : "var(--orange-600)"
+  const bg     = color === "green" ? "rgba(34, 197, 94, 0.10)" : "rgba(234, 88, 12, 0.10)"
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      onClick={() => onChange(value)}
+      disabled={disabled}
+      style={{
+        flex:         1,
+        padding:      "10px 12px",
+        borderRadius: 10,
+        border:       active ? `2px solid ${accent}` : "1.5px solid var(--slate-200)",
+        background:   active ? bg : "#fff",
+        cursor:       disabled ? "not-allowed" : "pointer",
+        opacity:      disabled ? 0.6 : 1,
+        textAlign:    "left",
+        display:      "flex",
+        flexDirection: "column",
+        gap:          4,
+        transition:   "border-color 0.15s, background 0.15s",
+      }}
+    >
+      <div style={{
+        display:     "flex",
+        alignItems:  "center",
+        gap:         6,
+        fontSize:    13,
+        fontWeight:  700,
+        color:       active ? accent : "var(--slate-700)",
+      }}>
+        {icon}
+        {label}
+        <span
+          className="font-mono-tabular"
+          style={{
+            marginLeft:   "auto",
+            fontSize:     10,
+            fontWeight:   800,
+            padding:      "1px 6px",
+            borderRadius: 4,
+            background:   active ? accent : "var(--slate-100)",
+            color:        active ? "#fff" : "var(--slate-500)",
+          }}
+        >
+          {value}
+        </span>
+      </div>
+      <div style={{ fontSize: 11.5, color: "var(--slate-500)" }}>
+        {description}
+      </div>
+    </button>
   )
 }
 

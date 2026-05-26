@@ -14,6 +14,7 @@ import {
   ChevronLeft,
 } from "lucide-react"
 import type { PartyState } from "@/lib/party"
+import { apiFetch } from "@/lib/apiClient"
 
 interface Props {
   code:             string
@@ -38,7 +39,13 @@ export function PartyLobby({ code, isAuthenticated, isMember: initialIsMember, m
 
     async function tick() {
       try {
-        const res = await fetch(`/api/parties/${code}`, { cache: "no-store" })
+        const res = await apiFetch(`/api/parties/${code}`, {
+          cache: "no-store",
+          // 404 = party borrada / código inválido — flujo esperado durante
+          // el polling (no es bug). Sin esto, cada poll fallido en partys
+          // expiradas fire un Sentry warning cada 2s = ruido.
+          ignoreStatus: [404],
+        })
         if (!res.ok) {
           if (alive) setError("Party no encontrada")
           return
@@ -77,10 +84,12 @@ export function PartyLobby({ code, isAuthenticated, isMember: initialIsMember, m
   const joinAsUser = () => {
     startTransition(async () => {
       try {
-        const res = await fetch(`/api/parties/${code}/join`, {
+        const res = await apiFetch(`/api/parties/${code}/join`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body:    "{}",
+          // 400 = party llena / ya empezada. El UI muestra el error al user.
+          ignoreStatus: [400],
         })
         if (!res.ok) {
           const body = await res.json().catch(() => ({}))
@@ -97,10 +106,12 @@ export function PartyLobby({ code, isAuthenticated, isMember: initialIsMember, m
     e.preventDefault()
     startTransition(async () => {
       try {
-        const res = await fetch(`/api/parties/${code}/join`, {
+        const res = await apiFetch(`/api/parties/${code}/join`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body:    JSON.stringify({ guestName: guestName.trim() }),
+          // Igual que el otro join: 400 = party llena/ya empezada. UX normal.
+          ignoreStatus: [400],
         })
         if (!res.ok) {
           const body = await res.json().catch(() => ({}))
@@ -116,8 +127,10 @@ export function PartyLobby({ code, isAuthenticated, isMember: initialIsMember, m
   const startGame = () => {
     startTransition(async () => {
       try {
-        const res = await fetch(`/api/parties/${code}`, {
+        const res = await apiFetch(`/api/parties/${code}`, {
           method: "POST",
+          // 400 = no eres host / menos de 2 jugadores. UX espera el error.
+          ignoreStatus: [400],
         })
         if (!res.ok) {
           const body = await res.json().catch(() => ({}))

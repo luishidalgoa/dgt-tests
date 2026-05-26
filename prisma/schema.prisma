@@ -34,7 +34,18 @@ model User {
   // ── Quota mensual de tokens IA (Gemini). aiTokensMonth = "YYYY-MM".
   //    Al cambiar de mes, se resetea a 0.
   aiTokensUsed    Int           @default(0)
+  /// LEGACY (mantenido por compat) — usado por la lógica anterior basada
+  /// en mes natural ("YYYY-MM"). Reemplazado por aiTokensRenewalAt; ya no
+  /// se actualiza en escritura, solo se lee si aiTokensRenewalAt es null.
   aiTokensMonth   String        @default("")
+  /// Próxima fecha en la que se renovarán los tokens del usuario.
+  ///   - FREE que NUNCA fue PRO: aniversario mensual de createdAt
+  ///   - PRO activo: subscriptionCurrentPeriodEnd (avanza con cada billing)
+  ///   - Ex-PRO (sub caducada): aniversario mensual de la fecha de expiry
+  /// Actualizado por los webhooks de Stripe (created/updated/deleted) y
+  /// avanzado lazy en aiQuota.ts cuando se accede al endpoint si la fecha
+  /// ya pasó. Ver src/lib/aiQuota.ts.
+  aiTokensRenewalAt DateTime?
   // ── Stripe (gestionado por el webhook, no tocar a mano) ─────────────
   stripeCustomerId             String?   @unique
   stripeSubscriptionId         String?   @unique

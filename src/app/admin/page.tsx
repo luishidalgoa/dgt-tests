@@ -1,10 +1,11 @@
 import Link from "next/link"
 import { getConfig } from "@/lib/appConfig"
 import { CONFIG_CATALOG, type ConfigEntry, type ConfigCategory } from "@/lib/configCatalog"
+import { getEffectiveSecret } from "@/lib/secretCatalog"
 import { db } from "@/lib/db"
 import { QUESTION_APPROVED_AI_WHERE, QUESTION_PENDING_REVIEW_WHERE } from "@/lib/questions"
 import { ConfigForm } from "./ConfigForm"
-import { Sliders, ToggleLeft, MessageSquareText, Sparkles, ListChecks, ArrowRight, Pencil, MessageSquareWarning, BarChart3, Bug, ExternalLink } from "lucide-react"
+import { Sliders, ToggleLeft, MessageSquareText, Sparkles, ListChecks, ArrowRight, Pencil, MessageSquareWarning, BarChart3, Bug, Cloud, ExternalLink, Image as ImageIcon } from "lucide-react"
 
 export const dynamic = "force-dynamic"
 
@@ -32,6 +33,18 @@ export default async function AdminPage() {
   const approvedAiCount     = await db.question.count({ where: QUESTION_APPROVED_AI_WHERE })
   const totalQuestions      = await db.question.count()
   const pendingReportsCount = await db.questionReport.count({ where: { status: "pending" } })
+
+  // URL al bucket R2 — la construimos en render leyendo los secrets para
+  // que se mantenga sincronizada con la config actual. Si falta cualquiera
+  // de los dos, fallback al overview general de R2 (Cloudflare resolverá
+  // el `:account` automáticamente al estar logueado).
+  const [r2AccountId, r2BucketName] = await Promise.all([
+    getEffectiveSecret("R2_ACCOUNT_ID"),
+    getEffectiveSecret("R2_BUCKET_NAME"),
+  ])
+  const r2BucketUrl = r2AccountId && r2BucketName
+    ? `https://dash.cloudflare.com/${r2AccountId}/r2/default/buckets/${r2BucketName}`
+    : "https://dash.cloudflare.com/?to=/:account/r2/overview"
 
   const groups: { category: ConfigCategory; title: string; icon: React.ReactNode; entries: ConfigEntry[] }[] = [
     {
@@ -100,6 +113,12 @@ export default async function AdminPage() {
             description="Reportes de usuarios sobre preguntas con errata, imagen rota, opciones repetidas, etc."
             badge={pendingReportsCount > 0 ? `${pendingReportsCount} pendientes` : undefined}
           />
+          <AdminLinkCard
+            href="/admin/images-bank"
+            icon={<ImageIcon className="h-5 w-5" />}
+            title="Banco de imágenes (dev)"
+            description="Vista del banco clasificado por SigLIP — filtra por tag o por imágenes sin clasificar. Solo funciona en local con sanitize/ poblado."
+          />
         </div>
       </section>
 
@@ -123,6 +142,16 @@ export default async function AdminPage() {
             icon={<Bug className="h-5 w-5" />}
             title="Sentry · Errores"
             description="Stack traces de errores en producción, agrupados por tipo. Filtra por environment=production para ver lo real."
+          />
+          <AdminExternalCard
+            href={r2BucketUrl}
+            icon={<Cloud className="h-5 w-5" />}
+            title="Cloudflare R2 · Bucket"
+            description={
+              r2AccountId && r2BucketName
+                ? `Imágenes del banco DGT. Bucket "${r2BucketName}" — ver objects, métricas de uso y configuración del CDN público.`
+                : "Configura R2_ACCOUNT_ID y R2_BUCKET_NAME en /admin/secrets para enlace directo al bucket. Por ahora abre el overview de R2."
+            }
           />
         </div>
       </section>

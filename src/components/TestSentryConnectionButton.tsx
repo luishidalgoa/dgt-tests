@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { toast } from "sonner"
 import { Loader2, Plug, ExternalLink } from "lucide-react"
+import { apiFetch } from "@/lib/apiClient"
 
 interface Props {
   /** Texto legible para los toasts. */
@@ -32,7 +33,7 @@ export function TestSentryConnectionButton({ label = "Sentry" }: Props) {
   async function handleClick() {
     setLoading(true)
     try {
-      const res = await fetch("/api/admin/test-sentry", {
+      const res = await apiFetch("/api/admin/test-sentry", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ mode: "capture" }),

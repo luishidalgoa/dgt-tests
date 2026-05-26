@@ -1,0 +1,20 @@
+# Dependencias MÍNIMAS para usar classify_hf.py (HF Inference API).
+#
+# Sin torch ni transformers — el modelo SigLIP corre en los servidores de
+# HuggingFace, aquí solo necesitamos un cliente HTTP + Pillow para abrir
+# las imágenes + tqdm para la barra de progreso.
+#
+# Cuándo usar este vs requirements.txt:
+#   - Esta lista (~30 MB de deps): solo HF API, sin entrenamiento local
+#   - requirements.txt (~2 GB con torch): modelo local + features completas
+#
+# Setup HF-only:
+#   python -m venv .venv-hf
+#   .venv-hf\Scripts\activate     # Windows
+#   source .venv-hf/bin/activate  # macOS/Linux
+#   pip install -r requirements-hf.txt
+#   python classify_hf.py
+
+huggingface_hub>=0.20
+Pillow>=10.0
+tqdm>=4.66

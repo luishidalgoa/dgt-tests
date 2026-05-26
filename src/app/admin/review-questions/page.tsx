@@ -162,6 +162,7 @@ export default async function ReviewQuestionsPage() {
               codigoTema={q.codigoTema}
               enunciado={q.enunciado}
               explicacion={q.explicacion}
+              imagen={q.imagen}
               options={q.options.map((o) => ({
                 id:        o.id,
                 letra:     o.letra,

@@ -1,8 +1,9 @@
 "use client"
 
 import { useState, useTransition } from "react"
+import Link from "next/link"
 import { toast } from "sonner"
-import { XCircle, Loader2, Sparkles, ChevronDown, ChevronRight } from "lucide-react"
+import { XCircle, Loader2, Sparkles, ChevronDown, ChevronRight, Pencil } from "lucide-react"
 import { discardApprovedQuestionAction } from "./actions"
 
 interface OptionData {
@@ -22,13 +23,15 @@ interface Props {
 }
 
 /**
- * Card de SOLO LECTURA para preguntas IA ya aprobadas. La única acción
- * destructiva es "Descartar" (revertir aprobación) por si el admin
- * detecta una pregunta mala que se aprobó por error.
- *
- * Si necesitas EDITAR una pregunta aprobada, hazlo desde la BBDD a mano
- * o re-rechaza y vuelve a generarla — MVP, no merece la pena duplicar
- * todo el flujo de edición.
+ * Card para preguntas IA ya aprobadas. Acciones:
+ *   - Editar:    navega a /admin/questions/[id]/edit?from=ai-questions,
+ *                que reutiliza el mismo formulario que usa el editor
+ *                normal del banco (incluye enunciado, codigoTema, tier
+ *                FREE/PRO, imagen + picker del banco, opciones,
+ *                explicación, sugerencia IA). Al guardar vuelve aquí.
+ *   - Descartar: revierte la aprobación (la pregunta deja de aparecer
+ *                a usuarios). No se borra de BBDD — el admin puede
+ *                re-aprobarla a mano si fue un error.
  */
 export function ApprovedQuestionCard(props: Props) {
   const [isPending, startTransition] = useTransition()
@@ -187,8 +190,31 @@ export function ApprovedQuestionCard(props: Props) {
         </div>
       )}
 
-      {/* Acción descartar */}
-      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+      {/* Acciones: editar (reusa el editor del banco) + descartar */}
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <Link
+          href={`/admin/questions/${props.questionId}/edit?from=ai-questions`}
+          aria-disabled={isPending}
+          style={{
+            padding:        "6px 11px",
+            borderRadius:   8,
+            border:         "1.5px solid var(--slate-200)",
+            background:     "#fff",
+            color:          "var(--slate-700)",
+            fontWeight:     600,
+            fontSize:       12,
+            textDecoration: "none",
+            cursor:         isPending ? "wait" : "pointer",
+            display:        "inline-flex",
+            alignItems:     "center",
+            gap:            5,
+            pointerEvents:  isPending ? "none" : "auto",
+            opacity:        isPending ? 0.5 : 1,
+          }}
+        >
+          <Pencil className="h-3.5 w-3.5" />
+          Editar
+        </Link>
         <button
           onClick={handleDiscard}
           disabled={isPending}

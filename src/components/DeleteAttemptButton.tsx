@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Trash2, Loader2 } from "lucide-react"
+import { apiFetch } from "@/lib/apiClient"
 
 interface Props {
   attemptId: number
@@ -38,7 +39,7 @@ export function DeleteAttemptButton({ attemptId, label }: Props) {
     setError(null)
     startTransition(async () => {
       try {
-        const res = await fetch(`/api/attempts/${attemptId}`, { method: "DELETE" })
+        const res = await apiFetch(`/api/attempts/${attemptId}`, { method: "DELETE" })
         if (!res.ok) {
           const body = await res.json().catch(() => ({}))
           throw new Error(body.error ?? "No se pudo borrar el intento")

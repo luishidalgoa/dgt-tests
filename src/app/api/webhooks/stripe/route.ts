@@ -5,6 +5,8 @@ import { getStripe, getStripeWebhookSecret, getSubscriptionPeriodEnd, willNotAut
 import { handleChargeRefunded } from "@/lib/handleChargeRefunded"
 import { composePaymentFailedEmail, composeInvoiceUpcomingEmail, sendUserEmail } from "@/lib/userEmails"
 import { captureAppException } from "@/lib/sentryUser"
+import { trackEventServer } from "@/lib/analyticsServer"
+import { applySubscriptionUpdate, applySubscriptionDeleted } from "@/lib/stripeSubscriptionHandlers"
 
 /**
  * Stripe webhook handler.
@@ -220,7 +222,6 @@ async function onSubscriptionUpdated(sub: Stripe.Subscription) {
   }
 
   const status = sub.status                          // active, past_due, canceled, trialing, ...
-  const isActive = status === "active" || status === "trialing"
   const priceId  = sub.items.data[0]?.price?.id ?? null
   // Bug Fase 85: el portal de Stripe expresa la cancelación de DOS formas
   // (cancel_at_period_end bool O cancel_at timestamp). Antes solo mirábamos
@@ -229,26 +230,53 @@ async function onSubscriptionUpdated(sub: Stripe.Subscription) {
   const endDateTs = getSubscriptionEndDate(sub)
   const cancelAtPeriodEnd = willNotAutoRenew(sub)
 
-  // Solo cambiamos role si NO es admin (los admins son intocables)
-  const current = await db.user.findUnique({
+  // Solo cambiamos role si NO es admin (los admins son intocables).
+  // Leemos también `subscriptionCancelAtPeriodEnd` PREVIO para detectar
+  // la transición false→true (= el user acaba de pulsar "Cancelar" en el
+  // Stripe Customer Portal) y trackearlo en analytics.
+  // Leemos cancelAtPeriodEnd previo solo para detectar la transición
+  // false→true (= el user acaba de pulsar "Cancelar" en el portal) y trackearlo.
+  const previousCancelState = await db.user.findUnique({
     where:  { id: userId },
-    select: { role: true },
+    select: { subscriptionCancelAtPeriodEnd: true },
   })
-  const isAdmin = current?.role === "ADMIN"
+  const wasNotCanceled = !previousCancelState?.subscriptionCancelAtPeriodEnd
+  const justCanceledAutoRenewal = wasNotCanceled && cancelAtPeriodEnd
 
-  await db.user.update({
-    where: { id: userId },
-    data: {
-      stripeCustomerId:              customerId,
-      stripeSubscriptionId:          sub.id,
-      subscriptionStatus:            status,
-      subscriptionPriceId:           priceId,
-      subscriptionCurrentPeriodEnd:  endDateTs ? new Date(endDateTs * 1000) : null,
-      subscriptionCancelAtPeriodEnd: cancelAtPeriodEnd,
-      // role: SUBSCRIBER si activa, USER si no — pero nunca tocamos ADMIN
-      ...(isAdmin ? {} : { role: isActive ? "SUBSCRIBER" : "USER" }),
+  // Delegamos la escritura a un handler aislado y testeable.
+  // Toda la lógica de aiTokensRenewalAt / aiTokensUsed vive ahí.
+  await applySubscriptionUpdate(
+    {
+      userId,
+      stripeCustomerId:  customerId,
+      subscriptionId:    sub.id,
+      status,
+      priceId,
+      newPeriodEnd:      endDateTs ? new Date(endDateTs * 1000) : null,
+      cancelAtPeriodEnd,
     },
-  })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    db as any,
+  )
+
+  // Analytics: la suscripción acaba de pasar a "no se renueva". No es la
+  // muerte real de la sub (eso es `customer.subscription.deleted` cuando
+  // termine el periodo), sino la INTENCIÓN de cancelar — la métrica que
+  // queremos medir para detectar churn temprano. Disparamos server-side
+  // (el portal redirige a /settings pero no podemos confiar en que el
+  // user vuelva a aterrizar ahí, especialmente si cierra la pestaña tras
+  // confirmar). Fire-and-forget — no bloqueamos el webhook.
+  if (justCanceledAutoRenewal) {
+    void trackEventServer(
+      "subscription_canceled",
+      {
+        // No PII: solo señales agregadas para distinguir tipos de cancelación
+        status,                           // active, past_due, trialing...
+        statusWasActive: status === "active",
+      },
+      { url: "/api/webhooks/stripe" },
+    )
+  }
 }
 
 /**
@@ -337,29 +365,16 @@ async function onSubscriptionDeleted(sub: Stripe.Subscription) {
   })
   if (!userId) return
 
-  const current = await db.user.findUnique({
-    where:  { id: userId },
-    select: { role: true },
-  })
-  const isAdmin = current?.role === "ADMIN"
-
   // Preservamos la fecha en la que la suscripción terminó para poder
   // mostrar "Tu plan PRO caducó el X" en /settings. Preferimos `ended_at`
   // (set por Stripe cuando la sub efectivamente termina), y caemos a
-  // `current_period_end` (top-level o por-item) si por alguna razón no
-  // viene.
+  // `current_period_end` (top-level o por-item) si por alguna razón no viene.
   const endedTs = (sub as Stripe.Subscription & { ended_at?: number | null }).ended_at
     ?? getSubscriptionPeriodEnd(sub)
   const endedAt = endedTs ? new Date(endedTs * 1000) : null
 
-  await db.user.update({
-    where: { id: userId },
-    data: {
-      subscriptionStatus:            "canceled",
-      subscriptionCurrentPeriodEnd:  endedAt,
-      subscriptionCancelAtPeriodEnd: false,
-      stripeSubscriptionId:          null,
-      ...(isAdmin ? {} : { role: "USER" }),
-    },
-  })
+  // Delegamos la escritura — handler testeable maneja aiTokensRenewalAt
+  // (= expiry + 1 mes) y reset del contador (PRO → FREE con quota fresca).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await applySubscriptionDeleted({ userId, endedAt }, db as any)
 }

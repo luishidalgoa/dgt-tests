@@ -25,6 +25,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { AI_QUOTA_CHANGED_EVENT, type MonthlyQuota } from "@/components/AIExplainPanel"
+import { apiFetch } from "@/lib/apiClient"
 
 // ── Tipos ────────────────────────────────────────────────────────────────
 
@@ -125,7 +126,14 @@ export function DashStatsAnalysis({ history, totalAnswers, aiQuotaRemaining }: P
   function handleGenerate() {
     startTransition(async () => {
       try {
-        const res = await fetch("/api/ai/stats-analysis", { method: "POST" })
+        const res = await apiFetch("/api/ai/stats-analysis", {
+          method: "POST",
+          // 400 cubre el set de errores "esperados" del endpoint:
+          // not_enough_tokens, not_enough_data, not_enough_new_data —
+          // todos flujos normales del UI, no bugs. Los errores ai_* (5xx
+          // del proveedor) siguen reportándose normalmente.
+          ignoreStatus: [400],
+        })
         const body = await res.json().catch(() => ({}))
         if (!res.ok) {
           if (body.code && AI_ERROR_TOASTS[body.code]) {

@@ -19,6 +19,7 @@ import {
   Wand2,
 } from "lucide-react"
 import { ExplanationWithHighlights } from "@/components/ExplanationWithHighlights"
+import { apiFetch } from "@/lib/apiClient"
 
 export interface AIResult {
   mainExplanation: string
@@ -173,7 +174,7 @@ export function AIExplainPanel({
       withImage:  hasImage ? "true" : "false",
     })
     if (attemptId) qs.set("attemptId", String(attemptId))
-    fetch(`/api/ai/explain?${qs.toString()}`)
+    apiFetch(`/api/ai/explain?${qs.toString()}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data: { alreadyPaid?: boolean; result?: AIResult } | null) => {
         if (cancelled || !data) return
@@ -195,7 +196,7 @@ export function AIExplainPanel({
     setError(null)
     setLoading(true)
     try {
-      const res = await fetch("/api/ai/explain", {
+      const res = await apiFetch("/api/ai/explain", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -203,6 +204,10 @@ export function AIExplainPanel({
           withImage: hasImage,
           ...(attemptId ? { attemptId } : {}),
         }),
+        // 400 = quota mensual agotada o pregunta no analizable. Es flujo
+        // normal del UI (mostramos toast traducido) — los errores reales
+        // del provider llegan como 5xx y siguen reportándose.
+        ignoreStatus: [400],
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))

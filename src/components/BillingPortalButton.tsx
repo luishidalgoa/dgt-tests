@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Loader2, CreditCard } from "lucide-react"
+import { apiFetch } from "@/lib/apiClient"
 
 export function BillingPortalButton() {
   const [loading, setLoading] = useState(false)
@@ -11,7 +12,13 @@ export function BillingPortalButton() {
     setError(null)
     setLoading(true)
     try {
-      const res = await fetch("/api/billing/portal", { method: "POST" })
+      const res = await apiFetch("/api/billing/portal", {
+        method: "POST",
+        // 400 = "no tienes suscripción asociada" / customer de otro
+        // ambiente. Es flujo esperado, no un bug — el botón solo se
+        // renderiza para users PRO pero el back valida igualmente.
+        ignoreStatus: [400],
+      })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
         throw new Error(body.error ?? "No se pudo abrir el portal")

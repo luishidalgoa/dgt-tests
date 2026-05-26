@@ -115,6 +115,34 @@ export const metadata: Metadata = {
     capable:    true,
     statusBarStyle: "default",
     title:      "DGT Tests",
+    // Splash screens iOS: Apple requiere un <link> por device exacto, con
+    // un media query que matchee (device-width, device-height, dpi). Si
+    // ninguno coincide → iOS muestra una pantalla blanca al abrir la PWA
+    // instalada. Aquí cubrimos los iPhones/iPads más comunes (2017→2024).
+    // Los splashes se generan on-demand vía /apple-splash/[device]/route.tsx
+    // (misma paleta que el icon + título "DGT Tests").
+    startupImage: [
+      // iPhone 14/15/16 Pro Max — 430×932pt @3x
+      { url: "/apple-splash/iphone-pro-max",  media: "screen and (device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)" },
+      // iPhone 14/15/16 Pro — 393×852pt @3x
+      { url: "/apple-splash/iphone-pro",      media: "screen and (device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)" },
+      // iPhone 12/13/14, 12/13 Pro — 390×844pt @3x
+      { url: "/apple-splash/iphone-standard", media: "screen and (device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)" },
+      // iPhone X/XS/11 Pro — 375×812pt @3x
+      { url: "/apple-splash/iphone-x",        media: "screen and (device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)" },
+      // iPhone 8/7/6 Plus — 414×736pt @3x
+      { url: "/apple-splash/iphone-8-plus",   media: "screen and (device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3)" },
+      // iPhone 8/7/6/SE2/SE3 — 375×667pt @2x
+      { url: "/apple-splash/iphone-8",        media: "screen and (device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)" },
+      // iPad Pro 12.9" — 1024×1366pt @2x
+      { url: "/apple-splash/ipad-pro-12",     media: "screen and (device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2)" },
+      // iPad Pro 11" — 834×1194pt @2x
+      { url: "/apple-splash/ipad-pro-11",     media: "screen and (device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2)" },
+      // iPad Air — 820×1180pt @2x
+      { url: "/apple-splash/ipad-air",        media: "screen and (device-width: 820px) and (device-height: 1180px) and (-webkit-device-pixel-ratio: 2)" },
+      // iPad mini — 744×1133pt @2x
+      { url: "/apple-splash/ipad-mini",       media: "screen and (device-width: 744px) and (device-height: 1133px) and (-webkit-device-pixel-ratio: 2)" },
+    ],
   },
 }
 

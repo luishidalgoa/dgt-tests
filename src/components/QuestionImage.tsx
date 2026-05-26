@@ -23,6 +23,18 @@ interface Props {
 /**
  * Imagen de una pregunta con apertura en modal a pantalla casi completa.
  * Mantiene proporción del viewport (max 94vw, 90vh).
+ *
+ * `unoptimized` en ambos <Image>: sirve la URL del CDN R2 tal cual, sin
+ * pasar por `/_next/image`. Decisión deliberada por dos razones:
+ *   1. Las imgs DGT ya son pequeñas (~50KB PNG fijo) y se sirven desde
+ *      Cloudflare R2 con Cache-Control immutable max-age=1y — el opt
+ *      de Vercel no añade valor real aquí.
+ *   2. La URL queda ESTABLE (mismo string para preload y para render),
+ *      lo que permite que `useImagePreloader` precargue durante el examen
+ *      y los resultados renderen instantáneos desde cache. Si pasaran por
+ *      `/_next/image?url=...&w=...&q=...`, el width que Next pide depende
+ *      del DPR del device y es difícil de replicar en el preload.
+ * Bonus: ahorra cuota de Vercel Image Optimization.
  */
 export function QuestionImage({ src, alt, title, size = 300 }: Props) {
   const [open, setOpen] = useState(false)
@@ -51,6 +63,7 @@ export function QuestionImage({ src, alt, title, size = 300 }: Props) {
             src={imageUrl(src)}
             alt={alt}
             fill
+            unoptimized
             className="object-contain transition-transform group-hover:scale-[1.02]"
             sizes={`${size}px`}
           />
@@ -91,6 +104,7 @@ export function QuestionImage({ src, alt, title, size = 300 }: Props) {
             src={imageUrl(src)}
             alt={`${alt} (ampliada)`}
             fill
+            unoptimized
             className="object-contain"
             sizes="(max-width: 1100px) 94vw, 1100px"
           />

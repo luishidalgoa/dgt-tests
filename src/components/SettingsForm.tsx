@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Loader2, Save, CheckCircle2, KeyRound, Eye } from "lucide-react"
+import { apiFetch } from "@/lib/apiClient"
 
 interface Props {
   initialUsername:    string
@@ -55,10 +56,13 @@ export function SettingsForm({ initialUsername, initialDisplayName, initialEmail
     setSaved(false)
     startTransition(async () => {
       try {
-        const res = await fetch("/api/users/me", {
+        const res = await apiFetch("/api/users/me", {
           method:  "PATCH",
           headers: { "Content-Type": "application/json" },
           body:    JSON.stringify({ username, displayName, email: email.trim() || null }),
+          // 400 = validación (username corto, ya en uso, email inválido).
+          // El form muestra el error inline al user — no es un bug.
+          ignoreStatus: [400],
         })
         if (!res.ok) {
           const body = await res.json().catch(() => ({}))
@@ -86,10 +90,12 @@ export function SettingsForm({ initialUsername, initialDisplayName, initialEmail
     }
     startPwd(async () => {
       try {
-        const res = await fetch("/api/users/me/password", {
+        const res = await apiFetch("/api/users/me/password", {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
           body:    JSON.stringify({ currentPassword, newPassword }),
+          // 400 = current password incorrecta o nueva < 6 chars. UX normal.
+          ignoreStatus: [400],
         })
         if (!res.ok) {
           const body = await res.json().catch(() => ({}))

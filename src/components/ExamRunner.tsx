@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition, useEffect, useRef, useCallback } from "react"
+import { useState, useTransition, useEffect, useRef, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -41,6 +41,9 @@ import type {
   SubmitAttemptPayload,
   SubmitAttemptResponse,
 } from "@/types/exam"
+import { apiFetch } from "@/lib/apiClient"
+import { imageUrl } from "@/lib/imageUrl"
+import { useImagePreloader } from "@/lib/useImagePreloader"
 
 interface ExamRunnerProps {
   data: TestRunnerData
@@ -100,6 +103,18 @@ export function ExamRunner({
   const q = questions[current]
   const selected = answers[q.id] ?? null
   const answered = Object.values(answers).filter((v) => v !== null).length
+
+  // Precarga TODAS las imágenes del examen en background al montar. Así
+  // cuando el user termine y aterrice en la pantalla de resultados, las
+  // imgs ya están cacheadas (HTTP cache + Service Worker) y el render es
+  // instantáneo. Especialmente útil si el user saltó preguntas vía el
+  // mapa sin verlas: sin esto, results haría 30 GETs en frío.
+  // Las URLs son las mismas del CDN porque QuestionImage usa `unoptimized`.
+  const imagePreloadUrls = useMemo(
+    () => questions.map((qu) => (qu.imagen ? imageUrl(qu.imagen) : null)),
+    [questions],
+  )
+  useImagePreloader(imagePreloadUrls)
 
   // Un examen es "reanudable" cuando viene de un test concreto (no /temas ni
   // /test-errores, que reparten preguntas aleatorias en cada visita).
@@ -255,7 +270,7 @@ export function ExamRunner({
 
     startTransition(async () => {
       try {
-        const res = await fetch("/api/attempts", {
+        const res = await apiFetch("/api/attempts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),

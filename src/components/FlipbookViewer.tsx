@@ -82,9 +82,13 @@ export function FlipbookViewer({ section, onClose }: FlipbookViewerProps) {
     for (const url of blobUrlsRef.current) URL.revokeObjectURL(url)
     blobUrlsRef.current = []
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true)
+     
     setProgress(0)
+     
     setError(null)
+     
     setPageUrls([])
 
     const renderAll = async () => {

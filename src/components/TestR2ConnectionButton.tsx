@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { toast } from "sonner"
 import { Loader2, Plug } from "lucide-react"
+import { apiFetch } from "@/lib/apiClient"
 
 interface Props {
   /** Texto legible para los toasts. */
@@ -36,7 +37,7 @@ export function TestR2ConnectionButton({ label = "R2" }: Props) {
   async function handleClick() {
     setLoading(true)
     try {
-      const res = await fetch("/api/admin/test-r2", { method: "POST" })
+      const res = await apiFetch("/api/admin/test-r2", { method: "POST" })
       const data = (await res.json()) as TestResult | { error: string }
 
       if (!res.ok || !("ok" in data)) {

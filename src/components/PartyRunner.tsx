@@ -1,11 +1,13 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
 import { Loader2, Trophy, Zap } from "lucide-react"
 import type { PartyState } from "@/lib/party"
 import { imageUrl } from "@/lib/imageUrl"
+import { apiFetch } from "@/lib/apiClient"
+import { useImagePreloader } from "@/lib/useImagePreloader"
 
 interface QuestionDTO {
   id:         number
@@ -31,10 +33,21 @@ export function PartyRunner({ code }: { code: string }) {
   // que carga las preguntas, antes de que submitAnswer pueda leerlo.
   const questionStartRef = useRef<number>(0)
 
+  // Precarga TODAS las imágenes en background una vez tenemos las preguntas.
+  // En party el orden de preguntas es server-driven y todos los jugadores
+  // las verán en la misma secuencia, pero igualmente vale: al llegar a la
+  // pantalla de resultados/review ya están cacheadas, sin tirones de red.
+  // `questions` empieza como null hasta que el effect de abajo lo setea.
+  const imagePreloadUrls = useMemo(
+    () => (questions ?? []).map((qu) => (qu.imagen ? imageUrl(qu.imagen) : null)),
+    [questions],
+  )
+  useImagePreloader(imagePreloadUrls)
+
   // Cargar preguntas
   useEffect(() => {
     let alive = true
-    fetch(`/api/parties/${code}/questions`)
+    apiFetch(`/api/parties/${code}/questions`)
       .then((r) => r.json())
       .then((data) => {
         if (alive) {
@@ -52,7 +65,12 @@ export function PartyRunner({ code }: { code: string }) {
     let timer: ReturnType<typeof setTimeout>
     async function tick() {
       try {
-        const r = await fetch(`/api/parties/${code}`, { cache: "no-store" })
+        const r = await apiFetch(`/api/parties/${code}`, {
+          cache: "no-store",
+          // Misma justificación que el polling de PartyLobby: 404 durante
+          // polling = flujo esperado (party borrada), no spammear Sentry.
+          ignoreStatus: [404],
+        })
         if (r.ok && alive) {
           const data = await r.json() as PartyState
           setState(data)
@@ -75,7 +93,7 @@ export function PartyRunner({ code }: { code: string }) {
     const elapsed = Date.now() - questionStartRef.current
 
     try {
-      const r = await fetch(`/api/parties/${code}/answer`, {
+      const r = await apiFetch(`/api/parties/${code}/answer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({
@@ -93,7 +111,7 @@ export function PartyRunner({ code }: { code: string }) {
         const next = current + 1
         if (next >= questions.length) {
           // Finalizar
-          fetch(`/api/parties/${code}/finish`, { method: "POST" }).then(() => {
+          apiFetch(`/api/parties/${code}/finish`, { method: "POST" }).then(() => {
             setFinished(true)
           })
         } else {
@@ -169,7 +187,11 @@ export function PartyRunner({ code }: { code: string }) {
             <div>
               {q.imagen ? (
                 <div className="relative aspect-square rounded-xl overflow-hidden" style={{ background: "var(--slate-100)" }}>
-                  <Image src={imageUrl(q.imagen)} alt={`Pregunta ${current + 1}`} fill className="object-contain" sizes="260px" priority />
+                  {/* `unoptimized` para que la URL servida sea el CDN R2 directo
+                      y coincida con la URL precargada por `useImagePreloader`.
+                      Las imgs ya son pequeñas (~50KB) → el opt de Vercel no
+                      añade valor real aquí. */}
+                  <Image src={imageUrl(q.imagen)} alt={`Pregunta ${current + 1}`} fill unoptimized className="object-contain" sizes="260px" priority />
                 </div>
               ) : (
                 <div className="aspect-square rounded-xl flex items-center justify-center" style={{ background: "var(--slate-100)", color: "var(--slate-300)" }}>

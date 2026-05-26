@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { Loader2, Crown } from "lucide-react"
 import { PRO_PRICE_PER_MONTH } from "@/lib/pricing"
+import { apiFetch } from "@/lib/apiClient"
 
 export function CheckoutButton() {
   const [loading, setLoading] = useState(false)
@@ -12,7 +13,7 @@ export function CheckoutButton() {
     setError(null)
     setLoading(true)
     try {
-      const res = await fetch("/api/checkout/session", { method: "POST" })
+      const res = await apiFetch("/api/checkout/session", { method: "POST" })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
         throw new Error(body.error ?? "No se pudo iniciar el checkout")

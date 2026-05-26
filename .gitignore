@@ -66,3 +66,14 @@ next-env.d.ts
 # Si vuelves a generarlas con scripts/copy-images.ts (poco probable),
 # las dejará aquí y git las ignora. Para subirlas a R2 usa images:setup-r2.
 /public/images/
+
+# Output del audit de imágenes (SHA-256, pHash, clasificación CLIP).
+# Son JSONs grandes derivados de los binarios; se regeneran con
+# `npm run images:audit-sha` y los siguientes pasos.
+/tools/image-audit/
+
+# Entorno virtual Python del clasificador SigLIP. Pesa varios GB (PyTorch
+# CPU + modelo) y es regenerable con `pip install -r requirements.txt`.
+/tools/image-classifier/.venv/
+/tools/**/__pycache__/
+/tools/**/*.pyc

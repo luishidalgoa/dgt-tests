@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { toast } from "sonner"
 import { Loader2, Plug, CheckCircle2, XCircle } from "lucide-react"
+import { apiFetch } from "@/lib/apiClient"
 
 interface Props {
   provider:  "gemini" | "groq"
@@ -30,7 +31,7 @@ export function TestAIConnectionButton({ provider, label }: Props) {
   async function handleClick() {
     setLoading(true)
     try {
-      const res = await fetch("/api/admin/test-ai-connection", {
+      const res = await apiFetch("/api/admin/test-ai-connection", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ provider }),

@@ -1,9 +1,12 @@
 "use client"
 
 import { useState, useTransition } from "react"
+import Image from "next/image"
 import { toast } from "sonner"
-import { CheckCircle2, XCircle, Pencil, Save, X, Loader2, ChevronDown, ChevronRight, Library } from "lucide-react"
+import { CheckCircle2, XCircle, Pencil, Save, X, Loader2, ChevronDown, ChevronRight, Library, ImageIcon } from "lucide-react"
+import { imageUrl } from "@/lib/imageUrl"
 import { approveQuestionAction, discardQuestionAction, editQuestionAction } from "./actions"
+import { ImageBankPickerButton } from "@/app/admin/images-bank/ImageBankPicker"
 import type { ReferenceQuestion } from "./page"
 
 interface OptionData {
@@ -18,6 +21,9 @@ interface Props {
   codigoTema:  string | null
   enunciado:   string
   explicacion: string
+  /** Filename del archivo en el banco (o null si la pregunta es solo
+   *  texto). Se resuelve vía imageUrl() según CDN o /public/images. */
+  imagen:      string | null
   options:     OptionData[]
   aiModel:     string | null
   createdLabel: string
@@ -40,11 +46,13 @@ export function QuestionCard(props: Props) {
   // Estado local para el modo edición
   const [enunciado, setEnunciado] = useState(props.enunciado)
   const [explicacion, setExplicacion] = useState(props.explicacion)
+  const [imagen, setImagen]       = useState(props.imagen ?? "")
   const [options, setOptions] = useState<OptionData[]>(props.options)
 
   function reset() {
     setEnunciado(props.enunciado)
     setExplicacion(props.explicacion)
+    setImagen(props.imagen ?? "")
     setOptions(props.options)
     setEditing(false)
   }
@@ -80,6 +88,7 @@ export function QuestionCard(props: Props) {
       f.set("id", String(props.questionId))
       f.set("enunciado", enunciado)
       f.set("explicacion", explicacion)
+      f.set("imagen", imagen.trim())
       f.set("optionsJson", JSON.stringify(
         options.map((o) => ({ id: o.id, texto: o.texto, isCorrect: o.isCorrect }))
       ))
@@ -145,6 +154,71 @@ export function QuestionCard(props: Props) {
           <p style={{ margin: "4px 0 0", fontSize: 14, lineHeight: 1.5 }}>{enunciado}</p>
         )}
       </div>
+
+      {/* Imagen — solo visible si la pregunta tiene una, o si estás en
+          modo edición (para que puedas asignarla con el picker). */}
+      {(editing || imagen.trim().length > 0) && (
+        <div style={{ marginBottom: 10 }}>
+          <label style={{ fontSize: 11, fontWeight: 700, color: "var(--slate-500)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            Imagen
+          </label>
+          {editing ? (
+            <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
+                <input
+                  type="text"
+                  value={imagen}
+                  onChange={(e) => setImagen(e.target.value)}
+                  disabled={isPending}
+                  placeholder="(sin imagen) — usa el botón para elegir del banco"
+                  style={{ ...inputStyle, flex: 1 }}
+                />
+                <ImageBankPickerButton
+                  onSelect={(filename) => setImagen(filename)}
+                  disabled={isPending}
+                  canWriteTagFeedback
+                />
+                {imagen.trim().length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setImagen("")}
+                    disabled={isPending}
+                    title="Quitar imagen"
+                    style={{
+                      padding:      "6px 12px",
+                      borderRadius: 8,
+                      border:       "1.5px solid var(--slate-200)",
+                      background:   "#fff",
+                      color:        "var(--red-600)",
+                      fontWeight:   600,
+                      fontSize:     12,
+                      cursor:       isPending ? "not-allowed" : "pointer",
+                      opacity:      isPending ? 0.5 : 1,
+                    }}
+                  >
+                    Quitar
+                  </button>
+                )}
+              </div>
+              {imagen.trim().length > 0 ? (
+                <ImagenPreview filename={imagen.trim()} />
+              ) : (
+                <div style={{
+                  padding: "8px 12px", fontSize: 12, color: "var(--slate-400)",
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                }}>
+                  <ImageIcon className="h-3.5 w-3.5" />
+                  Sin imagen — la pregunta se renderiza solo con texto.
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ marginTop: 6 }}>
+              <ImagenPreview filename={imagen.trim()} />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Opciones */}
       <div style={{ marginBottom: 10 }}>
@@ -323,6 +397,38 @@ export function QuestionCard(props: Props) {
         )}
       </div>
     </article>
+  )
+}
+
+/**
+ * Preview pequeño de la imagen de la pregunta. Pensado para encajar
+ * en el card sin ocupar mucho espacio (200px ancho, ratio 4:3 como
+ * el editor principal). Usa Next/Image con `unoptimized` porque las
+ * imágenes vienen del CDN externo / public/images sin transformación.
+ */
+function ImagenPreview({ filename }: { filename: string }) {
+  if (!filename) return null
+  return (
+    <div style={{
+      padding:      10,
+      borderRadius: 10,
+      background:   "var(--slate-50, #f8fafc)",
+      border:       "1px dashed var(--slate-200)",
+      display:      "inline-flex",
+      alignItems:   "center",
+      justifyContent: "center",
+    }}>
+      <div style={{ position: "relative", width: 200, aspectRatio: "4 / 3" }}>
+        <Image
+          src={imageUrl(filename)}
+          alt="preview"
+          fill
+          sizes="200px"
+          style={{ objectFit: "contain" }}
+          unoptimized
+        />
+      </div>
+    </div>
   )
 }
 

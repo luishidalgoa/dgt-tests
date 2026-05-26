@@ -51,6 +51,50 @@ describe("hashPassword + verifyPassword", () => {
   })
 })
 
+describe("createUser — token renewal al registro", () => {
+  beforeEach(() => {
+    vi.mocked(db.user.findUnique).mockReset()
+    vi.mocked(db.user.create).mockReset()
+  })
+
+  it("setea aiTokensRenewalAt = createdAt + 1 mes en la BBDD al crear el usuario", async () => {
+    vi.mocked(db.user.findUnique).mockResolvedValue(null)  // username + email libres
+    vi.mocked(db.user.create).mockResolvedValue({ id: 1 } as never)
+
+    const before = Date.now()
+    await createUser({ username: "newuser", password: "secret123", email: "new@ex.com" })
+    const after = Date.now()
+
+    expect(db.user.create).toHaveBeenCalledTimes(1)
+    const createArgs = vi.mocked(db.user.create).mock.calls[0]?.[0]
+    expect(createArgs?.data).toBeDefined()
+    const data = createArgs!.data as { aiTokensRenewalAt: Date }
+    expect(data.aiTokensRenewalAt).toBeInstanceOf(Date)
+
+    // Debe estar entre [before+1mes, after+1mes]
+    const minMs = before + 28 * 24 * 60 * 60 * 1000  // ≥ 28 días (mes corto)
+    const maxMs = after  + 32 * 24 * 60 * 60 * 1000  // ≤ 32 días (margen)
+    expect(data.aiTokensRenewalAt.getTime()).toBeGreaterThanOrEqual(minMs)
+    expect(data.aiTokensRenewalAt.getTime()).toBeLessThanOrEqual(maxMs)
+  })
+
+  it("la fecha es exactamente 1 mes calendario en adelante del momento del registro", async () => {
+    vi.mocked(db.user.findUnique).mockResolvedValue(null)
+    vi.mocked(db.user.create).mockResolvedValue({ id: 2 } as never)
+
+    await createUser({ username: "other", password: "secret123", email: "other@ex.com" })
+
+    const data = vi.mocked(db.user.create).mock.calls[0]?.[0]?.data as { aiTokensRenewalAt: Date }
+    const renewal = data.aiTokensRenewalAt
+    const now     = new Date()
+    // El mes destino debe ser el actual+1 (o year+1/month=0 si era diciembre)
+    const expectedMonth = (now.getUTCMonth() + 1) % 12
+    const expectedYear  = now.getUTCMonth() === 11 ? now.getUTCFullYear() + 1 : now.getUTCFullYear()
+    expect(renewal.getUTCMonth()).toBe(expectedMonth)
+    expect(renewal.getUTCFullYear()).toBe(expectedYear)
+  })
+})
+
 describe("authenticate (Fase 74 — login por email o username, case-insensitive)", () => {
   beforeEach(() => {
     vi.mocked(db.user.findUnique).mockReset()
