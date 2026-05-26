@@ -913,17 +913,21 @@ body {
 .tile {
   position: relative;
   display: block;
-  background: #fff;
-  border: 1px solid var(--slate-200);
+  /* DEFAULT (sin hacer): fondo grisáceo claro + borde dasheado para que
+     se distinga claramente de los completados. */
+  background: var(--slate-50, #f8fafc);
+  border: 1.5px dashed var(--slate-300, #cbd5e1);
   border-radius: 14px;
   padding: 14px;
   text-decoration: none;
   color: inherit;
-  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
 .tile:hover {
   transform: translateY(-2px);
   border-color: var(--orange-500);
+  border-style: solid;
+  background: #fff;
   box-shadow: 0 10px 22px -14px rgba(234, 88, 12, 0.4);
 }
 .tile .tile-label {
@@ -939,6 +943,8 @@ body {
   line-height: 1;
   margin: 4px 0 8px;
   letter-spacing: -0.03em;
+  /* En estado sin-hacer, el número se ve más apagado */
+  color: var(--slate-400, #94a3b8);
 }
 .tile .tile-score {
   display: inline-flex;
@@ -948,15 +954,47 @@ body {
   font-weight: 700;
   font-family: var(--font-mono);
   color: var(--slate-700);
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--slate-100, #f1f5f9);
 }
 .tile .tile-pending {
   font-size: 11.5px;
   color: var(--slate-400);
   font-weight: 600;
 }
-.tile.passed { border-color: rgba(34, 197, 94, 0.45); }
-.tile.passed .tile-score { color: var(--green-d); }
-.tile.failed { border-color: rgba(239, 68, 68, 0.30); }
+
+/* COMPLETADO Y APROBADO (≥ 90%): fondo verde claro sólido + número en
+   negro + badge de score verde con check. Cambio de border-style:dashed
+   a solid es la pista visual fuerte de "esto está hecho". */
+.tile.passed {
+  background: rgba(34, 197, 94, 0.08);
+  border-color: rgba(34, 197, 94, 0.55);
+  border-style: solid;
+}
+.tile.passed .tile-num   { color: var(--ink, #0f172a); }
+.tile.passed .tile-score {
+  color: #fff;
+  background: var(--green-d, #15803d);
+  font-weight: 800;
+}
+.tile.passed:hover { background: rgba(34, 197, 94, 0.12); }
+
+/* COMPLETADO PERO SUSPENDIDO (< 90%): fondo naranja claro + número en
+   negro + badge de score naranja. Marca claramente "hecho" pero deja
+   visible que falta nota. */
+.tile.failed {
+  background: rgba(249, 115, 22, 0.07);
+  border-color: rgba(249, 115, 22, 0.45);
+  border-style: solid;
+}
+.tile.failed .tile-num   { color: var(--ink, #0f172a); }
+.tile.failed .tile-score {
+  color: #fff;
+  background: var(--orange-600, #ea580c);
+  font-weight: 800;
+}
+.tile.failed:hover { background: rgba(249, 115, 22, 0.12); }
 
 
 /* ═══════════════════════════════════════════════════════════════════════════

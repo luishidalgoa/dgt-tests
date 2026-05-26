@@ -22,20 +22,29 @@ import { createClient } from "@libsql/client"
 
 function parseArgs() {
   const argv = process.argv.slice(2)
-  return { apply: argv.includes("--apply") }
+  return {
+    apply: argv.includes("--apply"),
+    local: argv.includes("--local"),  // apuntar a prisma/dev.db en vez de Turso
+  }
 }
 
 async function main() {
-  const { apply } = parseArgs()
-  if (!process.env.TURSO_DATABASE_URL) {
-    console.error("✗ TURSO_DATABASE_URL no definida")
-    process.exit(1)
+  const { apply, local } = parseArgs()
+  let url: string
+  let authToken: string | undefined
+  if (local) {
+    url = "file:./prisma/dev.db"
+    authToken = undefined
+  } else {
+    if (!process.env.TURSO_DATABASE_URL) {
+      console.error("✗ TURSO_DATABASE_URL no definida (o usa --local para apuntar a prisma/dev.db)")
+      process.exit(1)
+    }
+    url = process.env.TURSO_DATABASE_URL
+    authToken = process.env.TURSO_AUTH_TOKEN
   }
-  const c = createClient({
-    url:       process.env.TURSO_DATABASE_URL,
-    authToken: process.env.TURSO_AUTH_TOKEN,
-  })
-  console.log(`📥 Target: ${process.env.TURSO_DATABASE_URL}`)
+  const c = createClient({ url, authToken })
+  console.log(`📥 Target: ${url}`)
   if (!apply) console.log(`🔍 DRY-RUN — no se escribe nada. Pasa --apply para confirmar.\n`)
 
   // 1) Lista de attempts huérfanos a recuperar
