@@ -127,7 +127,101 @@ function SmallFlame({ id, k }: { id: string; k: number }) {
   )
 }
 
-// ── Niveles 2, 3: chispitas amarillas alrededor ───────────────────────
+// ─────────────────────────────────────────────────────────────────────
+//  PATRÓN COMÚN: partículas ascendentes alrededor de la llama
+// ─────────────────────────────────────────────────────────────────────
+// Las partículas nacen en la base del icono (Y alto = parte baja en
+// SVG), en las zonas LATERALES (izquierda 22-38 y derecha 62-78),
+// dejando libre el centro 38-62 donde se renderiza la llama. Suben
+// hacia arriba con drift lateral suave mientras se desvanecen.
+//
+// Esto es coherente para los niveles 2, 3, 4, 5 — solo cambian el
+// número, color, tamaño y si hay glow alrededor.
+
+interface AshendingSparkSpec {
+  /** posición horizontal inicial (0-100, SVG units) */
+  cx: number
+  /** posición vertical inicial (la base de la llama, ~75-85) */
+  cy: number
+  /** drift lateral durante el ascenso (px) */
+  dx: number
+  /** distancia que sube (px). Más grande = sube más alto */
+  rise: number
+  delay: number
+  color: string
+  size: number
+}
+
+function makeAscendingSparks(count: number, palette: string[], size: number, riseDistance = 32): AshendingSparkSpec[] {
+  return Array.from({ length: count }, (_, i) => {
+    // Alterna lado izquierdo/derecho, evita el centro donde está la llama
+    const isLeft   = i % 2 === 0
+    const sideMin  = isLeft ? 22 : 62
+    const sideMax  = isLeft ? 38 : 78
+    const range    = sideMax - sideMin
+    const cx       = sideMin + ((i * 11) % 100) / 100 * range  // pseudo-random pero estable
+    // Y de salida en la mitad inferior (parte baja del icono)
+    const cy       = 72 + ((i * 7) % 14)  // 72-86
+    const dx       = ((i * 5) % 9) - 4    // -4..+4px drift
+    const delay    = (i / count) * 1.4
+    const color    = palette[i % palette.length]
+    // Pequeña variación en tamaño para naturalidad
+    const sz       = size + (((i * 3) % 10) / 10 - 0.5) * 0.6
+    return { cx, cy, dx, rise: riseDistance, delay, color, size: sz }
+  })
+}
+
+function AscendingSparks({
+  id, sparks, animDuration,
+}: {
+  id: string
+  sparks: AshendingSparkSpec[]
+  animDuration: number
+}) {
+  // Cada chispa tiene su propia keyframe porque el rise es parametrizable
+  // por var CSS, pero para simplificar reutilizamos un solo @keyframes
+  // y modulamos delays / colores.
+  const styles = `
+    @keyframes ${id}-rise {
+      0%   { transform: translate(0, 0)                              scale(0);    opacity: 0; }
+      15%  { transform: translate(calc(var(--dx) * 0.3), -10%)       scale(1);    opacity: 1; }
+      70%  { transform: translate(calc(var(--dx) * 0.85), -70%)      scale(0.9);  opacity: 0.7; }
+      100% { transform: translate(var(--dx), -110%)                  scale(0.3);  opacity: 0; }
+    }
+  `
+  return (
+    <>
+      <style dangerouslySetInnerHTML={{ __html: styles }} />
+      <svg
+        viewBox="0 0 100 100"
+        style={{
+          position: "absolute", inset: 0, width: "100%", height: "100%",
+          pointerEvents: "none",
+        }}
+      >
+        {sparks.map((s, i) => (
+          <circle
+            key={i}
+            cx={s.cx}
+            cy={s.cy}
+            r={s.size}
+            fill={s.color}
+            style={{
+              ["--dx" as string]: `${s.dx}px`,
+              transformBox:    "fill-box",
+              transformOrigin: "center",
+              animation:       `${id}-rise ${animDuration}s ease-out ${s.delay}s infinite`,
+              filter:          `drop-shadow(0 0 2px ${s.color}cc)`,
+              opacity:         0,
+            } as React.CSSProperties}
+          />
+        ))}
+      </svg>
+    </>
+  )
+}
+
+// ── Niveles 2, 3: chispitas amarillas ascendentes desde la base ──────
 
 function Sparks({
   id, k, count, amplitude,
@@ -135,171 +229,73 @@ function Sparks({
   id: string; k: number; count: number; amplitude: number
 }) {
   void k
-  // amplitude = 0..1, cuánto se mueven las chispas
-  const r = 38 * amplitude  // radio del orbital
-  const styles = `
-    @keyframes ${id}-spark {
-      0%   { transform: scale(0); opacity: 0; }
-      30%  { transform: scale(1); opacity: 0.95; }
-      100% { transform: scale(0.3); opacity: 0; }
-    }
-  `
-  // Distribuir chispas alrededor del centro a 50,50
-  const sparks = Array.from({ length: count }, (_, i) => {
-    const angle = (i / count) * Math.PI * 2 - Math.PI / 2
-    const cx = 50 + Math.cos(angle) * r
-    const cy = 50 + Math.sin(angle) * r * 0.7  // elipse vertical
-    const delay = (i / count) * 1.2
-    return { cx, cy, delay }
-  })
-  return (
-    <>
-      <style dangerouslySetInnerHTML={{ __html: styles }} />
-      <svg
-        viewBox="0 0 100 100"
-        style={{
-          position: "absolute", inset: 0, width: "100%", height: "100%",
-          pointerEvents: "none",
-        }}
-      >
-        {sparks.map((s, i) => (
-          <circle
-            key={i}
-            cx={s.cx}
-            cy={s.cy}
-            r={1.8}
-            fill="#fde047"
-            style={{
-              transformOrigin: `${s.cx}px ${s.cy}px`,
-              animation: `${id}-spark 1.6s ease-in-out ${s.delay}s infinite`,
-              filter: "drop-shadow(0 0 2px rgba(253, 224, 71, 0.9))",
-              opacity: 0,
-            }}
-          />
-        ))}
-      </svg>
-    </>
+  // amplitude controla la variabilidad/intensidad (0..1)
+  const sparks = makeAscendingSparks(
+    count,
+    ["#fde047", "#facc15", "#fbbf24"],  // tonos amarillos
+    1.6 * amplitude,
   )
+  return <AscendingSparks id={id} sparks={sparks} animDuration={1.8} />
 }
 
-// ── Nivel 4: chispas grandes + glow pulsante alrededor ────────────────
+// ── Nivel 4: chispas naranjas grandes + glow pulsante ────────────────
 
 function SparksWithGlow({ id, k, count }: { id: string; k: number; count: number }) {
   void k
+  const glowId = `${id}-glow`
+  const sparks = makeAscendingSparks(
+    count,
+    ["#fb923c", "#f97316", "#fbbf24"],  // naranjas + amarillo
+    2.2,
+  )
   const styles = `
-    @keyframes ${id}-spark   {
-      0%   { transform: scale(0)   translateY(0);          opacity: 0; }
-      30%  { transform: scale(1.2) translateY(-2px);       opacity: 1; }
-      100% { transform: scale(0.4) translateY(-8px);       opacity: 0; }
-    }
-    @keyframes ${id}-glow {
+    @keyframes ${glowId} {
       0%, 100% { filter: drop-shadow(0 0 3px rgba(249, 115, 22, 0.3)); }
       50%      { filter: drop-shadow(0 0 7px rgba(249, 115, 22, 0.65)); }
     }
   `
-  const sparks = Array.from({ length: count }, (_, i) => {
-    const angle = (i / count) * Math.PI * 2 - Math.PI / 2
-    const cx = 50 + Math.cos(angle) * 30
-    const cy = 50 + Math.sin(angle) * 22
-    return { cx, cy, delay: (i / count) * 1.0 }
-  })
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: styles }} />
       <div style={{
         position: "absolute", inset: 0,
-        animation: `${id}-glow 1.8s ease-in-out infinite`,
+        animation: `${glowId} 1.8s ease-in-out infinite`,
         pointerEvents: "none",
       }} />
-      <svg
-        viewBox="0 0 100 100"
-        style={{
-          position: "absolute", inset: 0, width: "100%", height: "100%",
-          pointerEvents: "none",
-        }}
-      >
-        {sparks.map((s, i) => (
-          <circle
-            key={i}
-            cx={s.cx}
-            cy={s.cy}
-            r={2.5}
-            fill="#fb923c"
-            style={{
-              transformOrigin: `${s.cx}px ${s.cy}px`,
-              animation: `${id}-spark 1.4s ease-out ${s.delay}s infinite`,
-              filter: "drop-shadow(0 0 2.5px rgba(251, 146, 60, 0.9))",
-              opacity: 0,
-            }}
-          />
-        ))}
-      </svg>
+      <AscendingSparks id={id} sparks={sparks} animDuration={1.6} />
     </>
   )
 }
 
-// ── Nivel 5: llama mágica azul/morada — chispas mágicas + glow violeta ──
-// (El PNG del nivel 5 muestra una llama azul/morada arcana, no fuego
-// naranja convencional. Los colores y posiciones de las partículas se
-// alinean con ese diseño.)
+// ── Nivel 5: llama mágica azul/morada — chispas arcanas + glow violeta ──
+// El PNG del nivel 5 muestra una llama azul/morada arcana (no fuego
+// naranja convencional). Mismo patrón ascendente desde la base con
+// paleta cian/azul/púrpura/blanco.
 
 function IntenseBlaze({ id, k }: { id: string; k: number }) {
   void k
+  const glowId = `${id}-glow`
+  const sparks = makeAscendingSparks(
+    8,
+    ["#7dd3fc", "#3b82f6", "#a855f7", "#c4b5fd", "#ffffff"],
+    2.0,
+    36,  // rise mayor para que las chispas suban más alto
+  )
   const styles = `
-    @keyframes ${id}-ember {
-      0%   { transform: translate(0, 0)     scale(0);   opacity: 0; }
-      20%  { opacity: 1; }
-      100% { transform: translate(var(--dx), -34px) scale(0.5); opacity: 0; }
-    }
-    @keyframes ${id}-heatglow {
+    @keyframes ${glowId} {
       0%, 100% { filter: drop-shadow(0 0 4px rgba(139, 92, 246, 0.45)); }
       50%      { filter: drop-shadow(0 0 11px rgba(139, 92, 246, 0.85)); }
     }
   `
-  // 8 chispas mágicas ascendentes, distribuidas a lo ancho de la llama
-  // y emergiendo desde la base/centro hasta la punta. Posiciones X más
-  // cerca del centro (38-62) porque la llama está más estrecha que el
-  // contenedor cuadrado tras el center-crop.
-  const embers = Array.from({ length: 8 }, (_, i) => {
-    const startX = 38 + ((i * 5) % 24)        // 38-62 → centro horizontal
-    const startY = 55 + ((i * 4) % 25)        // 55-80 → mitad inferior (base de la llama)
-    const dx = ((i * 5) % 11) - 5             // drift lateral suave
-    const delay = (i * 0.25) % 2.0
-    // Paleta mágica: cian, azul, púrpura, lila, blanco brillante
-    const colors = ["#7dd3fc", "#3b82f6", "#a855f7", "#c4b5fd", "#ffffff"]
-    return { startX, startY, dx, delay, color: colors[i % colors.length] }
-  })
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: styles }} />
       <div style={{
         position: "absolute", inset: 0,
-        animation: `${id}-heatglow 1.6s ease-in-out infinite`,
+        animation: `${glowId} 1.6s ease-in-out infinite`,
         pointerEvents: "none",
       }} />
-      <svg
-        viewBox="0 0 100 100"
-        style={{
-          position: "absolute", inset: 0, width: "100%", height: "100%",
-          pointerEvents: "none",
-        }}
-      >
-        {embers.map((e, i) => (
-          <circle
-            key={i}
-            cx={e.startX}
-            cy={e.startY}
-            r={1.8}
-            fill={e.color}
-            style={{
-              ["--dx" as string]: `${e.dx}px`,
-              animation: `${id}-ember 2.2s ease-out ${e.delay}s infinite`,
-              filter: `drop-shadow(0 0 2px ${e.color}cc)`,
-              opacity: 0,
-            } as React.CSSProperties}
-          />
-        ))}
-      </svg>
+      <AscendingSparks id={id} sparks={sparks} animDuration={2.2} />
     </>
   )
 }
