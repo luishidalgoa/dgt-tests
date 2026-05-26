@@ -593,7 +593,11 @@ npm run images:upload-metadata`}</pre>
           .images-bank-layout { grid-template-columns: 1fr; }
           .filters-fab {
             display: inline-flex; align-items: center; gap: 8px;
-            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            position: fixed;
+            /* Esquina inferior derecha + safe-area-inset (iOS home indicator,
+               toolbars de extensiones, etc.). Posición estándar FAB Material. */
+            right: 20px;
+            bottom: calc(20px + env(safe-area-inset-bottom, 0px));
             z-index: 150;
             padding: 12px 22px;
             background: linear-gradient(135deg, var(--orange-500, #f97316), var(--red-600, #dc2626));
@@ -602,8 +606,9 @@ npm run images:upload-metadata`}</pre>
             font-size: 13.5px; font-weight: 800; letter-spacing: 0.02em;
             box-shadow: 0 14px 28px -10px rgba(220, 38, 38, 0.55), 0 0 0 1px rgba(255,255,255,0.4);
             cursor: pointer; user-select: none;
+            transition: transform 0.15s, box-shadow 0.15s;
           }
-          .filters-fab:hover { transform: translateX(-50%) translateY(-2px); }
+          .filters-fab:hover { transform: translateY(-2px); box-shadow: 0 18px 32px -10px rgba(220, 38, 38, 0.6), 0 0 0 1px rgba(255,255,255,0.4); }
           .filters-backdrop {
             position: fixed; inset: 0;
             background: rgba(15, 23, 42, 0.5);
