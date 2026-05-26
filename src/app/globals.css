@@ -449,6 +449,8 @@ body {
   text-decoration: none;
 }
 .logo .ring {
+  /* Legacy — antes envolvía un <svg> con gradiente naranja. Ahora el
+     logo es el PNG de marca (.logo-img) que ya trae su propio fondo. */
   width: 34px;
   height: 34px;
   border-radius: 10px;
@@ -458,6 +460,12 @@ body {
   align-items: center;
   justify-content: center;
   box-shadow: 0 8px 18px -8px rgba(220, 38, 38, 0.6);
+}
+.logo .logo-img {
+  /* La PNG ya tiene rounded corners y fondo naranja. Le añadimos solo
+     una sombra sutil para igualar el look del antiguo .ring. */
+  border-radius: 10px;
+  box-shadow: 0 8px 18px -8px rgba(220, 38, 38, 0.55);
 }
 .links {
   display: flex;

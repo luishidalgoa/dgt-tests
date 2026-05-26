@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { HeaderUser } from "@/components/HeaderUser"
 
@@ -39,15 +40,18 @@ export function Navbar({ user, aiTokensRemaining, aiTokensMax, plan }: NavbarPro
     <div className="nav-wrap">
       <nav className="nav">
         <Link href="/" className="logo">
-          <span className="ring" aria-hidden="true">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" strokeWidth="2.2"
-              strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="9"/>
-              <circle cx="12" cy="12" r="2.2"/>
-              <path d="M12 5v5M5 13l5 -1M19 13l-5 -1"/>
-            </svg>
-          </span>
+          {/* Logo de marca (mismo PNG que el icon PWA / favicon).
+              Tamaño 34px para que coincida visualmente con el ring anterior.
+              Sirve la versión 256 — Next/Image se encarga del downscale. */}
+          <Image
+            src="/icons/icon-256.png"
+            alt=""
+            width={34}
+            height={34}
+            priority
+            className="logo-img"
+            aria-hidden="true"
+          />
           DGT Tests
         </Link>
 
