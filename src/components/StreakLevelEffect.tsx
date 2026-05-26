@@ -238,7 +238,10 @@ function SparksWithGlow({ id, k, count }: { id: string; k: number; count: number
   )
 }
 
-// ── Nivel 5: hoguera intensa — chispas grandes ascendentes + glow rojo ──
+// ── Nivel 5: llama mágica azul/morada — chispas mágicas + glow violeta ──
+// (El PNG del nivel 5 muestra una llama azul/morada arcana, no fuego
+// naranja convencional. Los colores y posiciones de las partículas se
+// alinean con ese diseño.)
 
 function IntenseBlaze({ id, k }: { id: string; k: number }) {
   void k
@@ -246,20 +249,24 @@ function IntenseBlaze({ id, k }: { id: string; k: number }) {
     @keyframes ${id}-ember {
       0%   { transform: translate(0, 0)     scale(0);   opacity: 0; }
       20%  { opacity: 1; }
-      100% { transform: translate(var(--dx), -30px) scale(0.5); opacity: 0; }
+      100% { transform: translate(var(--dx), -34px) scale(0.5); opacity: 0; }
     }
     @keyframes ${id}-heatglow {
-      0%, 100% { filter: drop-shadow(0 0 4px rgba(220, 38, 38, 0.45)); }
-      50%      { filter: drop-shadow(0 0 10px rgba(220, 38, 38, 0.85)); }
+      0%, 100% { filter: drop-shadow(0 0 4px rgba(139, 92, 246, 0.45)); }
+      50%      { filter: drop-shadow(0 0 11px rgba(139, 92, 246, 0.85)); }
     }
   `
-  // 8 brasas ascendentes con drift lateral aleatorio (pseudo, fijo por index)
+  // 8 chispas mágicas ascendentes, distribuidas a lo ancho de la llama
+  // y emergiendo desde la base/centro hasta la punta. Posiciones X más
+  // cerca del centro (38-62) porque la llama está más estrecha que el
+  // contenedor cuadrado tras el center-crop.
   const embers = Array.from({ length: 8 }, (_, i) => {
-    const startX = 30 + ((i * 7) % 40)
-    const startY = 60 + ((i * 3) % 15)
-    const dx = ((i * 5) % 11) - 5   // -5..+5px de drift lateral
+    const startX = 38 + ((i * 5) % 24)        // 38-62 → centro horizontal
+    const startY = 55 + ((i * 4) % 25)        // 55-80 → mitad inferior (base de la llama)
+    const dx = ((i * 5) % 11) - 5             // drift lateral suave
     const delay = (i * 0.25) % 2.0
-    const colors = ["#fb923c", "#f97316", "#ef4444", "#fbbf24"]
+    // Paleta mágica: cian, azul, púrpura, lila, blanco brillante
+    const colors = ["#7dd3fc", "#3b82f6", "#a855f7", "#c4b5fd", "#ffffff"]
     return { startX, startY, dx, delay, color: colors[i % colors.length] }
   })
   return (
