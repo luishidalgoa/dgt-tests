@@ -11,6 +11,7 @@ import {
   AlertCircle,
 } from "lucide-react"
 import { LazyTileImage } from "./LazyTileImage"
+import { imageUrl } from "@/lib/imageUrl"
 import { CATEGORIES, LABEL_METADATA, isLabelNew, type Category, type LabelMetadata } from "./labelMetadata"
 import {
   QUALITY_TIERS,
@@ -809,7 +810,6 @@ npm run images:upload-metadata`}</pre>
                       const tile = (
                         <ImageTile
                           entry={entry}
-                          exists={filesMtime.has(entry.filename)}
                           currentTag={tagFilter}
                           getDisplay={labelEs}
                           anchorId={tagFilter ? undefined : anchorId}
@@ -886,9 +886,8 @@ function StatBox({ label, value, sub, color }: {
   )
 }
 
-function ImageTile({ entry, exists, currentTag, getDisplay, buildTagURL, anchorId }: {
+function ImageTile({ entry, currentTag, getDisplay, buildTagURL, anchorId }: {
   entry:      DisplayEntry
-  exists:     boolean
   currentTag: string | undefined
   getDisplay: (id: string) => string
   /** Opcional: id HTML para que ScrollToHashTarget pueda hacer
@@ -901,7 +900,8 @@ function ImageTile({ entry, exists, currentTag, getDisplay, buildTagURL, anchorI
    *  URL sin filtro de tag; si no, aplica el filtro). */
   buildTagURL: (tag: string) => string
 }) {
-  const imgSrc = `/images/${entry.filename}`
+  // Resuelto vía CDN (R2) en prod o /images/ local en dev — ver lib/imageUrl
+  const imgSrc = imageUrl(entry.filename)
   return (
     <div
       id={anchorId}
@@ -917,26 +917,7 @@ function ImageTile({ entry, exists, currentTag, getDisplay, buildTagURL, anchorI
       }}
     >
       {isImageNew(entry.addedAt) && <NewImageBadge />}
-      {exists ? (
-        <LazyTileImage src={imgSrc} alt={entry.sha.slice(0, 8)} />
-      ) : (
-        <div style={{
-          aspectRatio:    "1",
-          background:     "rgba(239, 68, 68, 0.06)",
-          display:        "flex",
-          flexDirection:  "column",
-          alignItems:     "center",
-          justifyContent: "center",
-          gap:            6,
-          color:          "var(--red-500)",
-          fontSize:       10,
-          textAlign:      "center",
-          padding:        12,
-        }}>
-          <ImageOff className="h-6 w-6" />
-          archivo no en public/images/
-        </div>
-      )}
+      <LazyTileImage src={imgSrc} alt={entry.sha.slice(0, 8)} />
 
       <div style={{ padding: 8, fontSize: 11, display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
         <div className="font-mono-tabular" style={{ fontSize: 9.5, color: "var(--slate-400)", overflow: "hidden", textOverflow: "ellipsis" }}>

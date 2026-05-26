@@ -12,6 +12,7 @@ import {
   AlertCircle,
 } from "lucide-react"
 import { LazyTileImage } from "./LazyTileImage"
+import { imageUrl } from "@/lib/imageUrl"
 import { CATEGORIES, LABEL_METADATA, isLabelNew, type Category } from "./labelMetadata"
 import {
   QUALITY_TIERS,
@@ -730,10 +731,9 @@ function PickerTile({ entry, currentTag, getDisplay, onSelect, onTagClick }: {
    *  stopPropagation para no disparar el onSelect del tile. */
   onTagClick:   (tag: string) => void
 }) {
-  // Misma URL que /admin/images-bank: /images/<sha>.<ext>. El picker
-  // SOLO funciona en local porque las imágenes únicas no van a prod
-  // (gitignored). Es un tool de DEV.
-  const imgSrc = `/images/${entry.filename}`
+  // Resuelto vía CDN (R2) en prod o /images/ local en dev — el helper
+  // imageUrl() de lib/imageUrl.ts decide en función de NEXT_PUBLIC_IMAGE_CDN_URL.
+  const imgSrc = imageUrl(entry.filename)
 
   return (
     <div
