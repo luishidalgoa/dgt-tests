@@ -98,19 +98,21 @@ export function StreakIcon({
           objectFit: "contain",
         }}
       />
-      {/* Overlays animados:
-            - active  → animación específica del nivel (humo, chispas, brasas...)
-            - frozen  → gotas derritiéndose del cubo de hielo (uniforme para
-                        todos los niveles que tengan asset frozen propio).
-                        Para los frozen "fake" (fallback CSS) no aplicamos
-                        gotas porque no hay cubo visible.
-            - dormant → sin overlay (visualmente apagado). */}
-      {state === "active" && (
+      {/* Overlays animados — la regla maestra:
+            - Si el icono mostrado es la LLAMA APAGADA (nivel 0) → siempre
+              humo de cenizas, independientemente del state. Aplica al
+              caso lvl 0 active, al dormant (que fuerza lvl 0) y al
+              frozen sin asset si el user está en lvl 0.
+            - active resto de niveles → animación específica (chispas, etc.)
+            - frozen con asset (lvl 1-4) → gotas derritiéndose del cubo
+            - frozen sin asset en lvl > 0 → sin overlay (solo filtro CSS azul) */}
+      {info.level === 0 ? (
+        <StreakLevelEffect level={0} size={size} />
+      ) : state === "active" ? (
         <StreakLevelEffect level={info.level} size={size} />
-      )}
-      {state === "frozen" && useFrozenAsset && (
+      ) : state === "frozen" && useFrozenAsset ? (
         <StreakFrozenEffect size={size} />
-      )}
+      ) : null}
     </span>
   )
 }
