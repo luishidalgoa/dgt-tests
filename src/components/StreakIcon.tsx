@@ -1,5 +1,6 @@
 import Image from "next/image"
 import { getLevel } from "@/lib/xp"
+import { StreakLevelEffect } from "./StreakLevelEffect"
 
 /**
  * Estado visual del icono:
@@ -69,6 +70,7 @@ export function StreakIcon({
     <span
       className={className}
       style={{
+        position:       "relative",
         display:        "inline-flex",
         alignItems:     "center",
         justifyContent: "center",
@@ -88,6 +90,12 @@ export function StreakIcon({
         priority={false}
         unoptimized
       />
+      {/* Overlay animado por nivel (humo, llamas, chispas...).
+          Solo en estado "active" — frozen y dormant son visualmente
+          apagados y la animación rompería esa intención. */}
+      {state === "active" && (
+        <StreakLevelEffect level={info.level} size={size} />
+      )}
     </span>
   )
 }
