@@ -1,5 +1,6 @@
 import Image from "next/image"
 import { getLevel } from "@/lib/xpLevels"
+import { StreakLevelEffect, StreakFrozenEffect } from "./StreakLevelEffect"
 
 /**
  * Estado visual del icono:
@@ -88,7 +89,28 @@ export function StreakIcon({
         height={size}
         priority={false}
         unoptimized
+        // Los assets generados por IA tienen aspect distinto (vertical
+        // 1024×1536, horizontal 1536×1024) — object-fit:contain los
+        // encaja en el cuadrado del contenedor sin deformación.
+        style={{
+          width:     size,
+          height:    size,
+          objectFit: "contain",
+        }}
       />
+      {/* Overlays animados:
+            - active  → animación específica del nivel (humo, chispas, brasas...)
+            - frozen  → gotas derritiéndose del cubo de hielo (uniforme para
+                        todos los niveles que tengan asset frozen propio).
+                        Para los frozen "fake" (fallback CSS) no aplicamos
+                        gotas porque no hay cubo visible.
+            - dormant → sin overlay (visualmente apagado). */}
+      {state === "active" && (
+        <StreakLevelEffect level={info.level} size={size} />
+      )}
+      {state === "frozen" && useFrozenAsset && (
+        <StreakFrozenEffect size={size} />
+      )}
     </span>
   )
 }
