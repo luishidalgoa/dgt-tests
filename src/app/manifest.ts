@@ -16,14 +16,14 @@ import type { MetadataRoute } from "next"
  * móvil. background_color es el splash screen mientras carga la app
  * tras tocar el icono.
  *
- * ICONOS: PNGs físicos en /public/icons/ a varios tamaños. Antes
- * generábamos un PNG con emoji 🚗 (icon.tsx) pero el emoji depende
- * del font del sistema y se veía pixelado en móviles. Ahora usamos el
- * volante real de marca (mismo diseño que /public/stripe/logo-*.png).
- * - 256: thumbnails / pequeñas (Android home grid pequeño)
- * - 512: PWA "installable" (Chrome lo exige). Maskable para que
- *        Android lo recorte en círculo/squircle sin perder detalle.
- * - 1024: hi-DPI para pantallas retina / 4K (iOS, Android premium)
+ * ICONOS: PNGs físicos en /public/icons/ a varios tamaños generados
+ * desde /public/icons/icon.png (fuente 1024×1024 de ChatGPT/DALL-E). El
+ * script scripts/generate-pwa-icons.ts produce todos los derivados.
+ * - 256:  thumbnails / pequeñas (Android home grid pequeño)
+ * - 512:  PWA "installable" (Chrome lo exige). Maskable para que
+ *         Android lo recorte en círculo/squircle sin perder detalle.
+ * - 1024: hi-DPI para pantallas retina (iOS, Android premium)
+ * - 2048: ⭐ máxima resolución para displays 4K
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
@@ -40,14 +40,13 @@ export default function manifest(): MetadataRoute.Manifest {
     // Cream del fondo para el splash de carga.
     background_color: "#fef7ed",
     icons: [
-      // PNGs físicos del logo de marca (volante blanco sobre naranja).
+      // PNGs derivados de /public/icons/icon.png (logo ChatGPT/DALL-E).
       // Varios tamaños para que cada SO escoja el más cercano a su DPI.
       { src: "/icons/icon-256.png",  sizes: "256x256",   type: "image/png", purpose: "any" },
       { src: "/icons/icon-512.png",  sizes: "512x512",   type: "image/png", purpose: "any" },
       { src: "/icons/icon-512.png",  sizes: "512x512",   type: "image/png", purpose: "maskable" },
       { src: "/icons/icon-1024.png", sizes: "1024x1024", type: "image/png", purpose: "any" },
-      // SVG escalable como fallback (mejor para zoom y pantallas hi-DPI extremas).
-      { src: "/icon.svg",            sizes: "any",       type: "image/svg+xml", purpose: "any" },
+      { src: "/icons/icon-2048.png", sizes: "2048x2048", type: "image/png", purpose: "any" },
     ],
     categories: ["education", "productivity"],
   }
