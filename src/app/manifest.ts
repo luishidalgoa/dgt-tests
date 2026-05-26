@@ -40,8 +40,9 @@ export default function manifest(): MetadataRoute.Manifest {
     // Cream del fondo para el splash de carga.
     background_color: "#fef7ed",
     icons: [
-      // PNGs derivados de /public/icons/icon.png (logo ChatGPT/DALL-E).
-      // Varios tamaños para que cada SO escoja el más cercano a su DPI.
+      // PNGs derivados de /public/icons/icon.png (logo de marca: volante
+      // blanco 3-spokes sobre fondo naranja). Varios tamaños para que
+      // cada SO escoja el más cercano a su DPI.
       { src: "/icons/icon-256.png",  sizes: "256x256",   type: "image/png", purpose: "any" },
       { src: "/icons/icon-512.png",  sizes: "512x512",   type: "image/png", purpose: "any" },
       { src: "/icons/icon-512.png",  sizes: "512x512",   type: "image/png", purpose: "maskable" },
