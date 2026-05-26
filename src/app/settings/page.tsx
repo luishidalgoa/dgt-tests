@@ -338,7 +338,7 @@ export default async function SettingsPage({ searchParams }: PageProps) {
           <div style={{ flex: 1 }}>
             <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Tokens IA este mes</h2>
             <p style={{ margin: 0, fontSize: 12.5, color: "var(--slate-500)" }}>
-              Mes {quota.month} · se resetea el {resetDate}
+              Se renueva el {resetDate}
             </p>
           </div>
         </div>

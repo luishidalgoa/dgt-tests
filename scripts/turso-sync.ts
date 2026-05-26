@@ -38,7 +38,7 @@
  *   --no-ai-cache             Skip ai_cache_entries
  */
 
-import { createClient, type Client } from "@libsql/client"
+import { createClient, type Client, type InStatement } from "@libsql/client"
 import { resolve } from "node:path"
 import { pathToFileURL } from "node:url"
 
@@ -184,7 +184,7 @@ async function syncSystemData(
     const cols = tqRes.columns
     const placeholders = "(" + cols.map(() => "?").join(",") + ")"
     const insertSql = `INSERT INTO test_questions (${cols.map((c) => `"${c}"`).join(",")}) VALUES ${placeholders}`
-    const batch: { sql: string; args: unknown[] }[] = []
+    const batch: InStatement[] = []
     let skipped = 0
     for (const row of tqRes.rows) {
       const localQId = Number(row.questionId)
@@ -382,7 +382,7 @@ async function syncQuestions(
 
     // DELETE bulk: una sentencia con IN (?,?,?,...)
     const placeholders = prodQIds.map(() => "?").join(",")
-    const stmts: { sql: string; args: unknown[] }[] = [
+    const stmts: InStatement[] = [
       { sql: `DELETE FROM options WHERE questionId IN (${placeholders})`, args: prodQIds },
     ]
 
