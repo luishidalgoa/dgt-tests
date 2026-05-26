@@ -155,6 +155,24 @@ async function syncSystemData(
 
   header("Sistema: categories, tests, manual_sections")
 
+  // ANTES de hacer DELETE FROM tests, guardamos en memoria el mapeo
+  // (attemptId → testId) que tiene PROD. El DELETE dispara el
+  // onDelete:SetNull de ExamAttempt.testId (schema línea 237) y dejaría
+  // huérfanos todos los exam_attempts en prod. Tras el INSERT que
+  // recrea los tests con sus IDs originales (que NO cambian porque
+  // preservamos IDs locales), restauramos los testId.
+  let attemptTestIdSnapshot: { id: number; testId: number }[] = []
+  if (!cfg.dryRun) {
+    const snap = await tgt.execute(
+      `SELECT id, testId FROM exam_attempts WHERE testId IS NOT NULL`,
+    )
+    attemptTestIdSnapshot = snap.rows.map((r) => ({
+      id:     Number(r.id),
+      testId: Number(r.testId),
+    }))
+    console.log(`  📸 snapshot exam_attempts.testId: ${attemptTestIdSnapshot.length} filas (para restaurar tras delete)`)
+  }
+
   // categories, tests, manual_sections: DELETE+INSERT (preservando IDs)
   for (const table of ["categories", "tests", "manual_sections"] as const) {
     const { rows, columns } = await src.execute(`SELECT * FROM ${table}`)
@@ -172,6 +190,28 @@ async function syncSystemData(
         "write",
       )
     }
+  }
+
+  // Restaurar testId de attempts huérfanos (los que tenían testId apuntando
+  // a tests que existían antes del DELETE). Solo restauramos si el testId
+  // sigue existiendo en la tabla tests recién re-insertada (matching por id).
+  if (!cfg.dryRun && attemptTestIdSnapshot.length > 0) {
+    const validIds = await tgt.execute(`SELECT id FROM tests`)
+    const validSet = new Set(validIds.rows.map((r) => Number(r.id)))
+    const toRestore = attemptTestIdSnapshot.filter((s) => validSet.has(s.testId))
+    let restored = 0
+    for (let i = 0; i < toRestore.length; i += 100) {
+      const chunk = toRestore.slice(i, i + 100)
+      await tgt.batch(
+        chunk.map((s) => ({
+          sql:  `UPDATE exam_attempts SET testId = ? WHERE id = ?`,
+          args: [s.testId, s.id],
+        })),
+        "write",
+      )
+      restored += chunk.length
+    }
+    console.log(`  🔁 testId restaurado en ${restored}/${attemptTestIdSnapshot.length} attempts`)
   }
 
   // test_questions: depende de questions ya estar sincronizadas.
