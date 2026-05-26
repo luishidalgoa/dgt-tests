@@ -46,7 +46,7 @@ describe("getLevel", () => {
   it("XP = 0 → nivel 0 con barra al 0%", () => {
     const info = getLevel(0)
     expect(info.level).toBe(0)
-    expect(info.iconPath).toBe("/streak/lvl-0.png")
+    expect(info.iconPath).toBe(LEVELS[0].iconPath)
     expect(info.minXp).toBe(0)
     expect(info.nextLevelXp).toBe(50)
     expect(info.xpToNext).toBe(50)
@@ -57,7 +57,7 @@ describe("getLevel", () => {
     // 50 XP exactos = lvl 1
     const info = getLevel(50)
     expect(info.level).toBe(1)
-    expect(info.iconPath).toBe("/streak/lvl-1.png")
+    expect(info.iconPath).toBe(LEVELS[1].iconPath)
     expect(info.minXp).toBe(50)
     expect(info.nextLevelXp).toBe(150)
   })
@@ -91,9 +91,13 @@ describe("getLevel", () => {
     expect(getLevel(Number.NEGATIVE_INFINITY).level).toBe(0)
   })
 
-  it("Cada nivel apunta a su PNG correspondiente", () => {
+  it("Cada nivel apunta al iconPath declarado en LEVELS", () => {
+    // No hard-codeamos la convención de naming (algunos PNGs usan
+    // legacy "lvl-N" y los nuevos "level-N"); solo verificamos que el
+    // path devuelto por getLevel coincide con el declarado en la tabla.
     for (const lvl of LEVELS) {
-      expect(getLevel(lvl.minXp).iconPath).toBe(`/streak/lvl-${lvl.level}.png`)
+      expect(getLevel(lvl.minXp).iconPath).toBe(lvl.iconPath)
+      expect(getLevel(lvl.minXp).iconPath).toMatch(/^\/streak\/(lvl|level)-\d+\.png$/)
     }
   })
 })
