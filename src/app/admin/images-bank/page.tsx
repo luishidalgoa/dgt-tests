@@ -84,6 +84,7 @@ interface PageProps {
     untagged?:  string
     lowconf?:   string
     tagged?:    string  // inverso de untagged: imgs CON al menos 1 tag (cualquier score)
+    withrefs?:  string  // solo imgs con refsCount > 0
     quality?:   string  // QualityTier id, ver QUALITY_TIERS
     sort?:      string  // "asc" | "desc" (default desc) — orden de las pills por count
     gridsort?:  string  // "most_recent" sobreescribe el orden del grid; ausente = auto
@@ -282,6 +283,7 @@ function buildFilterURL(opts: {
   untagged?: boolean
   lowconf?:  boolean
   tagged?:   boolean
+  withrefs?: boolean
   quality?:  QualityTier | null
   sort?:     "asc" | "desc"
   gridsort?: GridSort
@@ -291,6 +293,7 @@ function buildFilterURL(opts: {
   if (opts.untagged)                              params.set("untagged", "1")
   if (opts.lowconf)                               params.set("lowconf",  "1")
   if (opts.tagged)                                params.set("tagged",   "1")
+  if (opts.withrefs)                              params.set("withrefs", "1")
   if (opts.quality)                               params.set("quality",  opts.quality)
   if (opts.sort && opts.sort !== "desc")          params.set("sort",     opts.sort)
   if (opts.gridsort && opts.gridsort !== "auto")  params.set("gridsort", opts.gridsort)
@@ -304,6 +307,7 @@ export default async function ImagesBankPage({ searchParams }: PageProps) {
   const untaggedFilter = params.untagged === "1"
   const lowConfFilter  = params.lowconf  === "1"
   const withTagsFilter = params.tagged === "1"
+  const withRefsFilter = params.withrefs === "1"
   const sortDir: "asc" | "desc" = params.sort === "asc" ? "asc" : "desc"
   // gridSort: el grid SIEMPRE muestra divisores por fecha.
   //   - "auto"   (default): divisores por addedAt (mtime). Dentro de
@@ -311,11 +315,14 @@ export default async function ImagesBankPage({ searchParams }: PageProps) {
   //     filtro base (más usadas, peores primero, etc).
   //   - "recent": divisores por addedAt y orden POR addedAt desc
   //     dentro de cada bucket. Las más nuevas siempre primero.
+  //   - "refs":   divisores por addedAt, orden por refsCount desc —
+  //     las imágenes con más referencias guardadas salen primero.
   //   - "tagged": divisores por taggedAt. Sobreescribe el orden con
   //     fecha de tagging desc.
   const gridSort: GridSort =
     params.gridsort === "tagged" ? "tagged"
     : params.gridsort === "recent" ? "recent"
+    : params.gridsort === "refs"   ? "refs"
     : "auto"
   // Validar quality contra el enum — invalid silently ignored
   const qualityFilter: QualityTier | null =
@@ -554,6 +561,11 @@ npm run images:upload-metadata`}</pre>
       maxQuestionId,
       addedAt,
       taggedAt: Number.isFinite(taggedAt as number) ? (taggedAt as number) : null,
+      refsCount: referenceCountsMap.get(sha) ?? 0,
+      // El SHA aparece como newSha en alguna entry de
+      // alternative_references.json → es una ref descargada previamente.
+      // Vetamos buscarle más refs (ya está catalogada en internet).
+      isAlternativeReference: alternativeRefsRaw.has(sha),
     }
   })
 
@@ -595,6 +607,11 @@ npm run images:upload-metadata`}</pre>
       maxQuestionId: 0,
       addedAt:       Number.isFinite(downloadedAtMs) ? downloadedAtMs : null,
       taggedAt:      null,
+      // Una ref puede ella misma tener sub-refs si el admin descargó algo
+      // a partir de ella antes (caso raro pero posible).
+      refsCount:     referenceCountsMap.get(newSha) ?? 0,
+      // Por definición es una ref previamente descargada → veto Lens
+      isAlternativeReference: true,
       pendingClassification: true,
       pendingSource: {
         originalSha,
@@ -625,6 +642,10 @@ npm run images:upload-metadata`}</pre>
   } else if (withTagsFilter) {
     entries     = entries.filter((e) => e.tags.length > 0)
     filterLabel = "Con tags"
+    filterIcon  = <TagIcon className="h-4 w-4" />
+  } else if (withRefsFilter) {
+    entries     = entries.filter((e) => (e.refsCount ?? 0) > 0)
+    filterLabel = "Con referencias descargadas"
     filterIcon  = <TagIcon className="h-4 w-4" />
   } else if (tagFilter) {
     entries     = entries.filter((e) => e.tags.some((t) => t.tag === tagFilter))
@@ -676,6 +697,18 @@ npm run images:upload-metadata`}</pre>
       if (da !== dbb) return dbb - da
       return b.maxQuestionId - a.maxQuestionId
     })
+  } else if (gridSort === "refs") {
+    // Por refsCount desc — las imágenes con más refs guardadas primero.
+    // Tie-break por addedAt desc para que las recientes ganen entre las
+    // que comparten count.
+    entries.sort((a, b) => {
+      const ra = a.refsCount ?? 0
+      const rb = b.refsCount ?? 0
+      if (ra !== rb) return rb - ra
+      const da  = a.addedAt ?? FALLBACK_IMAGE_DATE_MS
+      const dbb = b.addedAt ?? FALLBACK_IMAGE_DATE_MS
+      return dbb - da
+    })
   } else if (untaggedFilter || lowConfFilter) {
     // Peores primero (max score asc) — más informativo para iterar prompts
     entries.sort((a, b) => a.maxScore - b.maxScore)
@@ -710,8 +743,10 @@ npm run images:upload-metadata`}</pre>
   let noTagsCount   = 0
   let noConfCount   = 0
   let pendingCount  = 0
+  let withRefsCount = 0
   for (const e of entriesAll) {
     if (e.pendingClassification) pendingCount++
+    if ((e.refsCount ?? 0) > 0)  withRefsCount++
     if (e.tags.length === 0) {
       noTagsCount++
       noConfCount++
@@ -932,6 +967,19 @@ npm run images:upload-metadata`}</pre>
               color="ok"
               icon={<TagIcon className="h-3 w-3" />}
             />
+            {/* Solo aparece si hay alguna ref descargada — no contamina
+                el sidebar mientras el admin no haya empezado a usar
+                "Buscar referencias". */}
+            {withRefsCount > 0 && (
+              <FilterPill
+                label="Con refs"
+                count={withRefsCount}
+                href={buildFilterURL({ withrefs: true, gridsort: gridSort })}
+                active={withRefsFilter}
+                color="ok"
+                icon={<TagIcon className="h-3 w-3" />}
+              />
+            )}
           </div>
 
           {/* ── Calidad (probabilidad sigmoid) ── */}
@@ -972,19 +1020,27 @@ npm run images:upload-metadata`}</pre>
               active={gridSort === "auto"}
               label="Por defecto"
               title="Orden intrínseco (más usadas, peores primero, etc) dentro de cada bucket de fecha (agrupado por mtime del archivo)"
-              href={buildFilterURL({ tag: tagFilter, untagged: untaggedFilter, lowconf: lowConfFilter, tagged: withTagsFilter, quality: qualityFilter, sort: sortDir, gridsort: "auto" })}
+              href={buildFilterURL({ tag: tagFilter, untagged: untaggedFilter, lowconf: lowConfFilter, tagged: withTagsFilter, withrefs: withRefsFilter, quality: qualityFilter, sort: sortDir, gridsort: "auto" })}
             />
             <SortToggle
               active={gridSort === "recent"}
               label="🕐 Más recientes"
               title="Ordena por addedAt desc (mtime del archivo). Las imágenes recién subidas al banco salen primero."
-              href={buildFilterURL({ tag: tagFilter, untagged: untaggedFilter, lowconf: lowConfFilter, tagged: withTagsFilter, quality: qualityFilter, sort: sortDir, gridsort: "recent" })}
+              href={buildFilterURL({ tag: tagFilter, untagged: untaggedFilter, lowconf: lowConfFilter, tagged: withTagsFilter, withrefs: withRefsFilter, quality: qualityFilter, sort: sortDir, gridsort: "recent" })}
             />
+            {withRefsCount > 0 && (
+              <SortToggle
+                active={gridSort === "refs"}
+                label="↻ Con más refs"
+                title="Ordena por refsCount desc — las imágenes con más referencias guardadas via Lens/stock APIs salen primero."
+                href={buildFilterURL({ tag: tagFilter, untagged: untaggedFilter, lowconf: lowConfFilter, tagged: withTagsFilter, withrefs: withRefsFilter, quality: qualityFilter, sort: sortDir, gridsort: "refs" })}
+              />
+            )}
             <SortToggle
               active={gridSort === "tagged"}
               label="🏷️ Nuevas tagueadas"
               title="Ordena por fecha de tagging del classifier (útil tras añadir labels nuevos)"
-              href={buildFilterURL({ tag: tagFilter, untagged: untaggedFilter, lowconf: lowConfFilter, tagged: withTagsFilter, quality: qualityFilter, sort: sortDir, gridsort: "tagged" })}
+              href={buildFilterURL({ tag: tagFilter, untagged: untaggedFilter, lowconf: lowConfFilter, tagged: withTagsFilter, withrefs: withRefsFilter, quality: qualityFilter, sort: sortDir, gridsort: "tagged" })}
             />
           </div>
 
@@ -1324,8 +1380,17 @@ function ImageTile({ entry, currentTag, getDisplay, buildTagURL, anchorId, refsC
           {/* Botón "buscar referencias visuales" — admin only (todo /admin/*
               gateado en layout.tsx). Modal lazy-load. El badge sobre la
               lupa repite el contador para ser visible incluso si el SHA
-              está truncado por anchos de tile estrechos. */}
-          <FindReplacementsButton sha={entry.sha} currentTags={entry.tags} refsCount={refsCount} />
+              está truncado por anchos de tile estrechos.
+
+              Si esta imagen es ella misma una ref descargada anteriormente
+              (isAlternativeReference) → deshabilitamos la lupa. No tiene
+              sentido buscar refs de una ref: ya viene de internet. */}
+          <FindReplacementsButton
+            sha={entry.sha}
+            currentTags={entry.tags}
+            refsCount={refsCount}
+            disabledBecauseIsRef={entry.isAlternativeReference === true}
+          />
         </div>
 
         {isPending && entry.pendingSource ? (

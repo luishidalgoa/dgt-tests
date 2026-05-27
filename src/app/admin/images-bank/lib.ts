@@ -197,6 +197,18 @@ export interface DisplayEntry {
     provider:     string
     attribution?: string
   }
+  /** Cuántas referencias alternativas (Lens/Pixabay/Pexels) se han
+   *  descargado a partir de esta imagen — para mostrar como badge y
+   *  para el filtro/sort "Con más refs". 0 / undefined si ninguna o
+   *  si el caller no las consultó. */
+  refsCount?:     number
+  /** True si este SHA aparece como `newSha` en alguna entry de
+   *  alternative_references.json — es decir, esta imagen VINO de un
+   *  proveedor externo en un guardado anterior. La UI deshabilita la
+   *  búsqueda Lens sobre ella porque buscarle refs a una ref no tiene
+   *  sentido (ya está catalogada en internet y el resultado sería
+   *  pobre o redundante). */
+  isAlternativeReference?: boolean
 }
 
 /** Modos de orden del grid:
@@ -209,12 +221,16 @@ export interface DisplayEntry {
  *               desc dentro de cada bucket. Las imágenes recién añadidas
  *               al banco salen primero. Útil tras descargar referencias
  *               nuevas o tras procesar SHAs nuevos.
+ *   - "refs":   ordena por refsCount desc — las imágenes con más
+ *               referencias alternativas descargadas (Lens/stock) salen
+ *               primero. Útil para auditar el trabajo del admin sobre
+ *               qué SHAs ha intentado sustituir más veces.
  *   - "tagged": ordena por fecha de tagging desc + divisores por la
  *               misma fecha. Sobreescribe el orden intrínseco. Útil
  *               tras añadir labels nuevos para ver qué imágenes acaba
  *               de procesar el classifier.
  *  En TODOS los modos hay divisores temporales (Hoy / Esta semana / …). */
-export type GridSort = "auto" | "recent" | "tagged"
+export type GridSort = "auto" | "recent" | "refs" | "tagged"
 
 /** Buckets temporales para los divisores del grid en modo "más recientes".
  *  Orden = orden visual (de más reciente a más antiguo). */

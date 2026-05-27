@@ -108,9 +108,16 @@ interface Props {
    *  SHA. El padre lo pasa desde page.tsx (lee meta/alternative_references.json).
    *  null/undefined = no se ha consultado todavía → no se pinta el badge. */
   refsCount?:    number
+  /** True si ESTA imagen es ella misma una referencia descargada
+   *  previamente (su SHA aparece como newSha en
+   *  alternative_references.json). En ese caso el botón se ve
+   *  desactivado: no tiene sentido buscar Lens sobre una imagen que ya
+   *  está catalogada en internet — los resultados serían pobres o la
+   *  propia imagen tal cual. */
+  disabledBecauseIsRef?: boolean
 }
 
-export function FindReplacementsButton({ sha, currentTags, refsCount }: Props) {
+export function FindReplacementsButton({ sha, currentTags, refsCount, disabledBecauseIsRef }: Props) {
   const [open, setOpen] = useState(false)
   // mounted: solo renderizamos el portal cuando ya estamos en cliente
   // (document existe). Sin esto, createPortal en SSR explota.
@@ -119,13 +126,16 @@ export function FindReplacementsButton({ sha, currentTags, refsCount }: Props) {
   useEffect(() => { setMounted(true) }, [])
 
   const hasRefs = typeof refsCount === "number" && refsCount > 0
+  const isDisabled = disabledBecauseIsRef === true
   return (
     <>
       <button
         type="button"
+        disabled={isDisabled}
         onClick={(e) => {
           e.stopPropagation()
           e.preventDefault()
+          if (isDisabled) return
           setOpen(true)
         }}
         // SwipeableImageTile inicia el drag con onMouseDown/onTouchStart —
@@ -136,14 +146,18 @@ export function FindReplacementsButton({ sha, currentTags, refsCount }: Props) {
         onTouchStart={(e) => e.stopPropagation()}
         onPointerDown={(e) => e.stopPropagation()}
         title={
-          hasRefs
-            ? `Buscar referencias visuales · ${refsCount} ya descargadas`
-            : "Buscar referencias visuales (Google Lens / stock)"
+          isDisabled
+            ? "Esta imagen es ella misma una referencia descargada anteriormente. No tiene sentido buscarle más refs (ya está catalogada en internet)."
+            : hasRefs
+              ? `Buscar referencias visuales · ${refsCount} ya descargadas`
+              : "Buscar referencias visuales (Google Lens / stock)"
         }
         aria-label={
-          hasRefs
-            ? `Buscar referencias, ${refsCount} ya descargadas`
-            : "Buscar referencias visuales"
+          isDisabled
+            ? "Búsqueda de referencias deshabilitada — esta imagen ya es una ref"
+            : hasRefs
+              ? `Buscar referencias, ${refsCount} ya descargadas`
+              : "Buscar referencias visuales"
         }
         style={{
           position:       "relative",      // contenedor del badge
@@ -153,14 +167,19 @@ export function FindReplacementsButton({ sha, currentTags, refsCount }: Props) {
           width:          22,
           height:         22,
           border:         0,
-          background:     hasRefs
-            ? "rgba(99, 102, 241, 0.22)"   // tinte más fuerte cuando hay refs
-            : "rgba(99, 102, 241, 0.12)",
-          color:          "var(--indigo-600, #6366f1)",
+          background:     isDisabled
+            ? "var(--slate-100)"                    // desactivado → gris claro
+            : hasRefs
+              ? "rgba(99, 102, 241, 0.22)"          // refs → tinte fuerte
+              : "rgba(99, 102, 241, 0.12)",
+          color:          isDisabled
+            ? "var(--slate-400)"
+            : "var(--indigo-600, #6366f1)",
           borderRadius:   4,
-          cursor:         "pointer",
+          cursor:         isDisabled ? "not-allowed" : "pointer",
           padding:        0,
           flexShrink:     0,
+          opacity:        isDisabled ? 0.55 : 1,
           // touchAction:none refuerza el bloqueo en móvil: el browser no
           // tratará el touch como pan/zoom y, sobre todo, lo entrega a
           // este botón antes que al wrapper de swipe del tile.
