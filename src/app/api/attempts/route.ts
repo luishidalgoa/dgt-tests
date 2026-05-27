@@ -196,7 +196,7 @@ export async function POST(req: Request) {
   //      /test-errores NO da XP base — son repaso.
   //   2. Bonus diario de racha (una vez por día) si el modo cuenta
   //      para stats (`awardDailyStreakBonusIfDue` lo decide via
-  //      `ATTEMPT_STATS_WHERE`): tabla cíclica [5,7,10,15,20,30,50].
+  //      `ATTEMPT_STATS_WHERE`): tabla cíclica [10,14,20,30,40,60,100].
   //      Aplica a cualquier examen normal/tema independientemente de
   //      si fue real o práctica — lo importante es mantener la racha.
   //
