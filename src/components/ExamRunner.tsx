@@ -418,11 +418,21 @@ export function ExamRunner({
   }, [elapsedSeconds, timeLimit, hydrated])
 
   // ── Selección y navegación ──────────────────────────────────────────────
+  // Una vez se ha mostrado feedback (modo práctica con respuesta dada), la
+  // opción queda bloqueada. Cambiar la respuesta tras ver si acertaste no
+  // tiene sentido pedagógico y además trampearía las stats: "elegí esta,
+  // me dijeron que fallé, ahora marco la correcta".
+  //
+  // En modo examen real (timeLimit !== null) showFeedback es siempre false
+  // — ahí SÍ puedes cambiar de idea antes de avanzar, igual que en un
+  // examen DGT físico.
+  const answerLocked = showFeedback
   const selectOption = useCallback(
     (optId: number) => {
+      if (answerLocked) return
       setAnswers((prev) => ({ ...prev, [q.id]: optId }))
     },
-    [q.id]
+    [q.id, answerLocked]
   )
 
   const goTo = useCallback(
@@ -723,6 +733,8 @@ export function ExamRunner({
                       key={opt.id}
                       type="button"
                       onClick={() => selectOption(opt.id)}
+                      disabled={answerLocked}
+                      aria-disabled={answerLocked}
                       className="w-full text-left transition flex items-start gap-3"
                       style={{
                         padding: 14,
@@ -730,6 +742,11 @@ export function ExamRunner({
                         border: `2px solid ${borderColor}`,
                         background,
                         boxShadow,
+                        // Cursor visual: locked → cursor "answered", no
+                        // interactiva. La opacidad se mantiene 1 para que
+                        // el feedback visual (verde correcta / rojo fallo)
+                        // siga siendo legible sin que parezca apagado.
+                        cursor: answerLocked ? "default" : "pointer",
                       }}
                     >
                       <span
