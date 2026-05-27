@@ -1273,12 +1273,58 @@ function ImageTile({ entry, currentTag, getDisplay, buildTagURL, anchorId, refsC
 
       <div style={{ padding: 8, fontSize: 11, display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
-          <div className="font-mono-tabular" style={{ fontSize: 9.5, color: "var(--slate-400)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>
-            {entry.sha.slice(0, 16)}…
+          {/* SHA + contador refs como texto visible. El `title` actúa de
+              tooltip nativo del navegador con la info completa — más
+              fiable cross-browser que un tooltip custom, y suficiente
+              para algo informativo. Tras ~700ms de hover sale. */}
+          <div
+            className="font-mono-tabular"
+            title={
+              `SHA-256: ${entry.sha}\n` +
+              `Filename: ${entry.filename}\n` +
+              (refsCount > 0
+                ? `Referencias descargadas (Google Lens / stock APIs): ${refsCount}`
+                : `Sin referencias alternativas descargadas todavía.`)
+            }
+            style={{
+              fontSize:     9.5,
+              color:        "var(--slate-400)",
+              overflow:     "hidden",
+              whiteSpace:   "nowrap",
+              flex:         1,
+              minWidth:     0,
+              display:      "flex",
+              alignItems:   "center",
+              gap:          5,
+              cursor:       "help",
+            }}
+          >
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0 }}>
+              {entry.sha.slice(0, 16)}…
+            </span>
+            {refsCount > 0 && (
+              <span
+                aria-label={`${refsCount} referencia${refsCount === 1 ? "" : "s"} descargada${refsCount === 1 ? "" : "s"} desde Lens/stock`}
+                style={{
+                  fontSize:     9,
+                  fontWeight:   800,
+                  padding:      "1px 5px",
+                  borderRadius: 999,
+                  background:   "rgba(99, 102, 241, 0.15)",
+                  color:        "var(--indigo-700, #4338ca)",
+                  flexShrink:   0,
+                  letterSpacing: "0.02em",
+                  textTransform: "lowercase",
+                }}
+              >
+                ↻ {refsCount} ref{refsCount === 1 ? "" : "s"}
+              </span>
+            )}
           </div>
           {/* Botón "buscar referencias visuales" — admin only (todo /admin/*
               gateado en layout.tsx). Modal lazy-load. El badge sobre la
-              lupa muestra cuántas refs ya se guardaron para este SHA. */}
+              lupa repite el contador para ser visible incluso si el SHA
+              está truncado por anchos de tile estrechos. */}
           <FindReplacementsButton sha={entry.sha} currentTags={entry.tags} refsCount={refsCount} />
         </div>
 
