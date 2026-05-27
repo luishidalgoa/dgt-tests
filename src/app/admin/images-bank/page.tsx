@@ -34,6 +34,7 @@ import {
 import { FilterPill, QualityPill, SortToggle, SidebarHeader, DateDivider, QuestionsListButton, NewImageBadge, SwipeableImageTile, ScrollToHashTarget, CardHashUpdater, TagSearchInput } from "./BankUi"
 import { FindReplacementsButton } from "./FindReplacementsModal"
 import { AddManualTagButton, type AvailableLabel } from "./AddManualTagModal"
+import { TagOverflowChip } from "./TagListPopover"
 
 export const dynamic = "force-dynamic"
 
@@ -1175,82 +1176,132 @@ function ImageTile({ entry, currentTag, getDisplay, buildTagURL, anchorId, refsC
               (sin tags)
             </span>
           ) : (
-            entry.tags.map((t) => {
-              const isFiltered = currentTag === t.tag
+            // Solo los 4 primeros tags se renderizan en la card. El resto se
+            // accede vía TagOverflowChip que abre el popover viewport-aware.
+            // Decisión: priorizamos los tags humanAssigned/humanConfirmed +
+            // confident para que la card cuente la historia más útil sin
+            // depender del orden del classifier.
+            (() => {
+              const sorted = [...entry.tags].sort((a, b) => {
+                // Manual primero, después confirmed, después confident,
+                // después por score desc. Estable por tag id como tie-break.
+                const aScore = (a.humanAssigned ? 1000 : 0)
+                             + (a.humanConfirmed ? 100 : 0)
+                             + (a.confident ? 10 : 0)
+                             + a.score
+                const bScore = (b.humanAssigned ? 1000 : 0)
+                             + (b.humanConfirmed ? 100 : 0)
+                             + (b.confident ? 10 : 0)
+                             + b.score
+                if (aScore !== bScore) return bScore - aScore
+                return a.tag.localeCompare(b.tag)
+              })
+              const VISIBLE = 4
+              const visible = sorted.slice(0, VISIBLE)
+              const hiddenCount = sorted.length - visible.length
               return (
-                <Link
-                  key={t.tag}
-                  href={buildTagURL(t.tag)}
-                  title={
-                    t.humanConfirmed
-                      ? `✓ Revisado por admin · ${isFiltered ? "Quitar filtro" : "Filtrar por"}: ${t.tag}`
-                      : isFiltered ? `Quitar filtro: ${t.tag}` : `Filtrar por: ${t.tag}`
-                  }
-                  style={{
-                    position:       "relative",  // necesario para el badge absolute
-                    display:        "flex",
-                    justifyContent: "space-between",
-                    alignItems:     "center",
-                    fontSize:       10,
-                    padding:        "1px 6px",
-                    paddingLeft:    t.humanConfirmed ? 12 : 6,  // espacio para el badge
-                    borderRadius:   3,
-                    textDecoration: "none",
-                    cursor:         "pointer",
-                    background:     isFiltered
-                      ? "rgba(234, 88, 12, 0.18)"
-                      : t.confident
-                      ? "rgba(34, 197, 94, 0.12)"
-                      : "var(--slate-100)",
-                    color: isFiltered
-                      ? "var(--orange-600)"
-                      : t.confident
-                      ? "var(--green-d)"
-                      : "var(--slate-500)",
-                    fontWeight: isFiltered ? 700 : 400,
-                    transition: "filter 0.12s",
-                    // Borde verde sutil si está confirmado, para reforzar la
-                    // señal del badge sin saturar (la mayoría de tags ya tienen
-                    // fondo verde claro por t.confident=true).
-                    boxShadow: t.humanConfirmed
-                      ? "inset 0 0 0 1px rgba(22, 163, 74, 0.45)"
-                      : undefined,
-                  }}
-                >
-                  {t.humanConfirmed && (
-                    <span
-                      aria-hidden="true"
-                      style={{
-                        position:       "absolute",
-                        top:            -3,
-                        left:           -3,
-                        width:          11,
-                        height:         11,
-                        background:     "#16a34a",  // green-600
-                        color:          "white",
-                        borderRadius:   "50%",
-                        display:        "inline-flex",
-                        alignItems:     "center",
-                        justifyContent: "center",
-                        // Anillo blanco fino para que el badge "flote" sobre
-                        // cualquier fondo (verde claro del tile, naranja del
-                        // filtro activo, gris del unconfident).
-                        boxShadow:      "0 0 0 1.5px white",
-                        zIndex:         1,
-                      }}
-                    >
-                      <Check size={7} strokeWidth={3.5} />
-                    </span>
+                <>
+                  {visible.map((t) => {
+                    const isFiltered = currentTag === t.tag
+                    return (
+                      <Link
+                        key={t.tag}
+                        href={buildTagURL(t.tag)}
+                        title={
+                          t.humanAssigned
+                            ? `M Manual · por ${t.assignedBy ?? "admin"} · ${isFiltered ? "Quitar filtro" : "Filtrar por"}: ${t.tag}`
+                            : t.humanConfirmed
+                              ? `✓ Revisado por admin · ${isFiltered ? "Quitar filtro" : "Filtrar por"}: ${t.tag}`
+                              : isFiltered ? `Quitar filtro: ${t.tag}` : `Filtrar por: ${t.tag}`
+                        }
+                        style={{
+                          position:       "relative",  // necesario para el badge absolute
+                          display:        "flex",
+                          justifyContent: "space-between",
+                          alignItems:     "center",
+                          fontSize:       10,
+                          padding:        "1px 6px",
+                          // Espacio para badge en esquina (manual / confirmed)
+                          paddingLeft:    (t.humanAssigned || t.humanConfirmed) ? 12 : 6,
+                          borderRadius:   3,
+                          textDecoration: "none",
+                          cursor:         "pointer",
+                          background:     isFiltered
+                            ? "rgba(234, 88, 12, 0.18)"
+                            : t.humanAssigned
+                              ? "rgba(99, 102, 241, 0.10)"  // tinte indigo para manuales
+                              : t.confident
+                                ? "rgba(34, 197, 94, 0.12)"
+                                : "var(--slate-100)",
+                          color: isFiltered
+                            ? "var(--orange-600)"
+                            : t.humanAssigned
+                              ? "var(--indigo-700, #4338ca)"
+                              : t.confident
+                                ? "var(--green-d)"
+                                : "var(--slate-500)",
+                          fontWeight: isFiltered ? 700 : 400,
+                          transition: "filter 0.12s",
+                          // Borde indigo para manual, verde para confirmed.
+                          // El manual gana (es la verdad humana del admin).
+                          boxShadow: t.humanAssigned
+                            ? "inset 0 0 0 1px rgba(99, 102, 241, 0.55)"
+                            : t.humanConfirmed
+                              ? "inset 0 0 0 1px rgba(22, 163, 74, 0.45)"
+                              : undefined,
+                        }}
+                      >
+                        {/* Badge esquina: M (manual) tiene prioridad sobre ✓ (confirmed) */}
+                        {t.humanAssigned ? (
+                          <span
+                            aria-hidden="true"
+                            style={{
+                              position: "absolute", top: -3, left: -3,
+                              minWidth: 12, height: 12, padding: "0 2px",
+                              background: "var(--indigo-600, #6366f1)", color: "white",
+                              borderRadius: 999,
+                              display: "inline-flex", alignItems: "center", justifyContent: "center",
+                              boxShadow: "0 0 0 1.5px white",
+                              fontSize: 7.5, fontWeight: 800, lineHeight: 1,
+                              zIndex: 1,
+                            }}
+                          >M</span>
+                        ) : t.humanConfirmed ? (
+                          <span
+                            aria-hidden="true"
+                            style={{
+                              position: "absolute", top: -3, left: -3,
+                              width: 11, height: 11,
+                              background: "#16a34a", color: "white",
+                              borderRadius: "50%",
+                              display: "inline-flex", alignItems: "center", justifyContent: "center",
+                              boxShadow: "0 0 0 1.5px white",
+                              zIndex: 1,
+                            }}
+                          ><Check size={7} strokeWidth={3.5} /></span>
+                        ) : null}
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {getDisplay(t.tag)}
+                        </span>
+                        <span className="font-mono-tabular" style={{ fontSize: 9.5, marginLeft: 4, flexShrink: 0 }}>
+                          {t.score.toFixed(2)}
+                        </span>
+                      </Link>
+                    )
+                  })}
+                  {hiddenCount > 0 && (
+                    <div style={{ marginTop: 2 }}>
+                      <TagOverflowChip
+                        sha={entry.sha}
+                        hiddenCount={hiddenCount}
+                        allTags={sorted}
+                        getDisplay={getDisplay}
+                      />
+                    </div>
                   )}
-                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {getDisplay(t.tag)}
-                  </span>
-                  <span className="font-mono-tabular" style={{ fontSize: 9.5, marginLeft: 4, flexShrink: 0 }}>
-                    {t.score.toFixed(2)}
-                  </span>
-                </Link>
+                </>
               )
-            })
+            })()
           )}
 
           {/* Botón "Añadir tag manual" — siempre visible (admin only por
