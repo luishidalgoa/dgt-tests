@@ -33,6 +33,7 @@ const FILES: { localName: string; r2Key: string }[] = [
   { localName: "tag_exclusions.json",         r2Key: "meta/tag_exclusions.json" },
   { localName: "tag_confirmations.json",      r2Key: "meta/tag_confirmations.json" },
   { localName: "alternative_references.json", r2Key: "meta/alternative_references.json" },
+  { localName: "manual_tags.json",            r2Key: "meta/manual_tags.json" },
 ]
 
 async function main() {

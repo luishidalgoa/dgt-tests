@@ -40,6 +40,20 @@ export interface ClassificationTag {
    *  donde queramos preservar la decisión sin ocultar el tag (e.g.
    *  vistas de auditoría). En el flujo normal del banco no aparece. */
   humanExcluded?: boolean
+  /** Tag asignado MANUALMENTE por el admin desde el banco (no por el
+   *  classifier). Hidratado en runtime desde meta/manual_tags.json. Si
+   *  un tag manual coincide con uno que el classifier ya descubrió,
+   *  se fusiona y el flag se añade al original. Si no coincide, se
+   *  inserta como entry NUEVA con score = 1.0 y confident = true. UI
+   *  lo pinta con borde azul + badge "M". */
+  humanAssigned?: boolean
+  /** ISO timestamp de la asignación manual (solo si humanAssigned). */
+  assignedAt?:    string
+  /** Username del admin que asignó (solo si humanAssigned). */
+  assignedBy?:    string
+  /** Justificación libre opcional del admin (solo si humanAssigned).
+   *  El clasificador la usa como few-shot example en el próximo run. */
+  reason?:        string
 }
 
 export interface ClassificationImage {

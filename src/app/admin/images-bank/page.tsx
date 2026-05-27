@@ -171,6 +171,29 @@ async function loadTagExclusions(): Promise<Map<string, Set<string>>> {
 }
 
 /**
+ * Carga meta/manual_tags.json y devuelve un Map<sha, ManualTag[]> para
+ * fusionar con los tags del classifier en runtime. Si el JSON no existe
+ * (todavía nadie asignó tags manuales) devuelve Map vacío.
+ */
+async function loadManualTags(): Promise<Map<string, Array<{
+  tag: string; assignedAt: string; assignedBy: string; reason?: string
+}>>> {
+  const result = new Map<string, Array<{ tag: string; assignedAt: string; assignedBy: string; reason?: string }>>()
+  try {
+    const data = await getJsonFromR2<{
+      entries?: Record<string, Array<{ tag: string; assignedAt: string; assignedBy: string; reason?: string }>>
+    }>(R2_META_KEYS.manualTags)
+    if (!data?.entries) return result
+    for (const [sha, arr] of Object.entries(data.entries)) {
+      if (Array.isArray(arr) && arr.length > 0) result.set(sha, arr)
+    }
+  } catch {
+    // No existe / JSON inválido → vacío
+  }
+  return result
+}
+
+/**
  * Carga meta/alternative_references.json y devuelve un Map<sha, count>
  * para que el tile pueda pintar el badge "X refs descargadas" junto a
  * la lupa. Si el JSON no existe (banco virgen, nadie guardó refs todavía)
@@ -363,6 +386,9 @@ npm run images:upload-metadata`}</pre>
   // boost del score se aplica en runtime también para que el filtro
   // de calidad las muestre inmediatamente.
   const tagConfirmationsMap = await loadShaTagMap(R2_META_KEYS.tagConfirmations, "confirmations")
+  // Tags manuales asignados por el admin — se fusionan en `entry.tags`
+  // con flag `humanAssigned` para que la UI los pinte distintos.
+  const manualTagsMap = await loadManualTags()
 
   // ── Index SHA → audit info (preguntas) ─────────────────────────────
   const shaToAudit = new Map<string, ShaAuditGroup>()
@@ -418,6 +444,43 @@ npm run images:upload-metadata`}</pre>
             }
           : t,
       )
+    }
+    // Tags manuales: dos casos según si el classifier ya lo descubrió.
+    //   1. Match: el classifier YA tenía ese tag → fusionamos flags
+    //      (humanAssigned + assignedAt/By/reason) y boosteamos el score
+    //      a 1.0 (es la "verdad" del admin).
+    //   2. Sin match: inserta una entry nueva con score=1.0, confident=true.
+    //      Se renderiza igual que las del classifier pero con borde azul.
+    const manualTags = manualTagsMap.get(sha)
+    if (manualTags && manualTags.length > 0) {
+      const seenTags = new Set(tagsFiltered.map((t) => t.tag))
+      // Caso 1: anotar las que ya existen
+      tagsFiltered = tagsFiltered.map((t) => {
+        const m = manualTags.find((mt) => mt.tag === t.tag)
+        if (!m) return t
+        return {
+          ...t,
+          score:         1.0,                // verdad humana → score máximo
+          confident:     true,
+          humanAssigned: true,
+          assignedAt:    m.assignedAt,
+          assignedBy:    m.assignedBy,
+          reason:        m.reason,
+        }
+      })
+      // Caso 2: añadir las que NO existían en el classifier
+      for (const m of manualTags) {
+        if (seenTags.has(m.tag)) continue
+        tagsFiltered.push({
+          tag:           m.tag,
+          score:         1.0,
+          confident:     true,
+          humanAssigned: true,
+          assignedAt:    m.assignedAt,
+          assignedBy:    m.assignedBy,
+          reason:        m.reason,
+        })
+      }
     }
     return {
       sha,

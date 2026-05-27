@@ -39,6 +39,7 @@ export const R2_META_KEYS = {
   tagExclusions:         "meta/tag_exclusions.json",
   tagConfirmations:      "meta/tag_confirmations.json",
   alternativeReferences: "meta/alternative_references.json",
+  manualTags:            "meta/manual_tags.json",
 } as const
 
 // Nombre local (para el script de upload desde tools/image-audit/)
@@ -51,6 +52,7 @@ export const LOCAL_TO_R2_KEY: Record<string, string> = {
   "tag_exclusions.json":          R2_META_KEYS.tagExclusions,
   "tag_confirmations.json":       R2_META_KEYS.tagConfirmations,
   "alternative_references.json":  R2_META_KEYS.alternativeReferences,
+  "manual_tags.json":             R2_META_KEYS.manualTags,
 }
 
 // ── Tipo del JSON de referencias alternativas ────────────────────────
@@ -79,6 +81,32 @@ export interface AlternativeReferencesData {
   version:    number
   /** Map originalSha → array de referencias guardadas para ese SHA. */
   references: Record<string, AlternativeReference[]>
+}
+
+// ── Tipo del JSON de tags manuales ───────────────────────────────────
+// El admin puede asignar tags directamente a una imagen (sin pasar por
+// el classifier). Persistimos quién, cuándo y un `reason` opcional para
+// que el LLM lo use en el próximo run del classifier como prototipo
+// kNN con narrativa de razonamiento — eso permite que el modelo aprenda
+// no solo "esta imagen → ese tag" sino TAMBIÉN POR QUÉ (vía text emb
+// del reason fundido con el visual emb).
+export interface ManualTag {
+  /** Id del label (igual que en LABELS). */
+  tag:           string
+  /** ISO timestamp de la asignación. */
+  assignedAt:    string
+  /** Username del admin que asignó. */
+  assignedBy:    string
+  /** Explicación libre opcional. Si está vacía, el clasificador solo
+   *  usa el binding sha↔tag como prototipo positivo. Si tiene texto, lo
+   *  embebe en el ejemplo few-shot que se le pasa al LLM. */
+  reason?:       string
+}
+
+export interface ManualTagsData {
+  version: number
+  /** Map sha → array de tags manuales para ese SHA. */
+  entries: Record<string, ManualTag[]>
 }
 
 // ── Cliente S3 lazy-init ──────────────────────────────────────────────
