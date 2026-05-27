@@ -133,10 +133,22 @@ CHECKPOINT_EVERY   = 80        # guarda parcial cada N imgs (5 batches → ~4-5%
 # Comportamiento final:
 #   Rank 1-N (ALWAYS_KEEP_TOP):  score >= MIN_SCORE → se emite
 #   Rank N+1 hasta TOP_K:        score >= THRESHOLD → se emite
-THRESHOLD       = 0.15
-TOP_K           = 5
-ALWAYS_KEEP_TOP = 3
-MIN_SCORE       = 0.05
+# Constantes movidas a `classifier_core.py` para single source of truth
+# entre local (este archivo) y cloud (modal_app.py).
+# Re-import limpio (mismos nombres) — el resto del código sigue funcionando
+# sin cambios. Solo `CONFIRMED_TAG_MIN_SCORE` se mantiene como alias del
+# nuevo nombre `CONFIRMED_BOOST` en core (retrocompat).
+from classifier_core import (  # noqa: E402
+    THRESHOLD, TOP_K, ALWAYS_KEEP_TOP, MIN_SCORE,
+    KNN_MIN_PROTOS, KNN_SIM_THRESHOLD, KNN_BOOST_WEIGHT, KNN_PENALTY_WEIGHT,
+    KNN_UNCERTAIN_LO, KNN_UNCERTAIN_HI,
+    CONFIRMED_BOOST as CONFIRMED_TAG_MIN_SCORE,  # alias retrocompat
+)
+
+# Cuántos labels "más relevantes" enviamos en el prompt a Gemini/Groq
+# (en lugar de los ~118 existing_ids completos — reduce tokens y mejora
+# tasa de aceptación de sugerencias nuevas).
+TOP_RELEVANT_FOR_DISCOVERY = 25
 
 # Variables que se asignan en main() leyendo los args. Las dejamos como
 # placeholder a nivel de módulo para que las funciones auxiliares (write_output,
@@ -158,6 +170,16 @@ OUTPUT:    Path = DEFAULT_OUTPUT
 # desactiva para el resto del run — NO se vuelve a intentar. Otros errores
 # (red, JSON malformado) se loguean y se sigue.
 DISCOVERED_LABELS_PATH = ROOT / "tools" / "image-audit" / "discovered_labels.json"
+# Refinamientos de prompts producidos por refine_labels.py (Fase B). Cuando
+# un label tiene refinement, el classifier REEMPLAZA los prompts originales
+# de LABELS y LABEL_NEGATIVES por los refinados. Persist en R2 también
+# (meta/refined_labels.json) — pero como classify_siglip.py local lee
+# filesystem, sincronizar antes con `npm run images:download-metadata`.
+REFINED_LABELS_PATH    = ROOT / "tools" / "image-audit" / "refined_labels.json"
+# Prototipos kNN (Fase C). Embeddings SigLIP de imgs confirmadas/excluidas
+# por humanos. Compute via `npm run images:compute-prototypes` (Modal GPU).
+# Local lee filesystem — sincronizar con `npm run images:download-metadata`.
+PROTOTYPES_PATH        = ROOT / "tools" / "image-audit" / "prototypes.json"
 # Exclusiones manuales de tags por imagen (sha → [tags excluidos]).
 # Gestionado por el admin desde el banco web (swipe Tinder). El
 # classifier las respeta — tags excluidos NO se emiten aunque el score
@@ -165,13 +187,10 @@ DISCOVERED_LABELS_PATH = ROOT / "tools" / "image-audit" / "discovered_labels.jso
 TAG_EXCLUSIONS_PATH    = ROOT / "tools" / "image-audit" / "tag_exclusions.json"
 TAG_CONFIRMATIONS_PATH = ROOT / "tools" / "image-audit" / "tag_confirmations.json"
 
-# Score mínimo que recibe un tag tras CONFIRMACIÓN manual del admin.
-# Coincide con el límite inferior del tier "medium" en QUALITY_TIERS
-# (frontend) → la imagen aparece bajo el filtro "Calidad medio" o
-# superior. Si el score real ya supera este mínimo, se respeta el
-# valor real (el boost solo eleva, nunca baja).
-# Sincronizado con `CONFIRMED_TAG_MIN_SCORE` en lib.ts (frontend).
-CONFIRMED_TAG_MIN_SCORE = 0.30
+# CONFIRMED_TAG_MIN_SCORE viene de classifier_core (re-import al inicio
+# del archivo, con alias `CONFIRMED_BOOST as CONFIRMED_TAG_MIN_SCORE`).
+# Sincronizado con `CONFIRMED_TAG_MIN_SCORE` en lib.ts (frontend) y con
+# `CONFIRMED_BOOST` en modal_app.py — todos derivan del core.
 # Cache de embeddings de imagen (visión SigLIP). Los embeddings NO dependen
 # del vocabulario, solo del modelo + imagen → cachearlos hace que re-runs
 # tras añadir/cambiar labels pasen de ~8 min a ~30 segundos. Se invalida
@@ -221,8 +240,12 @@ VALID_CATEGORIES = set(VALID_CATEGORIES_LIST)
 DISCOVERY_PROMPT_TEMPLATE = (
     """You are extending a SigLIP zero-shot classifier's vocabulary for Spanish driving theory test (DGT) images.
 
-EXISTING LABEL IDs (do NOT propose any of these — they already exist):
-{existing_ids}
+CONTEXT — the SigLIP base model already scored this image against ~118 existing labels. The top labels (by similarity to this image) are listed below with their scores. These are the labels MOST RELATED to this image — do NOT propose anything semantically duplicate to them, but feel free to propose something COMPLEMENTARY or more SPECIFIC.
+
+TOP EXISTING LABELS related to this image (top {n_top} by SigLIP score, do NOT propose duplicates):
+{top_relevant}
+
+There are ~{n_other} other labels in the vocabulary not shown here (less related to this image). The validator will reject any duplicate id we already have — but choose snake_case ids that are clearly novel concepts to maximize the chance of acceptance.
 
 VALID CATEGORIES (use exactly one of these strings):
 """
@@ -237,7 +260,7 @@ OUTPUT FORMAT — you MUST return a JSON object with a single key "labels":
 
 Each label_object has EXACTLY these 4 fields:
 {{
-  "id":        "snake_case_english_id",
+  "id":        "snake_case_english_id (max 30 chars)",
   "displayEs": "Texto en español (2-5 palabras)",
   "category":  "<exact category string from the list above>",
   "prompts":   ["sentence 1", "sentence 2", "sentence 3"]
@@ -266,6 +289,19 @@ The "prompts" array must contain EXACTLY 3 English sentences of 8-25 words each 
 
 Return ONLY the JSON object. No markdown fences. No explanatory text."""
 )
+
+
+def _format_top_relevant(top_relevant: list[tuple[str, float]]) -> str:
+    """Renderiza top-N labels como lista markdown para el prompt:
+        - urban_street          (score 0.42)
+        - intersection          (score 0.31)
+    """
+    if not top_relevant:
+        return "(no labels with significant score for this image)"
+    lines = []
+    for lid, sc in top_relevant:
+        lines.append(f"- {lid:<30s} (score {sc:.3f})")
+    return "\n".join(lines)
 
 # Alias para retrocompat — el prompt es el mismo
 GEMINI_PROMPT_TEMPLATE = DISCOVERY_PROMPT_TEMPLATE
@@ -364,6 +400,56 @@ def save_discovered_labels(labels: list[dict]) -> None:
         json.dumps(payload, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
+
+
+def load_refined_labels() -> dict[str, dict]:
+    """Carga refinamientos producidos por refine_labels.py (Fase B).
+
+    Returns: dict[label_id, {refinedPositives, refinedNegatives, ...}]. Vacío
+    si el archivo no existe o está corrupto. Para que el classifier los use,
+    el archivo debe estar en `tools/image-audit/refined_labels.json` — el run
+    de prod (modal_app.py) lee directamente de R2; el local hace falta hacer
+    `npm run images:download-metadata` antes para sincronizar.
+    """
+    if not REFINED_LABELS_PATH.exists():
+        return {}
+    try:
+        data = json.loads(REFINED_LABELS_PATH.read_text(encoding="utf-8"))
+        refinements = data.get("refinements", {})
+        if not isinstance(refinements, dict):
+            return {}
+        out: dict[str, dict] = {}
+        for lid, ref in refinements.items():
+            if not isinstance(ref, dict):
+                continue
+            # Validation suave: solo aceptamos si tiene al menos uno de los dos
+            # arrays válidos. El classifier hace fallback al original si falta.
+            rp = ref.get("refinedPositives")
+            rn = ref.get("refinedNegatives")
+            if (isinstance(rp, list) and len(rp) >= 1) or (isinstance(rn, list) and len(rn) >= 1):
+                out[lid] = ref
+        return out
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def load_prototypes() -> dict[str, dict]:
+    """Carga meta/prototypes.json (Fase C kNN) desde filesystem.
+
+    Returns: dict[label_id, {positive: [{sha, embedding}], negative: [...]}].
+    Vacío si el archivo no existe o está corrupto. Para sincronizar con R2:
+    `npm run images:download-metadata` antes del run local.
+    """
+    if not PROTOTYPES_PATH.exists():
+        return {}
+    try:
+        data = json.loads(PROTOTYPES_PATH.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return {}
+        protos = data.get("prototypes", {})
+        return protos if isinstance(protos, dict) else {}
+    except (json.JSONDecodeError, OSError):
+        return {}
 
 
 def _load_sha_tag_map(path: Path, map_key: str) -> dict[str, set[str]]:
@@ -526,8 +612,15 @@ def call_gemini(
     image_path:   Path,
     existing_ids: set[str],
     state:        GeminiState,
+    top_relevant: Optional[list[tuple[str, float]]] = None,
 ) -> Optional[list[dict]]:
     """Pide a Gemini que sugiera labels para una imagen.
+
+    `existing_ids`: set COMPLETO para validation (rechazar duplicados).
+    `top_relevant`: top-N labels más relevantes a la imagen (por score SigLIP)
+                   — solo estos se incluyen en el prompt para reducir tokens
+                   y mejorar tasa de aceptación. Si None o vacío, se pasa
+                   un mensaje genérico al modelo.
 
     Devuelve:
       - list[dict] válida (puede estar vacía si Gemini no propone nada)
@@ -538,8 +631,12 @@ def call_gemini(
     try:
         img_bytes  = image_path.read_bytes()
         mime       = _mime_of(image_path)
+        tr         = top_relevant or []
+        n_other    = max(0, len(existing_ids) - len(tr))
         prompt     = GEMINI_PROMPT_TEMPLATE.format(
-            existing_ids=", ".join(sorted(existing_ids)),
+            top_relevant=_format_top_relevant(tr),
+            n_top=len(tr),
+            n_other=n_other,
         )
         response = client.models.generate_content(
             model    = GEMINI_MODEL_ID,
@@ -637,8 +734,11 @@ def call_groq(
     image_path:   Path,
     existing_ids: set[str],
     state:        GroqState,
+    top_relevant: Optional[list[tuple[str, float]]] = None,
 ) -> Optional[list[dict]]:
     """Pide a Groq que sugiera labels para una imagen.
+
+    Ver `call_gemini` para semántica de `existing_ids` y `top_relevant`.
 
     Devuelve:
       - list[dict] válida (puede estar vacía si Groq no propone nada)
@@ -650,8 +750,12 @@ def call_groq(
         img_bytes = image_path.read_bytes()
         mime      = _mime_of(image_path)
         b64       = _b64.b64encode(img_bytes).decode("ascii")
+        tr        = top_relevant or []
+        n_other   = max(0, len(existing_ids) - len(tr))
         prompt    = DISCOVERY_PROMPT_TEMPLATE.format(
-            existing_ids=", ".join(sorted(existing_ids)),
+            top_relevant=_format_top_relevant(tr),
+            n_top=len(tr),
+            n_other=n_other,
         )
         # OpenAI-compatible chat completion con image_url multimodal.
         # System message refuerza el formato JSON — mejora cumplimiento
@@ -848,6 +952,91 @@ def write_output(path: Path, payload: dict) -> None:
     )
 
 
+def _auto_download_images_from_r2(target_dir: Path) -> int:
+    """Si target_dir no existe o está vacío, auto-descarga TODAS las imgs
+    de R2 al directorio. Pensado para que el classifier funcione sin tener
+    que correr manualmente `npm run images:download-r2` antes.
+
+    Returns: número de imgs descargadas. 0 si no se pudo (sin creds, etc).
+    """
+    try:
+        import boto3
+    except ImportError:
+        print(f"❌ boto3 no instalado — no puedo descargar de R2.")
+        print(f"   Corre: npm run images:setup-classifier  (instala boto3)")
+        print(f"   O: npm run images:download-r2  (descarga manualmente)")
+        return 0
+
+    # Cargar .env files PRIMERO — el classifier solo los carga más tarde para
+    # Gemini/Groq, pero las R2 creds también pueden estar ahí.
+    _load_env_files(ROOT / ".env.local", ROOT / ".env")
+
+    needed = ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME"]
+    missing = [k for k in needed if not os.environ.get(k)]
+    if missing:
+        print(f"❌ Faltan credenciales R2 en .env / .env.local: {missing}")
+        print(f"   No puedo auto-descargar.")
+        print(f"   Soluciones:")
+        print(f"     1. Añade las creds R2 a .env.local")
+        print(f"     2. O corre manualmente: npm run images:download-r2")
+        return 0
+
+    s3 = boto3.client(
+        "s3",
+        endpoint_url          = f"https://{os.environ['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com",
+        aws_access_key_id     = os.environ["R2_ACCESS_KEY_ID"],
+        aws_secret_access_key = os.environ["R2_SECRET_ACCESS_KEY"],
+        region_name           = "auto",
+    )
+    bucket = os.environ["R2_BUCKET_NAME"]
+
+    # 1. Listar imgs en R2 (excluir prefix meta/)
+    print(f"📥 listando keys de R2 en bucket '{bucket}'...")
+    keys: list[str] = []
+    paginator = s3.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket):
+        for obj in page.get("Contents", []):
+            key = obj["Key"]
+            if key.startswith("meta/"):
+                continue
+            ext = key.rsplit(".", 1)[-1].lower() if "." in key else ""
+            if ext in ("png", "jpg", "jpeg", "webp"):
+                keys.append(key)
+
+    if not keys:
+        print(f"⚠  No hay imágenes en R2.")
+        return 0
+
+    print(f"   {len(keys)} imgs encontradas en R2.")
+    print(f"   Descargando a {target_dir} (paralelo, ~30-60s para 1.7k imgs)...")
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    from concurrent.futures import ThreadPoolExecutor
+    downloaded = 0
+    skipped    = 0
+    failed     = 0
+
+    def _download(key: str) -> str:
+        local_path = target_dir / key.replace("/", "_")  # flatten any subdirs
+        if local_path.exists() and local_path.stat().st_size > 0:
+            return "skipped"
+        try:
+            s3.download_file(bucket, key, str(local_path))
+            return "ok"
+        except Exception as e:  # noqa: BLE001
+            print(f"   ⚠  falló {key}: {e}")
+            return "failed"
+
+    pool = ThreadPoolExecutor(max_workers=24)
+    results = list(pool.map(_download, keys))
+    pool.shutdown()
+    downloaded = results.count("ok")
+    skipped    = results.count("skipped")
+    failed     = results.count("failed")
+    print(f"✅ descargadas: {downloaded}, ya estaban: {skipped}, fallos: {failed}")
+    return downloaded + skipped
+
+
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Clasifica imágenes multi-label con SigLIP")
     p.add_argument(
@@ -913,10 +1102,18 @@ def main() -> None:
     print(f"   Threshold: {THRESHOLD} (prob sigmoid mínima para incluir tag)")
     print()
 
-    if not INPUT_DIR.exists():
-        print(f"❌ {INPUT_DIR} no existe.")
-        print(f"   Tip: pasa --input-dir /ruta/a/imagenes")
-        sys.exit(1)
+    # Si INPUT_DIR no existe o está vacío, intentar auto-descargar de R2.
+    # Esto evita tener que correr manualmente `npm run images:download-r2`
+    # antes — el classifier se las arregla solo si las creds R2 están en
+    # .env / .env.local.
+    if not INPUT_DIR.exists() or not any(INPUT_DIR.iterdir()):
+        print(f"📂 {INPUT_DIR} no existe o está vacío — intentando auto-descargar de R2...\n")
+        downloaded = _auto_download_images_from_r2(INPUT_DIR)
+        if downloaded == 0:
+            print(f"\n❌ No se pudieron descargar imágenes de R2.")
+            print(f"   Pasa --input-dir <ruta> con un directorio que SÍ tenga imágenes.")
+            sys.exit(1)
+        print()
 
     paths = collect_image_paths(INPUT_DIR)
     if not paths:
@@ -924,7 +1121,7 @@ def main() -> None:
         sys.exit(1)
     print(f"📷 {len(paths)} imágenes a clasificar")
 
-    # ── Cargar discovered + build active_labels (early, sin model) ──────
+    # ── Cargar discovered + refined + build active_labels (early, sin model) ──
     # Necesitamos active_labels (LABELS + discovered) ANTES del check de
     # vocabulario para comparar contra el classification.json existente.
     # No necesita SigLIP cargado, solo leer JSON.
@@ -934,12 +1131,49 @@ def main() -> None:
     if discovered:
         print(f"♻  {len(discovered)} labels descubiertos previamente cargados de {DISCOVERED_LABELS_PATH.name}")
 
-    active_labels: list[tuple[str, list[str]]] = list(LABELS)
+    # Refinamientos de prompts (Fase B). Si un label tiene refinement, se
+    # REEMPLAZAN sus prompts originales (positivos y/o negativos) por los
+    # que produjo Gemini analizando las imágenes confirmadas/excluidas.
+    refined_labels = load_refined_labels()
+    if refined_labels:
+        n_pos_refined = sum(1 for r in refined_labels.values() if r.get("refinedPositives"))
+        n_neg_refined = sum(1 for r in refined_labels.values() if r.get("refinedNegatives"))
+        print(f"🪄 {len(refined_labels)} labels con refinements aplicados ({n_pos_refined} positivos, {n_neg_refined} negativos)")
+        print(f"   ids: {', '.join(sorted(refined_labels.keys())[:10])}{'...' if len(refined_labels) > 10 else ''}")
+
+    # Construir active_labels aplicando refinements en LABELS hardcoded.
+    # Los discovered NO se refinan (su vocabulario original viene de Gemini).
+    active_labels: list[tuple[str, list[str]]] = []
+    for lid, prompts in LABELS:
+        ref = refined_labels.get(lid)
+        if ref and isinstance(ref.get("refinedPositives"), list) and ref["refinedPositives"]:
+            active_labels.append((lid, list(ref["refinedPositives"])))
+        else:
+            active_labels.append((lid, list(prompts)))
     _seen_ids = {lid for lid, _ in active_labels}
     for d in discovered:
         if d["id"] not in _seen_ids:
             active_labels.append((d["id"], d["prompts"]))
             _seen_ids.add(d["id"])
+
+    # active_negatives = LABEL_NEGATIVES con override de refined si aplica.
+    # Se usa más abajo (en el loop de encoding de negativos) en lugar del
+    # LABEL_NEGATIVES global directo.
+    active_negatives: dict[str, list[str]] = dict(LABEL_NEGATIVES)
+    for lid, ref in refined_labels.items():
+        rn = ref.get("refinedNegatives")
+        if isinstance(rn, list) and rn:
+            active_negatives[lid] = list(rn)
+
+    # Prototipos kNN (Fase C). Se construyen como tensores GPU MÁS ABAJO,
+    # cuando ya tengamos `device` y `text_embeds.dtype` disponibles. Aquí
+    # solo los cargamos como dict (puro JSON).
+    prototypes_data = load_prototypes()
+    if prototypes_data:
+        n_lab = len(prototypes_data)
+        n_pos = sum(len(d.get("positive", [])) for d in prototypes_data.values() if isinstance(d, dict))
+        n_neg = sum(len(d.get("negative", [])) for d in prototypes_data.values() if isinstance(d, dict))
+        print(f"🧬 prototipos kNN cargados de {PROTOTYPES_PATH.name}: {n_lab} labels ({n_pos} positivos + {n_neg} negativos)")
 
     # ── Detección de vocab change ───────────────────────────────────────
     # Si cambió alguna entrada de LABELS (añadida, eliminada, prompts
@@ -1298,13 +1532,16 @@ def main() -> None:
     print(f"   listo — {n_labels} embeddings promediados\n")
 
     # ── Pre-computar embeddings negativos ────────────────────────────────
-    # Para labels con LABEL_NEGATIVES, codificamos sus prompts negativos y
-    # los usamos para penalizar similitudes con escenas confundibles.
+    # Para labels con prompts negativos, codificamos esos prompts y los
+    # usamos para penalizar similitudes con escenas confundibles.
     # Labels sin negativos → vector cero (penalty ≈ 0 por el bias de SigLIP).
+    # Usamos `active_negatives` (definido arriba) en lugar de LABEL_NEGATIVES
+    # directo, para que los refinamientos de Fase B sustituyan los negativos
+    # originales cuando estén disponibles.
     neg_text_embeds = torch.zeros((n_labels, emb_dim), device=device, dtype=text_embeds.dtype)
     has_neg_mask    = torch.zeros(n_labels, device=device, dtype=text_embeds.dtype)
     for li, lid in enumerate(label_ids):
-        neg_prompts = LABEL_NEGATIVES.get(lid)
+        neg_prompts = active_negatives.get(lid)
         if not neg_prompts:
             continue
         try:
@@ -1315,6 +1552,43 @@ def main() -> None:
             print(f"   ⚠  No se pudo codificar negativo de '{lid}': {e}")
     n_neg = int(has_neg_mask.sum().item())
     print(f"🔻 {n_neg} labels con prompts negativos (NEG_WEIGHT={NEG_WEIGHT})\n")
+
+    # ── Construir tensores kNN de prototipos (Fase C) ──────────────────
+    # Convertimos `prototypes_data` (dict JSON) → tensores GPU listos para
+    # matmul en el scoring. Skip labels con < KNN_MIN_PROTOS o con
+    # embeddings de dim incorrecta.
+    proto_pos: dict[str, torch.Tensor] = {}
+    proto_neg: dict[str, torch.Tensor] = {}
+    if prototypes_data:
+        for lid, data in prototypes_data.items():
+            if not isinstance(data, dict):
+                continue
+            for sign_key, target_dict in [("positive", proto_pos), ("negative", proto_neg)]:
+                items = data.get(sign_key)
+                if not isinstance(items, list) or len(items) < KNN_MIN_PROTOS:
+                    continue
+                vectors: list[list[float]] = []
+                for it in items:
+                    if not isinstance(it, dict):
+                        continue
+                    emb = it.get("embedding")
+                    if isinstance(emb, list) and len(emb) == emb_dim:
+                        vectors.append(emb)
+                if len(vectors) < KNN_MIN_PROTOS:
+                    continue
+                tensor = torch.tensor(vectors, device=device, dtype=text_embeds.dtype)
+                # Re-normalizar (defensivo — los embeddings ya vienen así
+                # de compute_image_embeddings, pero el cómputo coseno lo
+                # requiere)
+                tensor = tensor / tensor.norm(dim=-1, keepdim=True)
+                target_dict[lid] = tensor
+        n_proto_pos = sum(t.shape[0] for t in proto_pos.values())
+        n_proto_neg = sum(t.shape[0] for t in proto_neg.values())
+        print(
+            f"🧬 prototipos aplicados al scoring: "
+            f"{len(proto_pos)} labels con +protos ({n_proto_pos} embeds), "
+            f"{len(proto_neg)} labels con −protos ({n_proto_neg} embeds)\n"
+        )
 
     # SigLIP usa logit_scale + logit_bias para escalar el dot product antes
     # del sigmoid. Los exponemos como tensores para usar en el loop.
@@ -1382,6 +1656,28 @@ def main() -> None:
             neg_probs  = torch.sigmoid(neg_logits) * has_neg_mask          # 0 para labels sin negativo
             probs      = (probs - NEG_WEIGHT * neg_probs).clamp(0.0, 1.0)
 
+            # ── Fase C: ajuste kNN sobre prototipos humanos ──────────
+            # Boost (zona incierta) y penalty (siempre) basados en sim
+            # coseno con prototipos confirmados / excluidos por humanos.
+            # Idéntico a la lógica de modal_app.py.
+            if proto_pos or proto_neg:
+                for li, lid in enumerate(label_ids):
+                    if lid in proto_pos:
+                        pp = proto_pos[lid]
+                        sim_pos     = img_embeds @ pp.T  # (n_imgs, N_pos)
+                        max_sim_pos = sim_pos.max(dim=1).values
+                        boost       = torch.clamp(max_sim_pos - KNN_SIM_THRESHOLD, min=0) * KNN_BOOST_WEIGHT
+                        score_col   = probs[:, li]
+                        uncertain   = (score_col > KNN_UNCERTAIN_LO) & (score_col < KNN_UNCERTAIN_HI)
+                        probs[:, li] = score_col + boost * uncertain.to(probs.dtype)
+                    if lid in proto_neg:
+                        pn = proto_neg[lid]
+                        sim_neg     = img_embeds @ pn.T  # (n_imgs, N_neg)
+                        max_sim_neg = sim_neg.max(dim=1).values
+                        penalty     = torch.clamp(max_sim_neg - KNN_SIM_THRESHOLD, min=0) * KNN_PENALTY_WEIGHT
+                        probs[:, li] = probs[:, li] - penalty
+                probs = probs.clamp(0.0, 1.0)
+
         # Per-image: check confidence + retry con Gemini si toca
         for path, img_emb, prob_row in zip(paths_for_scoring, img_embeds, probs):
             sha       = path.stem
@@ -1400,11 +1696,23 @@ def main() -> None:
                 suggestions: Optional[list[dict]] = None
                 discovery_source: str = ""
 
+                # Top-N labels más relevantes a ESTA imagen (por score SigLIP).
+                # Pasados a Gemini/Groq como contexto en lugar de los ~118
+                # existing_ids — reduce ruido del prompt y mejora tasa de
+                # aceptación. El validator sigue usando el set completo para
+                # rechazar duplicados.
+                score_pairs = list(zip(label_ids, prob_row.tolist()))
+                score_pairs.sort(key=lambda x: -x[1])
+                top_relevant = [
+                    (lid, float(sc)) for lid, sc in score_pairs[:TOP_RELEVANT_FOR_DISCOVERY]
+                ]
+
                 # Intento 1: Gemini (preferido por calidad típica)
                 if gemini_usable:
                     gemini_state.images_with_gemini += 1
                     suggestions = call_gemini(
                         gemini_client, path, set(label_ids), gemini_state,
+                        top_relevant=top_relevant,
                     )
                     if suggestions:
                         discovery_source = "gemini"
@@ -1420,6 +1728,7 @@ def main() -> None:
                         groq_state.images_with_groq += 1
                         suggestions = call_groq(
                             groq_client, path, set(label_ids), groq_state,
+                            top_relevant=top_relevant,
                         )
                         if suggestions:
                             discovery_source = "groq"
@@ -1472,11 +1781,31 @@ def main() -> None:
                         # no perdemos progreso de vocabulario.
                         save_discovered_labels(discovered)
                         # Re-scorear ESTA imagen con vocabulario expandido (incluye negativos)
+                        # Aplica también kNN sobre prototipos (Fase C) — mismas reglas
+                        # que el scoring principal de batch.
                         with torch.no_grad():
                             logits_re     = img_emb.unsqueeze(0) @ text_embeds.T * logit_scale + logit_bias
                             neg_logits_re = img_emb.unsqueeze(0) @ neg_text_embeds.T * logit_scale + logit_bias
                             neg_probs_re  = torch.sigmoid(neg_logits_re) * has_neg_mask
-                            prob_row      = (torch.sigmoid(logits_re) - NEG_WEIGHT * neg_probs_re).clamp(0.0, 1.0).squeeze(0)
+                            probs_re      = (torch.sigmoid(logits_re) - NEG_WEIGHT * neg_probs_re).clamp(0.0, 1.0)
+                            # kNN boost/penalty (Fase C)
+                            if proto_pos or proto_neg:
+                                img_emb_2d = img_emb.unsqueeze(0)  # (1, D)
+                                for li_re, lid_re in enumerate(label_ids):
+                                    if lid_re in proto_pos:
+                                        pp_re   = proto_pos[lid_re]
+                                        sim_p   = (img_emb_2d @ pp_re.T).max(dim=1).values  # (1,)
+                                        boost_r = torch.clamp(sim_p - KNN_SIM_THRESHOLD, min=0) * KNN_BOOST_WEIGHT
+                                        sc_re   = probs_re[0, li_re]
+                                        if KNN_UNCERTAIN_LO < float(sc_re) < KNN_UNCERTAIN_HI:
+                                            probs_re[0, li_re] = sc_re + boost_r[0]
+                                    if lid_re in proto_neg:
+                                        pn_re    = proto_neg[lid_re]
+                                        sim_n    = (img_emb_2d @ pn_re.T).max(dim=1).values
+                                        pen_r    = torch.clamp(sim_n - KNN_SIM_THRESHOLD, min=0) * KNN_PENALTY_WEIGHT
+                                        probs_re[0, li_re] = probs_re[0, li_re] - pen_r[0]
+                                probs_re = probs_re.clamp(0.0, 1.0)
+                            prob_row = probs_re.squeeze(0)
 
             # ── Construir tags ─────────────────────────────────────────
             # Regla en dos niveles:
@@ -1518,11 +1847,23 @@ def main() -> None:
                 if rank >= ALWAYS_KEEP_TOP and score < THRESHOLD:
                     # Tag "extra" (4º, 5º) que no pasa threshold de calidad
                     continue
-                tags.append({
-                    "tag": lid,
-                    "score": score,
+                tag_entry: dict = {
+                    "tag":       lid,
+                    "score":     score,
                     "confident": score >= THRESHOLD,
-                })
+                }
+                # `humanConfirmed`: si el admin marcó "SÍ es" para esta
+                # (sha, lid) desde el banco, persistimos el flag. Esto hace
+                # el classification.json self-contained: la UI puede pintar
+                # el check verde sin cruzar con tag_confirmations.json en
+                # runtime, y el JSON queda auditable (export, debug, etc.).
+                # Lo aplicamos SIEMPRE — independientemente del score real,
+                # incluso si ya estaba alto (sirve como "reward signal" del
+                # humano que distingue "alta confianza del modelo" de "alta
+                # confianza humanamente verificada").
+                if lid in sha_confirmations:
+                    tag_entry["humanConfirmed"] = True
+                tags.append(tag_entry)
             results[sha] = {
                 "filename":  path.name,
                 "tags":      tags,

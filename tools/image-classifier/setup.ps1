@@ -1,4 +1,4 @@
-# Setup del clasificador SigLIP en local (Windows / PowerShell).
+﻿# Setup del clasificador SigLIP en local (Windows / PowerShell).
 #
 # Lo que hace:
 #   1. Crea un venv aislado en tools/image-classifier/.venv
@@ -14,6 +14,12 @@
 # Es idempotente — si el venv ya existe, lo reutiliza. Si quieres uno limpio:
 #   Remove-Item -Recurse -Force .venv
 #   .\setup.ps1
+#
+# Nota sobre encoding: este archivo está guardado con BOM UTF-8 (3 bytes
+# invisibles al inicio) para que PowerShell 5.1 (Windows PowerShell legacy)
+# lo lea correctamente. Sin BOM, PS 5.1 asume CP1252 y los emojis (🔥 📦 ✅)
+# se corrompen → bytes UTF-8 mal interpretados como comillas → parse error.
+# PowerShell 7+ no necesita BOM (asume UTF-8) pero el BOM tampoco molesta.
 
 $ErrorActionPreference = "Stop"
 
@@ -61,7 +67,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # ── 5. Instalar el resto de requirements ───────────────────────────────
-Write-Host "📚 Instalando transformers, Pillow, tqdm, sentencepiece, accelerate..." -ForegroundColor Cyan
+Write-Host "📚 Instalando transformers, Pillow, tqdm, modal, etc..." -ForegroundColor Cyan
 & $pipExe install -r requirements.txt
 if ($LASTEXITCODE -ne 0) {
     Write-Host "❌ Falló instalando requirements.txt" -ForegroundColor Red
@@ -72,7 +78,8 @@ Write-Host ""
 Write-Host "✅ Setup completo." -ForegroundColor Green
 Write-Host ""
 Write-Host "📌 Ahora puedes ejecutar el clasificador desde la raíz del proyecto:" -ForegroundColor Gray
-Write-Host "   npm run images:classify" -ForegroundColor Cyan
+Write-Host "   npm run images:classify         # local (CPU)" -ForegroundColor Cyan
+Write-Host "   npm run images:classify-modal   # cloud GPU (necesita 'npm run images:setup-modal' la primera vez)" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "   La primera vez descargará el modelo SigLIP (~370 MB)." -ForegroundColor Gray
+Write-Host "   La primera vez images:classify descargará el modelo SigLIP (~370 MB)." -ForegroundColor Gray
 Write-Host "   Después se ejecuta directamente desde caché en ~10s de arranque." -ForegroundColor Gray

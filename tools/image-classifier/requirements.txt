@@ -48,3 +48,15 @@ google-genai>=1.0
 # fallback de Gemini en classify_siglip.py: cuotas independientes →
 # robustez ante quota/503 de uno de los dos providers. Opcional.
 groq>=0.11
+# modal — CLI + SDK para correr el classifier 100% en cloud GPU
+# (tools/image-classifier/modal_app.py). NO arrastra torch/transformers
+# en local: todo eso lo levanta el contenedor de Modal en su cloud. La
+# dep local es ligera (~50 MB: protobuf + grpc + websocket).
+# Autenticación inicial: `npm run images:setup-modal` (abre browser, una vez).
+modal>=1.0
+# boto3 — cliente S3-compatible para R2 (Cloudflare). Usado por
+# refine_labels.py (Fase B) para leer feedback y descargar imágenes
+# desde R2 directamente. classify_siglip.py local NO lo necesita
+# (lee filesystem); modal_app.py tampoco a nivel local (su imagen
+# Modal lo incluye aparte).
+boto3>=1.34
