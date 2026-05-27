@@ -1,8 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { createPortal } from "react-dom"
 import { useRouter } from "next/navigation"
-import Image from "next/image"
 import { Search, X, Check, AlertCircle, ExternalLink, Loader2 } from "lucide-react"
 
 /**
@@ -61,6 +61,12 @@ interface Props {
 
 export function FindReplacementsButton({ sha, currentTags }: Props) {
   const [open, setOpen] = useState(false)
+  // mounted: solo renderizamos el portal cuando ya estamos en cliente
+  // (document existe). Sin esto, createPortal en SSR explota.
+  const [mounted, setMounted] = useState(false)
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setMounted(true) }, [])
+
   return (
     <>
       <button
@@ -89,12 +95,17 @@ export function FindReplacementsButton({ sha, currentTags }: Props) {
       >
         <Search size={12} />
       </button>
-      {open && (
+      {/* Portal al body — el tile padre tiene `overflow: hidden` y
+          SwipeableImageTile usa `transform`, ambos crean un contain block
+          que rompe `position: fixed`. Sin portal el modal se ve "dentro"
+          del tile en vez de a pantalla completa. */}
+      {open && mounted && createPortal(
         <FindReplacementsModal
           sha={sha}
           currentTags={currentTags}
           onClose={() => setOpen(false)}
-        />
+        />,
+        document.body,
       )}
     </>
   )
