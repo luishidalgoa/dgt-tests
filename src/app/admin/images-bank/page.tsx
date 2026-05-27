@@ -10,6 +10,7 @@ import {
   EyeOff,
   AlertCircle,
   X,
+  Check,
 } from "lucide-react"
 import { LazyTileImage } from "./LazyTileImage"
 import { imageUrl } from "@/lib/imageUrl"
@@ -31,6 +32,7 @@ import {
   type DisplayEntry,
 } from "./lib"
 import { FilterPill, QualityPill, SortToggle, SidebarHeader, DateDivider, QuestionsListButton, NewImageBadge, SwipeableImageTile, ScrollToHashTarget, CardHashUpdater, TagSearchInput } from "./BankUi"
+import { FindReplacementsButton } from "./FindReplacementsModal"
 
 export const dynamic = "force-dynamic"
 
@@ -360,8 +362,14 @@ npm run images:upload-metadata`}</pre>
     const taggedAt = info.taggedAt ? Date.parse(info.taggedAt) : null
     // Aplicar exclusiones + confirmaciones manuales en runtime:
     //   - Exclusiones: filtra el tag (no aparece aunque score sea alto)
-    //   - Confirmaciones: boost del score a CONFIRMED_TAG_MIN_SCORE
-    //     (0.30 = filtro "medio") si el score real es menor
+    //   - Confirmaciones:
+    //       1. Marca `humanConfirmed: true` SIEMPRE — independientemente del
+    //          score original. La UI usa este flag para pintar el check verde
+    //          en la esquina top-left del tag (señal visual de "revisado").
+    //       2. Boost del score a CONFIRMED_TAG_MIN_SCORE (0.30 = filtro
+    //          "medio") SOLO si el score real es menor. El boost preserva la
+    //          decisión humana en el filtro de calidad; cuando el modelo ya
+    //          acertaba (score >= 0.30) no tocamos nada.
     // Esto da UX inmediato sin esperar al próximo run del classifier.
     const exclusions    = tagExclusionsMap.get(sha)
     const confirmations = tagConfirmationsMap.get(sha)
@@ -370,8 +378,14 @@ npm run images:upload-metadata`}</pre>
       : info.tags
     if (confirmations) {
       tagsFiltered = tagsFiltered.map((t) =>
-        confirmations.has(t.tag) && t.score < CONFIRMED_TAG_MIN_SCORE
-          ? { ...t, score: CONFIRMED_TAG_MIN_SCORE }
+        confirmations.has(t.tag)
+          ? {
+              ...t,
+              score:          t.score < CONFIRMED_TAG_MIN_SCORE
+                                ? CONFIRMED_TAG_MIN_SCORE
+                                : t.score,
+              humanConfirmed: true,
+            }
           : t,
       )
     }
@@ -999,8 +1013,13 @@ function ImageTile({ entry, currentTag, getDisplay, buildTagURL, anchorId }: {
       <LazyTileImage src={imgSrc} alt={entry.sha.slice(0, 8)} />
 
       <div style={{ padding: 8, fontSize: 11, display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
-        <div className="font-mono-tabular" style={{ fontSize: 9.5, color: "var(--slate-400)", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {entry.sha.slice(0, 16)}…
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+          <div className="font-mono-tabular" style={{ fontSize: 9.5, color: "var(--slate-400)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>
+            {entry.sha.slice(0, 16)}…
+          </div>
+          {/* Botón "buscar reemplazo" estilo Lens — solo aparece para admins
+              (todo /admin/* ya está gateado en layout.tsx). Modal lazy-load. */}
+          <FindReplacementsButton sha={entry.sha} currentTags={entry.tags} />
         </div>
 
         <div style={{ color: "var(--slate-600)", fontSize: 10.5 }}>
@@ -1019,13 +1038,19 @@ function ImageTile({ entry, currentTag, getDisplay, buildTagURL, anchorId }: {
                 <Link
                   key={t.tag}
                   href={buildTagURL(t.tag)}
-                  title={isFiltered ? `Quitar filtro: ${t.tag}` : `Filtrar por: ${t.tag}`}
+                  title={
+                    t.humanConfirmed
+                      ? `✓ Revisado por admin · ${isFiltered ? "Quitar filtro" : "Filtrar por"}: ${t.tag}`
+                      : isFiltered ? `Quitar filtro: ${t.tag}` : `Filtrar por: ${t.tag}`
+                  }
                   style={{
+                    position:       "relative",  // necesario para el badge absolute
                     display:        "flex",
                     justifyContent: "space-between",
                     alignItems:     "center",
                     fontSize:       10,
                     padding:        "1px 6px",
+                    paddingLeft:    t.humanConfirmed ? 12 : 6,  // espacio para el badge
                     borderRadius:   3,
                     textDecoration: "none",
                     cursor:         "pointer",
@@ -1041,8 +1066,39 @@ function ImageTile({ entry, currentTag, getDisplay, buildTagURL, anchorId }: {
                       : "var(--slate-500)",
                     fontWeight: isFiltered ? 700 : 400,
                     transition: "filter 0.12s",
+                    // Borde verde sutil si está confirmado, para reforzar la
+                    // señal del badge sin saturar (la mayoría de tags ya tienen
+                    // fondo verde claro por t.confident=true).
+                    boxShadow: t.humanConfirmed
+                      ? "inset 0 0 0 1px rgba(22, 163, 74, 0.45)"
+                      : undefined,
                   }}
                 >
+                  {t.humanConfirmed && (
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        position:       "absolute",
+                        top:            -3,
+                        left:           -3,
+                        width:          11,
+                        height:         11,
+                        background:     "#16a34a",  // green-600
+                        color:          "white",
+                        borderRadius:   "50%",
+                        display:        "inline-flex",
+                        alignItems:     "center",
+                        justifyContent: "center",
+                        // Anillo blanco fino para que el badge "flote" sobre
+                        // cualquier fondo (verde claro del tile, naranja del
+                        // filtro activo, gris del unconfident).
+                        boxShadow:      "0 0 0 1.5px white",
+                        zIndex:         1,
+                      }}
+                    >
+                      <Check size={7} strokeWidth={3.5} />
+                    </span>
+                  )}
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {getDisplay(t.tag)}
                   </span>

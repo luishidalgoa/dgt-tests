@@ -29,6 +29,17 @@ export interface ClassificationTag {
   tag:       string
   score:     number
   confident: boolean
+  /** El admin ha marcado "SÍ es" para esta (sha, tag) desde el banco.
+   *  Se hidrata en runtime cruzando con tag_confirmations.json. El score
+   *  ORIGINAL se preserva (excepto por el boost a CONFIRMED_TAG_MIN_SCORE
+   *  cuando estaba por debajo). UI muestra un badge verde de "revisado"
+   *  en la esquina top-left del tag. */
+  humanConfirmed?: boolean
+  /** El admin ha marcado "NO es" para esta (sha, tag). En `tags` los
+   *  excluidos se filtran out → este flag SOLO existirá en contextos
+   *  donde queramos preservar la decisión sin ocultar el tag (e.g.
+   *  vistas de auditoría). En el flujo normal del banco no aparece. */
+  humanExcluded?: boolean
 }
 
 export interface ClassificationImage {

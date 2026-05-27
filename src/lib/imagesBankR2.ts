@@ -34,6 +34,8 @@ export const R2_META_KEYS = {
   classification:   "meta/classification.json",
   shaAudit:         "meta/sha-audit.json",
   discoveredLabels: "meta/discovered_labels.json",
+  refinedLabels:    "meta/refined_labels.json",
+  prototypes:       "meta/prototypes.json",
   tagExclusions:    "meta/tag_exclusions.json",
   tagConfirmations: "meta/tag_confirmations.json",
 } as const
@@ -43,6 +45,8 @@ export const LOCAL_TO_R2_KEY: Record<string, string> = {
   "classification.json":     R2_META_KEYS.classification,
   "sha-audit.json":          R2_META_KEYS.shaAudit,
   "discovered_labels.json":  R2_META_KEYS.discoveredLabels,
+  "refined_labels.json":     R2_META_KEYS.refinedLabels,
+  "prototypes.json":         R2_META_KEYS.prototypes,
   "tag_exclusions.json":     R2_META_KEYS.tagExclusions,
   "tag_confirmations.json":  R2_META_KEYS.tagConfirmations,
 }
@@ -108,5 +112,28 @@ export async function putJsonToR2(key: string, data: unknown): Promise<void> {
     Body:         JSON.stringify(data, null, 2),
     ContentType:  "application/json; charset=utf-8",
     CacheControl: "no-cache",  // R2 + CDN no debe cachear — queremos lectura fresca
+  }))
+}
+
+/**
+ * Sube un binario (imagen) a R2 con su content-type específico.
+ * Usado por el endpoint `replace-image` para guardar candidatos descargados
+ * de Pixabay/Pexels/Unsplash con su SHA como key.
+ *
+ * Cache: 1 año (immutable). El SHA en el filename garantiza que cambios
+ * en la imagen producen una key nueva — no hay invalidación necesaria.
+ */
+export async function putBinaryToR2(
+  key:         string,
+  body:        Buffer | Uint8Array,
+  contentType: string,
+): Promise<void> {
+  const { client, bucket } = getR2Client()
+  await client.send(new PutObjectCommand({
+    Bucket:       bucket,
+    Key:          key,
+    Body:         body,
+    ContentType:  contentType,
+    CacheControl: "public, max-age=31536000, immutable",
   }))
 }
