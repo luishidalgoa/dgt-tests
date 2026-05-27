@@ -171,6 +171,28 @@ async function loadTagExclusions(): Promise<Map<string, Set<string>>> {
 }
 
 /**
+ * Carga meta/alternative_references.json y devuelve un Map<sha, count>
+ * para que el tile pueda pintar el badge "X refs descargadas" junto a
+ * la lupa. Si el JSON no existe (banco virgen, nadie guardó refs todavía)
+ * devuelve Map vacío.
+ */
+async function loadReferenceCounts(): Promise<Map<string, number>> {
+  const result = new Map<string, number>()
+  try {
+    const data = await getJsonFromR2<{ references?: Record<string, unknown[]> }>(
+      R2_META_KEYS.alternativeReferences,
+    )
+    if (!data?.references) return result
+    for (const [sha, arr] of Object.entries(data.references)) {
+      if (Array.isArray(arr) && arr.length > 0) result.set(sha, arr.length)
+    }
+  } catch {
+    // No existe / JSON inválido → vacío
+  }
+  return result
+}
+
+/**
  * Lista los archivos físicos de public/images/ con su mtime (ms).
  * Devuelve un Map<filename, mtimeMs> para:
  *   1) detectar tiles missing (`!map.has(filename)`)
@@ -329,6 +351,9 @@ npm run images:upload-metadata`}</pre>
   // "no corresponde" desde el banco (swipe Tinder). Las respetamos
   // en runtime aunque el classifier aún no las haya reprocesado.
   const tagExclusionsMap = await loadTagExclusions()
+  // Map<sha, count> — cuántas referencias alternativas hay descargadas
+  // para cada SHA del banco. Lo pintamos como badge sobre la lupa.
+  const referenceCountsMap = await loadReferenceCounts()
   // Confirmaciones: sha → set(tag_id) que admin marcó "SÍ es". El
   // boost del score se aplica en runtime también para que el filtro
   // de calidad las muestre inmediatamente.
@@ -906,6 +931,7 @@ npm run images:upload-metadata`}</pre>
                           currentTag={tagFilter}
                           getDisplay={labelEs}
                           anchorId={tagFilter ? undefined : anchorId}
+                          refsCount={referenceCountsMap.get(entry.sha) ?? 0}
                           buildTagURL={(tag) => {
                             const url = buildFilterURL({
                               tag:      tag === tagFilter ? undefined : tag,
@@ -979,7 +1005,7 @@ function StatBox({ label, value, sub, color }: {
   )
 }
 
-function ImageTile({ entry, currentTag, getDisplay, buildTagURL, anchorId }: {
+function ImageTile({ entry, currentTag, getDisplay, buildTagURL, anchorId, refsCount }: {
   entry:      DisplayEntry
   currentTag: string | undefined
   getDisplay: (id: string) => string
@@ -992,6 +1018,9 @@ function ImageTile({ entry, currentTag, getDisplay, buildTagURL, anchorId }: {
    *  decide la semántica de toggle (si tag === currentTag, devuelve
    *  URL sin filtro de tag; si no, aplica el filtro). */
   buildTagURL: (tag: string) => string
+  /** Cuántas referencias alternativas se han descargado para esta SHA.
+   *  El botón lupa pinta un badge con este número si > 0. */
+  refsCount:   number
 }) {
   // Resuelto vía CDN (R2) en prod o /images/ local en dev — ver lib/imageUrl
   const imgSrc = imageUrl(entry.filename)
@@ -1017,9 +1046,10 @@ function ImageTile({ entry, currentTag, getDisplay, buildTagURL, anchorId }: {
           <div className="font-mono-tabular" style={{ fontSize: 9.5, color: "var(--slate-400)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>
             {entry.sha.slice(0, 16)}…
           </div>
-          {/* Botón "buscar reemplazo" estilo Lens — solo aparece para admins
-              (todo /admin/* ya está gateado en layout.tsx). Modal lazy-load. */}
-          <FindReplacementsButton sha={entry.sha} currentTags={entry.tags} />
+          {/* Botón "buscar referencias visuales" — admin only (todo /admin/*
+              gateado en layout.tsx). Modal lazy-load. El badge sobre la
+              lupa muestra cuántas refs ya se guardaron para este SHA. */}
+          <FindReplacementsButton sha={entry.sha} currentTags={entry.tags} refsCount={refsCount} />
         </div>
 
         <div style={{ color: "var(--slate-600)", fontSize: 10.5 }}>

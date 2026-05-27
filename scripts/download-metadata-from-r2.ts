@@ -25,13 +25,14 @@ import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3"
 const LOCAL_DIR = join(process.cwd(), "tools", "image-audit")
 
 const FILES: { localName: string; r2Key: string }[] = [
-  { localName: "classification.json",     r2Key: "meta/classification.json" },
-  { localName: "sha-audit.json",          r2Key: "meta/sha-audit.json" },
-  { localName: "discovered_labels.json",  r2Key: "meta/discovered_labels.json" },
-  { localName: "refined_labels.json",     r2Key: "meta/refined_labels.json" },
-  { localName: "prototypes.json",         r2Key: "meta/prototypes.json" },
-  { localName: "tag_exclusions.json",     r2Key: "meta/tag_exclusions.json" },
-  { localName: "tag_confirmations.json",  r2Key: "meta/tag_confirmations.json" },
+  { localName: "classification.json",         r2Key: "meta/classification.json" },
+  { localName: "sha-audit.json",              r2Key: "meta/sha-audit.json" },
+  { localName: "discovered_labels.json",      r2Key: "meta/discovered_labels.json" },
+  { localName: "refined_labels.json",         r2Key: "meta/refined_labels.json" },
+  { localName: "prototypes.json",             r2Key: "meta/prototypes.json" },
+  { localName: "tag_exclusions.json",         r2Key: "meta/tag_exclusions.json" },
+  { localName: "tag_confirmations.json",      r2Key: "meta/tag_confirmations.json" },
+  { localName: "alternative_references.json", r2Key: "meta/alternative_references.json" },
 ]
 
 async function main() {

@@ -30,13 +30,14 @@ const LOCAL_DIR = join(process.cwd(), "tools", "image-audit")
 // Pares (filename local → key R2). Coincide con R2_META_KEYS en
 // src/lib/imagesBankR2.ts — si cambias uno, cambia el otro.
 const FILES: { localName: string; r2Key: string }[] = [
-  { localName: "classification.json",     r2Key: "meta/classification.json" },
-  { localName: "sha-audit.json",          r2Key: "meta/sha-audit.json" },
-  { localName: "discovered_labels.json",  r2Key: "meta/discovered_labels.json" },
-  { localName: "refined_labels.json",     r2Key: "meta/refined_labels.json" },
-  { localName: "prototypes.json",         r2Key: "meta/prototypes.json" },
-  { localName: "tag_exclusions.json",     r2Key: "meta/tag_exclusions.json" },
-  { localName: "tag_confirmations.json",  r2Key: "meta/tag_confirmations.json" },
+  { localName: "classification.json",         r2Key: "meta/classification.json" },
+  { localName: "sha-audit.json",              r2Key: "meta/sha-audit.json" },
+  { localName: "discovered_labels.json",      r2Key: "meta/discovered_labels.json" },
+  { localName: "refined_labels.json",         r2Key: "meta/refined_labels.json" },
+  { localName: "prototypes.json",             r2Key: "meta/prototypes.json" },
+  { localName: "tag_exclusions.json",         r2Key: "meta/tag_exclusions.json" },
+  { localName: "tag_confirmations.json",      r2Key: "meta/tag_confirmations.json" },
+  { localName: "alternative_references.json", r2Key: "meta/alternative_references.json" },
 ]
 
 async function main() {

@@ -6,21 +6,27 @@ import { useRouter } from "next/navigation"
 import { Search, X, Check, AlertCircle, ExternalLink, Loader2, RefreshCw, Sparkles, Database } from "lucide-react"
 
 /**
- * Botón + modal "estilo Google Lens" para reemplazar la imagen actual de
- * una pregunta DGT por un candidato con licencia libre (Pixabay/Pexels/
- * Unsplash).
+ * Botón + modal para buscar referencias visuales alternativas y guardarlas
+ * en el banco. La búsqueda usa stock APIs (Pixabay/Pexels) o Google Lens
+ * (reverse image VISUAL real vía SerpAPI).
  *
  * Flow:
- *   1. Admin clica botón `<Search />` en el tile
- *   2. Se abre el modal, dispara POST /api/admin/images-bank/find-replacements
- *      con la sha de la imagen actual
- *   3. Backend determina el keyword (tag confident principal en español)
- *      y llama stock APIs
- *   4. Modal renderiza grid de candidatos
- *   5. Admin clica "Reemplazar" en uno
- *   6. POST /api/admin/images-bank/replace-image descarga + sube R2 +
- *      actualiza Question.imagen en BBDD para todas las Q que usaban la sha vieja
- *   7. Modal se cierra + router.refresh() → page.tsx re-render con la nueva
+ *   1. Admin clica botón `<Search />` en el tile.
+ *   2. Modal abre, dispara POST /api/admin/images-bank/find-replacements
+ *      con la sha de la imagen actual + tab activo (stock|google).
+ *   3. Backend devuelve candidatos.
+ *   4. Modal pinta el grid + un badge con cuántas referencias ya hay
+ *      guardadas para este sha (`refsCount` recibido del padre).
+ *   5. Admin clica "Guardar referencia" en uno.
+ *   6. POST /api/admin/images-bank/save-reference descarga el binario,
+ *      lo sube a R2 como `<newSha>.<ext>` (sin tocar Question), y
+ *      registra el vínculo en meta/alternative_references.json para
+ *      poder llevar el seguimiento.
+ *   7. El contador local del modal se incrementa; al cerrar, el padre
+ *      revalidará con router.refresh().
+ *
+ * Las imágenes guardadas quedan huérfanas hasta que el clasificador
+ * (siguiente run) las procese y les asigne tags.
  */
 
 // Mirror del shape devuelto por el endpoint find-replacements
@@ -86,20 +92,25 @@ function clearCache(sha: string, set: ProviderSet): void {
   try { window.sessionStorage.removeItem(cacheKey(sha, set)) } catch {}
 }
 
-interface ReplaceResponse {
-  ok:                boolean
-  error?:            string
-  newSha?:           string
-  newFilename?:      string
-  questionsUpdated?: number
+interface SaveReferenceResponse {
+  ok:                 boolean
+  error?:             string
+  newSha?:            string
+  newFilename?:       string
+  dedup?:             boolean
+  totalForOriginal?:  number
 }
 
 interface Props {
   sha:           string
   currentTags?:  Array<{ tag: string; score: number; confident: boolean }>
+  /** Cuántas referencias alternativas se han descargado ya para este
+   *  SHA. El padre lo pasa desde page.tsx (lee meta/alternative_references.json).
+   *  null/undefined = no se ha consultado todavía → no se pinta el badge. */
+  refsCount?:    number
 }
 
-export function FindReplacementsButton({ sha, currentTags }: Props) {
+export function FindReplacementsButton({ sha, currentTags, refsCount }: Props) {
   const [open, setOpen] = useState(false)
   // mounted: solo renderizamos el portal cuando ya estamos en cliente
   // (document existe). Sin esto, createPortal en SSR explota.
@@ -107,6 +118,7 @@ export function FindReplacementsButton({ sha, currentTags }: Props) {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setMounted(true) }, [])
 
+  const hasRefs = typeof refsCount === "number" && refsCount > 0
   return (
     <>
       <button
@@ -123,16 +135,27 @@ export function FindReplacementsButton({ sha, currentTags }: Props) {
         onMouseDown={(e) => e.stopPropagation()}
         onTouchStart={(e) => e.stopPropagation()}
         onPointerDown={(e) => e.stopPropagation()}
-        title="Buscar reemplazo (Google Lens style)"
-        aria-label="Buscar imagen de reemplazo"
+        title={
+          hasRefs
+            ? `Buscar referencias visuales · ${refsCount} ya descargadas`
+            : "Buscar referencias visuales (Google Lens / stock)"
+        }
+        aria-label={
+          hasRefs
+            ? `Buscar referencias, ${refsCount} ya descargadas`
+            : "Buscar referencias visuales"
+        }
         style={{
+          position:       "relative",      // contenedor del badge
           display:        "inline-flex",
           alignItems:     "center",
           justifyContent: "center",
           width:          22,
           height:         22,
           border:         0,
-          background:     "rgba(99, 102, 241, 0.12)",
+          background:     hasRefs
+            ? "rgba(99, 102, 241, 0.22)"   // tinte más fuerte cuando hay refs
+            : "rgba(99, 102, 241, 0.12)",
           color:          "var(--indigo-600, #6366f1)",
           borderRadius:   4,
           cursor:         "pointer",
@@ -145,6 +168,32 @@ export function FindReplacementsButton({ sha, currentTags }: Props) {
         }}
       >
         <Search size={12} />
+        {hasRefs && (
+          <span
+            aria-hidden="true"
+            style={{
+              position:       "absolute",
+              top:            -5,
+              right:          -5,
+              minWidth:       14,
+              height:         14,
+              padding:        "0 3px",
+              background:     "var(--indigo-600, #6366f1)",
+              color:          "white",
+              borderRadius:   999,
+              fontSize:       9,
+              fontWeight:     800,
+              lineHeight:     1,
+              display:        "inline-flex",
+              alignItems:     "center",
+              justifyContent: "center",
+              boxShadow:      "0 0 0 1.5px white",  // anillo blanco para flotar sobre cualquier fondo
+              fontFamily:     "var(--font-mono)",
+            }}
+          >
+            {refsCount! > 99 ? "99+" : refsCount}
+          </span>
+        )}
       </button>
       {/* Portal al body — el tile padre tiene `overflow: hidden` y
           SwipeableImageTile usa `transform`, ambos crean un contain block
@@ -154,6 +203,7 @@ export function FindReplacementsButton({ sha, currentTags }: Props) {
         <FindReplacementsModal
           sha={sha}
           currentTags={currentTags}
+          initialRefsCount={refsCount ?? 0}
           onClose={() => setOpen(false)}
         />,
         document.body,
@@ -165,8 +215,9 @@ export function FindReplacementsButton({ sha, currentTags }: Props) {
 function FindReplacementsModal({
   sha,
   currentTags,
+  initialRefsCount,
   onClose,
-}: Props & { onClose: () => void }) {
+}: Props & { onClose: () => void; initialRefsCount: number }) {
   const router = useRouter()
   // Default "stock" porque es free y no gasta la quota cara de SerpAPI.
   // El admin tiene que clicar el otro tab para activar Google Lens.
@@ -176,9 +227,17 @@ function FindReplacementsModal({
   const [keyword,    setKeyword]    = useState<string>("")
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [providers,  setProviders]  = useState<string[]>([])
-  const [replacing,  setReplacing]  = useState<string | null>(null)  // url del candidato en proceso
-  const [success,    setSuccess]    = useState<string | null>(null)  // mensaje de éxito
+  const [saving,     setSaving]     = useState<string | null>(null)  // url del candidato en proceso
+  const [success,    setSuccess]    = useState<string | null>(null)  // mensaje de éxito de la ÚLTIMA acción
   const [fromCache,  setFromCache]  = useState(false)
+  // Refs guardadas total para este SHA — empieza con el valor que pasó
+  // el padre (que lo leyó de R2) y se incrementa localmente con cada
+  // guardado exitoso. El padre revalidará al cerrar el modal.
+  const [refsCount,  setRefsCount]  = useState(initialRefsCount)
+  // SHAs de candidatos que YA se guardaron en esta apertura del modal
+  // — sirve para tachar visualmente el botón "Guardar" en sus tarjetas
+  // sin tener que volver a llamar al endpoint find-replacements.
+  const [savedCandidateUrls, setSavedCandidateUrls] = useState<Set<string>>(new Set())
   // Bump para forzar re-fetch ignorando caché (botón "refrescar")
   const [refreshTick, setRefreshTick] = useState(0)
 
@@ -251,48 +310,55 @@ function FindReplacementsModal({
     return () => { document.body.style.overflow = prev }
   }, [])
 
-  // ── Replace handler ───────────────────────────────────────────────
-  async function handleReplace(candidate: Candidate) {
-    if (replacing) return
-    const confirmed = window.confirm(
-      `¿Reemplazar la imagen actual con esta de ${candidate.provider}?\n\n` +
-      `Esto sube la nueva a R2 y actualiza Question.imagen en BBDD para TODAS ` +
-      `las preguntas que usan esta imagen. La imagen vieja se mantiene en R2 ` +
-      `(no se borra).\n\n` +
-      `Autor: ${candidate.attribution ?? "?"}\nLicencia: ${candidate.license}`,
-    )
-    if (!confirmed) return
-
-    setReplacing(candidate.url)
+  // ── Save reference handler ────────────────────────────────────────
+  // Descarga el candidato, lo sube a R2 con su SHA como filename (sin
+  // tocar Question), y registra el vínculo en alternative_references.json.
+  // El clasificador lo recogerá en su siguiente run y lo etiquetará.
+  async function handleSave(candidate: Candidate) {
+    if (saving) return
+    setSaving(candidate.url)
     setError(null)
+    setSuccess(null)
     try {
-      const res = await fetch("/api/admin/images-bank/replace-image", {
+      const res = await fetch("/api/admin/images-bank/save-reference", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({
           originalSha:  sha,
           candidateUrl: candidate.url,
+          sourceUrl:    candidate.sourceUrl,
+          provider:     candidate.provider,
+          attribution:  candidate.attribution,
         }),
       })
-      const data = (await res.json()) as ReplaceResponse
+      const data = (await res.json()) as SaveReferenceResponse
       if (!res.ok || !data.ok) {
         setError(data.error ?? `HTTP ${res.status}`)
-        setReplacing(null)
+        setSaving(null)
         return
       }
+      setSavedCandidateUrls((prev) => new Set([...prev, candidate.url]))
+      if (typeof data.totalForOriginal === "number") setRefsCount(data.totalForOriginal)
       setSuccess(
-        `✅ Reemplazada — nuevo SHA ${data.newSha?.slice(0, 12)}… · ` +
-        `${data.questionsUpdated} preguntas actualizadas`,
+        data.dedup
+          ? `Ya estaba guardada — refs totales: ${data.totalForOriginal ?? refsCount}`
+          : `Guardada ✓ SHA ${data.newSha?.slice(0, 10)}… · refs: ${data.totalForOriginal ?? refsCount + 1}`,
       )
-      // Refresh page after a short delay so user sees confirmation
-      setTimeout(() => {
-        router.refresh()
-        onClose()
-      }, 1400)
+      setSaving(null)
+      // No cerramos el modal — el admin probablemente quiere guardar varias
+      // referencias para el mismo SHA en una sola apertura. Que cierre él.
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
-      setReplacing(null)
+      setSaving(null)
     }
+  }
+
+  // Refresca la página padre al cerrar SOLO si se guardaron refs nuevas
+  // (la página padre relee meta/alternative_references.json para repintar
+  // los badges de los demás tiles si comparten alguna ref con éste).
+  function handleClose() {
+    if (savedCandidateUrls.size > 0) router.refresh()
+    onClose()
   }
 
   // ── Tag confident principal como contexto visual ─────────────────
@@ -303,7 +369,7 @@ function FindReplacementsModal({
   return (
     <div
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
+        if (e.target === e.currentTarget) handleClose()
       }}
       role="dialog"
       aria-modal="true"
@@ -353,7 +419,25 @@ function FindReplacementsModal({
             <div style={{ minWidth: 0 }}>
               <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, display: "flex", alignItems: "center", gap: 8 }}>
                 <Search size={16} />
-                Buscar reemplazo
+                Buscar referencias visuales
+                {refsCount > 0 && (
+                  <span
+                    title="Referencias alternativas ya descargadas para esta imagen"
+                    style={{
+                      display:      "inline-flex",
+                      alignItems:   "center",
+                      gap:          4,
+                      padding:      "2px 8px",
+                      background:   "var(--indigo-600, #6366f1)",
+                      color:        "white",
+                      borderRadius: 999,
+                      fontSize:     11,
+                      fontWeight:   800,
+                    }}
+                  >
+                    {refsCount} refs
+                  </span>
+                )}
               </h2>
               <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--slate-500)" }}>
                 SHA: <code>{sha.slice(0, 12)}…</code> · Tag principal: <strong>{topConfidentTag}</strong>
@@ -378,7 +462,7 @@ function FindReplacementsModal({
             </div>
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               aria-label="Cerrar"
               style={{
                 border: 0, background: "transparent", padding: 8,
@@ -565,9 +649,10 @@ function FindReplacementsModal({
                 <CandidateCard
                   key={c.url}
                   candidate={c}
-                  onReplace={() => handleReplace(c)}
-                  replacing={replacing === c.url}
-                  disabled={Boolean(replacing) || Boolean(success)}
+                  onSave={() => handleSave(c)}
+                  saving={saving === c.url}
+                  alreadySaved={savedCandidateUrls.has(c.url)}
+                  disabled={Boolean(saving)}
                 />
               ))}
             </div>
@@ -582,7 +667,10 @@ function FindReplacementsModal({
           fontSize:   11.5,
           color:      "var(--slate-500)",
         }}>
-          Stock APIs gratuitas (Pixabay/Pexels/Unsplash) con licencia libre comercial. Al reemplazar, la imagen vieja se mantiene en R2 — solo se actualiza <code>Question.imagen</code> en BBDD.
+          Las referencias guardadas se suben a R2 con su SHA y se quedan SIN
+          etiquetar hasta que el clasificador (siguiente run) las procese.
+          <strong> Question.imagen NO se modifica</strong> — solo amplía el banco
+          con candidatos para que el clasificador escoja después.
         </footer>
       </div>
 
@@ -597,14 +685,18 @@ function FindReplacementsModal({
 // ── CandidateCard ────────────────────────────────────────────────────
 function CandidateCard({
   candidate,
-  onReplace,
-  replacing,
+  onSave,
+  saving,
+  alreadySaved,
   disabled,
 }: {
-  candidate: Candidate
-  onReplace: () => void
-  replacing: boolean
-  disabled:  boolean
+  candidate:    Candidate
+  onSave:       () => void
+  saving:       boolean
+  /** ya se guardó en esta apertura del modal → pinta el botón como "Guardada" */
+  alreadySaved: boolean
+  /** true mientras CUALQUIER candidato está siendo subido (evita concurrencia) */
+  disabled:     boolean
 }) {
   return (
     <div style={{
@@ -654,21 +746,26 @@ function CandidateCard({
         <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
           <button
             type="button"
-            onClick={onReplace}
-            disabled={disabled}
+            onClick={onSave}
+            disabled={disabled || alreadySaved}
+            title={alreadySaved
+              ? "Ya guardada en este modal · puedes seguir guardando otras"
+              : "Descargar y guardar en R2 como referencia visual de esta imagen"}
             style={{
               flex:           1,
               padding:        "6px 8px",
               border:         0,
-              background:     replacing
+              background:     saving
                                 ? "var(--slate-400)"
-                                : "var(--indigo-600, #6366f1)",
+                                : alreadySaved
+                                  ? "var(--green, #16a34a)"
+                                  : "var(--indigo-600, #6366f1)",
               color:          "#fff",
               borderRadius:   6,
               fontSize:       11.5,
               fontWeight:     700,
-              cursor:         disabled ? "not-allowed" : "pointer",
-              opacity:        disabled && !replacing ? 0.5 : 1,
+              cursor:         disabled || alreadySaved ? "default" : "pointer",
+              opacity:        disabled && !saving && !alreadySaved ? 0.5 : 1,
               display:        "inline-flex",
               alignItems:     "center",
               justifyContent: "center",
@@ -676,15 +773,20 @@ function CandidateCard({
               transition:     "background 0.15s",
             }}
           >
-            {replacing ? (
+            {saving ? (
               <>
                 <Loader2 size={11} className="spin" />
-                Reemplazando…
+                Guardando…
+              </>
+            ) : alreadySaved ? (
+              <>
+                <Check size={11} />
+                Guardada
               </>
             ) : (
               <>
                 <Check size={11} />
-                Reemplazar
+                Guardar referencia
               </>
             )}
           </button>

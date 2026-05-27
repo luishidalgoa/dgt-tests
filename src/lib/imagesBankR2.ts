@@ -31,24 +31,54 @@ import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3
 // ── Keys de los JSONs en el bucket ────────────────────────────────────
 // Bajo prefix `meta/` para separarlos de las imágenes (que están en la raíz).
 export const R2_META_KEYS = {
-  classification:   "meta/classification.json",
-  shaAudit:         "meta/sha-audit.json",
-  discoveredLabels: "meta/discovered_labels.json",
-  refinedLabels:    "meta/refined_labels.json",
-  prototypes:       "meta/prototypes.json",
-  tagExclusions:    "meta/tag_exclusions.json",
-  tagConfirmations: "meta/tag_confirmations.json",
+  classification:        "meta/classification.json",
+  shaAudit:              "meta/sha-audit.json",
+  discoveredLabels:      "meta/discovered_labels.json",
+  refinedLabels:         "meta/refined_labels.json",
+  prototypes:            "meta/prototypes.json",
+  tagExclusions:         "meta/tag_exclusions.json",
+  tagConfirmations:      "meta/tag_confirmations.json",
+  alternativeReferences: "meta/alternative_references.json",
 } as const
 
 // Nombre local (para el script de upload desde tools/image-audit/)
 export const LOCAL_TO_R2_KEY: Record<string, string> = {
-  "classification.json":     R2_META_KEYS.classification,
-  "sha-audit.json":          R2_META_KEYS.shaAudit,
-  "discovered_labels.json":  R2_META_KEYS.discoveredLabels,
-  "refined_labels.json":     R2_META_KEYS.refinedLabels,
-  "prototypes.json":         R2_META_KEYS.prototypes,
-  "tag_exclusions.json":     R2_META_KEYS.tagExclusions,
-  "tag_confirmations.json":  R2_META_KEYS.tagConfirmations,
+  "classification.json":          R2_META_KEYS.classification,
+  "sha-audit.json":               R2_META_KEYS.shaAudit,
+  "discovered_labels.json":       R2_META_KEYS.discoveredLabels,
+  "refined_labels.json":          R2_META_KEYS.refinedLabels,
+  "prototypes.json":              R2_META_KEYS.prototypes,
+  "tag_exclusions.json":          R2_META_KEYS.tagExclusions,
+  "tag_confirmations.json":       R2_META_KEYS.tagConfirmations,
+  "alternative_references.json":  R2_META_KEYS.alternativeReferences,
+}
+
+// ── Tipo del JSON de referencias alternativas ────────────────────────
+// El admin descarga imágenes de Google Lens / stock APIs como "referencias"
+// (no como reemplazos) para que el clasificador las procese más adelante.
+// Cada referencia se ata al SHA original que la inspiró — útil para auditar
+// y para mostrar "X referencias ya descargadas" junto a cada tile.
+export interface AlternativeReference {
+  /** SHA-256 del binario descargado (= filename en R2). */
+  sha:           string
+  /** Extensión (jpg, png, webp…). */
+  ext:           string
+  /** URL pública de donde se descargó (Pixabay/Pexels/Lens). */
+  sourceUrl:     string
+  /** "pixabay" | "pexels" | "unsplash" | "serpapi". */
+  provider:      string
+  /** Atribución reportada por el provider (autor / sitio fuente). */
+  attribution?:  string
+  /** ISO timestamp de la descarga. */
+  downloadedAt:  string
+  /** Username del admin que la guardó. */
+  addedBy?:      string
+}
+
+export interface AlternativeReferencesData {
+  version:    number
+  /** Map originalSha → array de referencias guardadas para ese SHA. */
+  references: Record<string, AlternativeReference[]>
 }
 
 // ── Cliente S3 lazy-init ──────────────────────────────────────────────
@@ -117,8 +147,9 @@ export async function putJsonToR2(key: string, data: unknown): Promise<void> {
 
 /**
  * Sube un binario (imagen) a R2 con su content-type específico.
- * Usado por el endpoint `replace-image` para guardar candidatos descargados
- * de Pixabay/Pexels/Unsplash con su SHA como key.
+ * Usado por el endpoint `save-reference` para guardar candidatos descargados
+ * de Pixabay/Pexels/Unsplash/Lens con su SHA como key, sin asociarlos
+ * todavía a ninguna Question — el clasificador los etiquetará después.
  *
  * Cache: 1 año (immutable). El SHA en el filename garantiza que cambios
  * en la imagen producen una key nueva — no hay invalidación necesaria.
