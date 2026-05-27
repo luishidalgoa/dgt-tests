@@ -165,6 +165,10 @@ export function TagListPopover({ anchorRect, tags, sha, tagDisplayMap, onClose }
         return
       }
       setRemovedTags((prev) => new Set([...prev, tag]))
+      // Refresca el server data inmediatamente para que el tag
+      // desaparezca también en la card debajo del popover (sin esperar
+      // a que el admin cierre el popover).
+      router.refresh()
       setDeletingTag(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))

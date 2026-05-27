@@ -1390,6 +1390,7 @@ function ImageTile({ entry, currentTag, getDisplay, buildTagURL, anchorId, refsC
             currentTags={entry.tags}
             refsCount={refsCount}
             disabledBecauseIsRef={entry.isAlternativeReference === true}
+            originalImageUrl={imgSrc}
           />
         </div>
 

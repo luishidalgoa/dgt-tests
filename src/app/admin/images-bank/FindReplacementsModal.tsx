@@ -120,9 +120,14 @@ interface Props {
    *  está catalogada en internet — los resultados serían pobres o la
    *  propia imagen tal cual. */
   disabledBecauseIsRef?: boolean
+  /** URL pública de la imagen original (resuelta vía imageUrl() en el
+   *  padre). El modal muestra una mini-previsualización en el header
+   *  para que el admin tenga contexto visual de QUÉ está buscando
+   *  reemplazo. */
+  originalImageUrl?: string
 }
 
-export function FindReplacementsButton({ sha, currentTags, refsCount, disabledBecauseIsRef }: Props) {
+export function FindReplacementsButton({ sha, currentTags, refsCount, disabledBecauseIsRef, originalImageUrl }: Props) {
   const [open, setOpen] = useState(false)
   // mounted: solo renderizamos el portal cuando ya estamos en cliente
   // (document existe). Sin esto, createPortal en SSR explota.
@@ -228,6 +233,7 @@ export function FindReplacementsButton({ sha, currentTags, refsCount, disabledBe
           sha={sha}
           currentTags={currentTags}
           initialRefsCount={refsCount ?? 0}
+          originalImageUrl={originalImageUrl}
           onClose={() => setOpen(false)}
         />,
         document.body,
@@ -240,6 +246,7 @@ function FindReplacementsModal({
   sha,
   currentTags,
   initialRefsCount,
+  originalImageUrl,
   onClose,
 }: Props & { onClose: () => void; initialRefsCount: number }) {
   const router = useRouter()
@@ -445,33 +452,65 @@ function FindReplacementsModal({
             gap:            12,
           }}
         >
-          {/* Fila 1: título + cerrar */}
+          {/* Fila 1: thumbnail original + título + cerrar */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-            <div style={{ minWidth: 0 }}>
-              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, display: "flex", alignItems: "center", gap: 8 }}>
-                <Search size={16} />
-                Buscar referencias visuales
-                {refsCount > 0 && (
-                  <span
-                    title="Referencias alternativas ya descargadas para esta imagen"
+            <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0, flex: 1 }}>
+              {/* Mini-previsualización de la imagen ORIGINAL — la que
+                  estamos buscando reemplazos para. Da contexto visual
+                  inmediato al admin (sin tener que cerrar el modal y
+                  mirar la card). next/image no — la URL del CDN R2 no
+                  está en next.config.images.remotePatterns; usamos <img>
+                  nativo con loading lazy. */}
+              {originalImageUrl && (
+                <a
+                  href={originalImageUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Ver original en tamaño completo"
+                  style={{ flexShrink: 0, display: "block", lineHeight: 0 }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={originalImageUrl}
+                    alt={`Imagen original ${sha.slice(0, 8)}…`}
+                    loading="lazy"
                     style={{
-                      display:      "inline-flex",
-                      alignItems:   "center",
-                      gap:          4,
-                      padding:      "2px 8px",
-                      background:   "var(--indigo-600, #6366f1)",
-                      color:        "white",
-                      borderRadius: 999,
-                      fontSize:     11,
-                      fontWeight:   800,
+                      width:        56,
+                      height:       56,
+                      objectFit:    "cover",
+                      borderRadius: 8,
+                      border:       "1px solid var(--slate-200)",
+                      background:   "var(--slate-100)",
+                      display:      "block",
                     }}
-                  >
-                    {refsCount} refs
-                  </span>
-                )}
-              </h2>
-              <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--slate-500)" }}>
-                SHA: <code>{sha.slice(0, 12)}…</code> · Tag principal: <strong>{topConfidentTag}</strong>
+                  />
+                </a>
+              )}
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <Search size={16} />
+                  Buscar referencias visuales
+                  {refsCount > 0 && (
+                    <span
+                      title="Referencias alternativas ya descargadas para esta imagen"
+                      style={{
+                        display:      "inline-flex",
+                        alignItems:   "center",
+                        gap:          4,
+                        padding:      "2px 8px",
+                        background:   "var(--indigo-600, #6366f1)",
+                        color:        "white",
+                        borderRadius: 999,
+                        fontSize:     11,
+                        fontWeight:   800,
+                      }}
+                    >
+                      {refsCount} refs
+                    </span>
+                  )}
+                </h2>
+                <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--slate-500)" }}>
+                  SHA: <code>{sha.slice(0, 12)}…</code> · Tag principal: <strong>{topConfidentTag}</strong>
                 {/* En modo Lens la búsqueda es VISUAL (reverse image),
                     no por palabra clave — mostramos algo más claro que
                     "Keyword:" para no confundir. */}
@@ -490,6 +529,7 @@ function FindReplacementsModal({
                   </>
                 )}
               </p>
+              </div>
             </div>
             <button
               type="button"

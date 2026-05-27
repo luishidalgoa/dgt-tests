@@ -206,6 +206,11 @@ function AddManualTagModal({
         ? data.updated ? "Justificación actualizada" : "Ya estaba asignado"
         : "Tag añadido"
       setSuccess(`${noun}: ${effectiveTag}`)
+      // Refresca el server data INMEDIATAMENTE — antes solo se hacía al
+      // cerrar el modal, así el admin no veía el tag aparecer en la card
+      // hasta que cerrase. Con router.refresh() la página de fondo se
+      // re-renderiza con los nuevos datos manteniendo el modal abierto.
+      router.refresh()
       // Reset solo el input + reason; mantenemos abierto y enfocado para
       // que el admin pueda seguir añadiendo más tags rápidamente.
       setQuery("")
