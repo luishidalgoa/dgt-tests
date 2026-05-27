@@ -317,18 +317,25 @@ function FindReplacementsModal({
                 <strong>Error:</strong> {error}
                 {error.includes("No hay provider") && (
                   <p style={{ margin: "8px 0 0", fontSize: 12 }}>
-                    Soluciones:
-                    <br />• Pixabay (recomendado): registrarse en{" "}
+                    Soluciones (en orden de calidad para DGT):
+                    <br />• <strong>SerpAPI (Google Images, recomendado)</strong>:{" "}
+                    <a href="https://serpapi.com/manage-api-key" target="_blank" rel="noopener noreferrer">
+                      serpapi.com
+                    </a>{" "}
+                    → free tier 100 búsquedas/mes, después $50/mes. Calidad órdenes de
+                    magnitud mejor que stock APIs porque indexa toda la web. Variable:{" "}
+                    <code>SERPAPI_API_KEY</code>
+                    <br />• Pixabay (stock, free 5000/h):{" "}
                     <a href="https://pixabay.com/accounts/register/" target="_blank" rel="noopener noreferrer">
                       pixabay.com
                     </a>{" "}
-                    y añadir <code>PIXABAY_API_KEY</code> a <code>.env.local</code>
-                    <br />• Pexels: registro en{" "}
+                    → <code>PIXABAY_API_KEY</code>
+                    <br />• Pexels (stock, free 200/h):{" "}
                     <a href="https://www.pexels.com/api/" target="_blank" rel="noopener noreferrer">
                       pexels.com
                     </a>{" "}
                     → <code>PEXELS_API_KEY</code>
-                    <br />• Unsplash:{" "}
+                    <br />• Unsplash (stock, free 50/h):{" "}
                     <a href="https://unsplash.com/developers" target="_blank" rel="noopener noreferrer">
                       unsplash.com
                     </a>{" "}

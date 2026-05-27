@@ -41,7 +41,7 @@ const bodySchema = z.object({
   sha:          z.string().regex(/^[a-f0-9]{64}$/, "sha debe ser hex sha256 (64 chars)"),
   max:          z.number().int().min(1).max(50).optional(),
   imageType:    z.enum(["photo", "illustration", "vector", "any"]).optional(),
-  providerName: z.enum(["pixabay", "pexels", "unsplash"]).optional(),
+  providerName: z.enum(["pixabay", "pexels", "unsplash", "serpapi"]).optional(),
   keyword:      z.string().min(2).max(100).optional(),
 })
 
@@ -151,7 +151,8 @@ export async function POST(req: NextRequest) {
           {
             ok:    false,
             error: "No hay provider configurado. Añade alguna a .env.local: " +
-                   "PIXABAY_API_KEY (recomendado, 5000 req/h free), PEXELS_API_KEY, UNSPLASH_ACCESS_KEY.",
+                   "SERPAPI_API_KEY (recomendado, Google Images), PIXABAY_API_KEY (free 5000/h), " +
+                   "PEXELS_API_KEY, UNSPLASH_ACCESS_KEY.",
           },
           { status: 500 },
         )

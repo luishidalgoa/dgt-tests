@@ -218,6 +218,122 @@ class PexelsProvider implements ReverseImageProvider {
   }
 }
 
+// ── SerpAPI Google Images Provider ───────────────────────────────────
+// Docs: https://serpapi.com/google-images-api
+// Key:  https://serpapi.com/manage-api-key (free tier 100 búsquedas/mes,
+//       después $50/mes para 5000).
+//
+// Por qué este es el bueno:
+//   Los stock APIs (Pixabay/Pexels/Unsplash) buscan en un corpus pequeño
+//   de fotos comerciales — para un pictograma DGT o un diagrama didáctico
+//   no tienen NADA. SerpAPI envuelve Google Images, que indexa toda la
+//   web (PDFs de manuales, blogs de autoescuelas, foros, etc.). La calidad
+//   y relevancia es órdenes de magnitud mejor para nuestro caso DGT.
+//
+// Licencia: por defecto pedimos `tbs=il:cl` (Creative Commons) para que
+//   los resultados sean LEGALMENTE reusables. Sin ese filtro, salen imgs
+//   con copyright que NO se pueden usar comercialmente.
+
+class SerpApiProvider implements ReverseImageProvider {
+  name = "serpapi" as const
+
+  isConfigured(): boolean {
+    return Boolean(process.env.SERPAPI_API_KEY)
+  }
+
+  async findSimilar(opts: SearchOpts): Promise<Candidate[]> {
+    const apiKey = process.env.SERPAPI_API_KEY
+    if (!apiKey) throw new Error("SERPAPI_API_KEY no configurada en .env / .env.local")
+    if (!opts.keyword) throw new Error("SerpAPI requiere 'keyword'")
+
+    const max = opts.max ?? 12
+
+    // tbs (Google search filters) — encadenable con `,`:
+    //   il:cl       → license filter Creative Commons (libre uso comercial
+    //                 y modificación). CRÍTICO para no meter copyrighted
+    //                 en el banco DGT.
+    //   itp:photo   → solo fotos (no clipart). Permitimos otros si el
+    //                 caller pide vector/illustration.
+    const tbsParts: string[] = ["il:cl"]
+    if (opts.imageType === "photo") tbsParts.push("itp:photo")
+    else if (opts.imageType === "illustration") tbsParts.push("itp:clipart")
+    else if (opts.imageType === "vector") tbsParts.push("itp:lineart")
+    const tbs = tbsParts.join(",")
+
+    const params = new URLSearchParams({
+      engine:  "google_images",
+      q:       opts.keyword,
+      api_key: apiKey,
+      hl:      opts.lang ?? "es",
+      gl:      "es",                          // geo Spain → resultados localizados
+      safe:    "active",
+      tbs,
+      ijn:     "0",                            // primera página
+      num:     String(Math.min(Math.max(10, max * 2), 100)),  // pedimos algo más para filtrar
+    })
+
+    const res = await fetch(`https://serpapi.com/search.json?${params.toString()}`, {
+      method:  "GET",
+      headers: { Accept: "application/json" },
+    })
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "")
+      throw new Error(`SerpAPI HTTP ${res.status}: ${text.slice(0, 240)}`)
+    }
+
+    const data = (await res.json()) as {
+      error?: string
+      images_results?: Array<{
+        position?:        number
+        thumbnail?:       string
+        source?:          string
+        title?:           string
+        link?:            string
+        original?:        string
+        original_width?:  number
+        original_height?: number
+        is_product?:      boolean
+        tag?:             string
+      }>
+    }
+
+    if (data.error) {
+      throw new Error(`SerpAPI error: ${data.error}`)
+    }
+
+    const results = data.images_results ?? []
+
+    // Filtrar: necesitamos original + dimensiones razonables. Algunos hits
+    // vienen sin `original` (solo thumbnail) — los descartamos porque al
+    // intentar descargarlos en /replace-image fallaría.
+    return results
+      .filter((r) => r.original && r.original.startsWith("http"))
+      .filter((r) => {
+        const w = r.original_width  ?? 0
+        const h = r.original_height ?? 0
+        const minSize = opts.minSize ?? 480
+        // Si no conocemos las dimensiones, lo dejamos pasar (Google a veces
+        // las omite). Si las conocemos, exigimos mínimo.
+        return (w === 0 && h === 0) || (w >= minSize || h >= minSize)
+      })
+      .slice(0, max)
+      .map((r): Candidate => ({
+        url:          r.original!,
+        thumbnailUrl: r.thumbnail ?? r.original!,
+        sourceUrl:    r.link ?? r.original!,
+        provider:     "serpapi",
+        width:        r.original_width  ?? 0,
+        height:       r.original_height ?? 0,
+        imageType:    opts.imageType && opts.imageType !== "any" ? opts.imageType : "photo",
+        license:      "cc-by",                                  // tbs=il:cl ≈ CC, asumimos atribución
+        tags:         r.title ? [r.title] : [],
+        attribution:  r.source ?? "Google Images",
+        contentType:  guessContentType(r.original!),
+      }))
+  }
+}
+
 // ── Unsplash Provider (preparado) ────────────────────────────────────
 // Docs: https://unsplash.com/documentation
 // Free tier: 50 req/h
@@ -292,9 +408,11 @@ function guessContentType(url: string): string {
 
 /**
  * Devuelve el provider primario configurado. Orden de preferencia:
- *   1. Pixabay   (free, 5000/h, license CC0-equivalente)
- *   2. Pexels    (free, 200/h)
- *   3. Unsplash  (free, 50/h)
+ *   1. SerpAPI   (pago, $50/mes — Google Images real, MUCHO más relevante
+ *                 para pictogramas DGT y escenas de tráfico que stock APIs)
+ *   2. Pixabay   (free, 5000/h, license CC0-equivalente)
+ *   3. Pexels    (free, 200/h)
+ *   4. Unsplash  (free, 50/h)
  *
  * Si quieres forzar uno concreto: `getProviderByName("unsplash")`.
  * Si quieres TODOS los configurados (búsqueda agregada): `getAllProviders()`.
@@ -304,7 +422,8 @@ export function getProvider(): ReverseImageProvider {
   if (all.length === 0) {
     throw new Error(
       "No hay provider de reverse image search configurado. " +
-      "Añade alguna de estas keys a .env.local: PIXABAY_API_KEY, PEXELS_API_KEY, UNSPLASH_ACCESS_KEY.",
+      "Añade alguna de estas keys a .env.local: " +
+      "SERPAPI_API_KEY (Google Images, recomendado), PIXABAY_API_KEY, PEXELS_API_KEY, UNSPLASH_ACCESS_KEY.",
     )
   }
   return all[0]
@@ -323,8 +442,11 @@ export function getAllProviders(): ReverseImageProvider[] {
   return PROVIDERS.filter((p) => p.isConfigured())
 }
 
-// Orden de preferencia (Pixabay primero porque tiene MUCHO más rate limit)
+// Orden de preferencia: SerpAPI primero (Google Images = mejor calidad
+// para casos DGT). El resto en orden de rate limit descendente — si solo
+// hay stock APIs, Pixabay es el siguiente más útil por su quota generosa.
 const PROVIDERS: ReverseImageProvider[] = [
+  new SerpApiProvider(),
   new PixabayProvider(),
   new PexelsProvider(),
   new UnsplashProvider(),
