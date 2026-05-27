@@ -6,9 +6,9 @@
  *     CUALQUIER modo (normal, tema, errores, errores-refuerzo). Premia
  *     la precisión por encima del simple "haber finalizado".
  *   - Bonus diario de racha (una sola vez por día, en el primer examen
- *     que cuente para stats): ciclo [5, 7, 10, 15, 20, 30, 50] indexado
- *     por la longitud actual de la racha. Día 8 vuelve a 5 (loop), día 9
- *     a 7, etc. Si rompes la racha vuelves a empezar por día 1.
+ *     que cuente para stats): ciclo [10, 14, 20, 30, 40, 60, 100] indexado
+ *     por la longitud actual de la racha. Día 8 vuelve a 10 (loop), día 9
+ *     a 14, etc. Si rompes la racha vuelves a empezar por día 1.
  *
  * El nivel se deriva del XP acumulado vía `getLevel`. Tabla geométrica
  * 0..6:
@@ -81,13 +81,19 @@ export function sumXp(items: ReadonlyArray<XpLineItem>): number {
 // ── Bonus diario de racha ──────────────────────────────────────────────
 
 /** Bonuses por día de racha consecutiva. Indexado por día - 1 (día 1
- *  = índice 0). Si la racha sobrepasa la tabla, vuelve al principio. */
-export const STREAK_DAY_BONUSES: ReadonlyArray<number> = [5, 7, 10, 15, 20, 30, 50] as const
+ *  = índice 0). Si la racha sobrepasa la tabla, vuelve al principio.
+ *
+ *  La tabla está escalada para que el día 7 (cima del ciclo) valga 100 XP
+ *  — duplica el nivel base anterior ([5,7,10,15,20,30,50]) preservando
+ *  proporciones exactas. Sigue siendo geométrica: cada día ~vale 1.5×
+ *  más que el anterior, con un salto fuerte al día 7 que recompensa la
+ *  constancia semanal. */
+export const STREAK_DAY_BONUSES: ReadonlyArray<number> = [10, 14, 20, 30, 40, 60, 100] as const
 
 /**
  * Devuelve el bonus de XP que corresponde a `streakDays` (días seguidos
- * con ≥1 examen que cuenta, incluyendo hoy). El día 8 vuelve a 5 puntos,
- * el día 9 a 7, y así sucesivamente. `streakDays ≤ 0` devuelve 0.
+ * con ≥1 examen que cuenta, incluyendo hoy). El día 8 vuelve a 10 puntos,
+ * el día 9 a 14, y así sucesivamente. `streakDays ≤ 0` devuelve 0.
  */
 export function computeStreakDayBonus(streakDays: number): number {
   if (!Number.isFinite(streakDays) || streakDays <= 0) return 0

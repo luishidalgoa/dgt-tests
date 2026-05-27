@@ -211,53 +211,53 @@ describe("awardDailyStreakBonusIfDue — paga 1 vez por día si racha activa", (
     })
   }
 
-  it("paga +5 XP si es día 1 (solo hoy, sin claim previo)", async () => {
+  it("paga +10 XP si es día 1 (solo hoy, sin claim previo)", async () => {
     mockUser({
       lastStreakBonusAt:   null,
       streakRestoredUntil: null,
       todayAttempts:       true,
       previousDays:        0,
-      xpAfterUpdate:       5,
+      xpAfterUpdate:       10,
     })
     const r = await awardDailyStreakBonusIfDue(1)
     expect(r).not.toBeNull()
-    expect(r!.newXp).toBe(5)
+    expect(r!.newXp).toBe(10)
 
     // Verifica que se marcó lastStreakBonusAt (primer update sin xp)
     const updateCalls = dbMocks.user.update.mock.calls
     const markCall = updateCalls.find(([args]) => "lastStreakBonusAt" in (args as { data: object }).data)
     expect(markCall).toBeDefined()
-    // Y que se incrementó el XP en +5
+    // Y que se incrementó el XP en +10
     const xpCall = updateCalls.find(([args]) => "xp" in (args as { data: object }).data)
-    expect(xpCall?.[0]).toMatchObject({ data: { xp: { increment: 5 } } })
+    expect(xpCall?.[0]).toMatchObject({ data: { xp: { increment: 10 } } })
   })
 
-  it("paga +50 si la racha es de 7 días", async () => {
+  it("paga +100 si la racha es de 7 días", async () => {
     mockUser({
       lastStreakBonusAt:   null,
       streakRestoredUntil: null,
       todayAttempts:       true,
       previousDays:        6,
-      xpAfterUpdate:       50,
+      xpAfterUpdate:       100,
     })
     const r = await awardDailyStreakBonusIfDue(1)
-    expect(r!.newXp).toBe(50)
+    expect(r!.newXp).toBe(100)
     const xpCall = dbMocks.user.update.mock.calls.find(
       ([args]) => "xp" in (args as { data: object }).data,
     )
-    expect(xpCall?.[0]).toMatchObject({ data: { xp: { increment: 50 } } })
+    expect(xpCall?.[0]).toMatchObject({ data: { xp: { increment: 100 } } })
   })
 
-  it("paga +5 si la racha es de 8 días (loop)", async () => {
+  it("paga +10 si la racha es de 8 días (loop)", async () => {
     mockUser({
       lastStreakBonusAt:   null,
       streakRestoredUntil: null,
       todayAttempts:       true,
       previousDays:        7,
-      xpAfterUpdate:       5,
+      xpAfterUpdate:       10,
     })
     const r = await awardDailyStreakBonusIfDue(1)
-    expect(r!.newXp).toBe(5)
+    expect(r!.newXp).toBe(10)
   })
 
   it("devuelve null si ya cobró el bonus hoy (claimedToday)", async () => {
@@ -302,13 +302,13 @@ describe("awardDailyStreakBonusIfDue — paga 1 vez por día si racha activa", (
       streakRestoredUntil: null,
       todayAttempts:       true,
       previousDays:        0,
-      xpAfterUpdate:       5,
+      xpAfterUpdate:       10,
     })
     await awardDailyStreakBonusIfDue(1)
     const calls = dbMocks.user.update.mock.calls
     // Primer update = marcar lastStreakBonusAt; segundo = incrementar XP.
     expect(calls[0]?.[0]).toMatchObject({ data: { lastStreakBonusAt: expect.any(Date) } })
-    expect(calls[1]?.[0]).toMatchObject({ data: { xp: { increment: 5 } } })
+    expect(calls[1]?.[0]).toMatchObject({ data: { xp: { increment: 10 } } })
   })
 
   it("user inexistente → null sin escribir", async () => {
@@ -335,17 +335,17 @@ describe("awardDailyStreakBonusIfDue — paga 1 vez por día si racha activa", (
       { startedAt: new Date(now - 2 * 86_400_000 - 60_000) },   // anteayer
     ])
     dbMocks.user.update.mockImplementation(async (args: { data: { xp?: unknown; lastStreakBonusAt?: unknown } }) => {
-      if (args.data.xp) return { xp: 10 }
+      if (args.data.xp) return { xp: 20 }
       return { lastStreakBonusAt: new Date() }
     })
 
     const r = await awardDailyStreakBonusIfDue(1)
     expect(r).not.toBeNull()
-    // Día 3 del ciclo → +10 XP
+    // Día 3 del ciclo → +20 XP
     const xpCall = dbMocks.user.update.mock.calls.find(
       ([args]) => "xp" in (args as { data: object }).data,
     )
-    expect(xpCall?.[0]).toMatchObject({ data: { xp: { increment: 10 } } })
+    expect(xpCall?.[0]).toMatchObject({ data: { xp: { increment: 20 } } })
   })
 })
 
@@ -353,7 +353,7 @@ describe("awardDailyStreakBonusIfDue — paga 1 vez por día si racha activa", (
 // Escenario end-to-end del endpoint POST /api/attempts
 // ────────────────────────────────────────────────────────────────────────
 describe("Endpoint flow: examen real first-of-day → awarded = base + bonus", () => {
-  it("primer examen real del día con 1 error → awarded = 14 (base) + 5 (D1 bonus) = 19", async () => {
+  it("primer examen real del día con 1 error → awarded = 14 (base) + 10 (D1 bonus) = 24", async () => {
     // Caso que reportó el usuario: hace un examen real con 1 error y
     // espera ver en la animación +19 (no +14). Confirmamos que el flujo
     // del endpoint (awardXp para base + awardDailyStreakBonusIfDue para
@@ -378,7 +378,7 @@ describe("Endpoint flow: examen real first-of-day → awarded = base + bonus", (
     })
 
     // Mock de findMany: el examen recién creado es el único de hoy.
-    // Sin nada en yesterday → chain length = 1 → bonus D1 = 5.
+    // Sin nada en yesterday → chain length = 1 → bonus D1 = 10.
     dbMocks.examAttempt.findMany.mockResolvedValue([
       { startedAt: new Date() },
     ])
@@ -416,15 +416,15 @@ describe("Endpoint flow: examen real first-of-day → awarded = base + bonus", (
     const streakResult = await awardDailyStreakBonusIfDue(1)
     expect(streakResult).not.toBeNull()
     expect(streakResult!.oldXp).toBe(19)
-    expect(streakResult!.newXp).toBe(24)
+    expect(streakResult!.newXp).toBe(29)
 
     // 4. Calcular awarded como hace el endpoint: finalState.newXp - xpResult.oldXp
     const finalState = streakResult ?? xpResult
     const awarded = finalState.newXp - xpResult.oldXp
-    expect(awarded).toBe(19)
+    expect(awarded).toBe(24)
 
     // 5. Verificar que el state simulado quedó consistente
-    expect(currentXp).toBe(24)
+    expect(currentXp).toBe(29)
     expect(currentLastBonusAt).not.toBeNull()
   })
 

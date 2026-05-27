@@ -33,16 +33,17 @@ export interface LevelDef {
 export const LEVELS: ReadonlyArray<LevelDef> = [
   // Nota sobre el naming: los niveles 1 y 2 mantienen el prefijo legacy
   // `lvl-` porque sus PNGs son los originales (no se regeneraron en la
-  // tanda nueva). Los niveles 0, 3, 4, 5 ya usan el prefijo nuevo `level-`.
-  // El nivel 6 todavía no tiene asset — Next/Image dará 404 silencioso
-  // hasta que se genere.
+  // tanda nueva). Los niveles 0, 3-6 ya usan el prefijo nuevo `level-`.
+  // Todos los niveles 1-6 tienen ahora variante freeze; solo el nivel 0
+  // (llama apagada) se queda sin freeze porque su icono base ya transmite
+  // "inactivo" por sí solo y un filtro azul lo destrozaría visualmente.
   { level: 0, minXp: 0,    iconPath: "/streak/level-0.png", frozenIconPath: null,                            label: "Llama apagada" },
   { level: 1, minXp: 50,   iconPath: "/streak/lvl-1.png",   frozenIconPath: "/streak/lvl-1-freeze.png",      label: "Chispa" },
   { level: 2, minXp: 150,  iconPath: "/streak/lvl-2.png",   frozenIconPath: "/streak/level-2-freeze.png",    label: "Llama pequeña" },
   { level: 3, minXp: 400,  iconPath: "/streak/level-3.png", frozenIconPath: "/streak/level-3-freeze.png",    label: "Llama estable" },
   { level: 4, minXp: 1000, iconPath: "/streak/level-4.png", frozenIconPath: "/streak/level-4-freeze.png",    label: "Llama fuerte" },
-  { level: 5, minXp: 2500, iconPath: "/streak/level-5.png", frozenIconPath: null,                            label: "Hoguera intensa" },
-  { level: 6, minXp: 6000, iconPath: "/streak/level-6.png", frozenIconPath: null,                            label: "Fénix" },
+  { level: 5, minXp: 2500, iconPath: "/streak/level-5.png", frozenIconPath: "/streak/level-5-freeze.png",    label: "Hoguera intensa" },
+  { level: 6, minXp: 6000, iconPath: "/streak/level-6.png", frozenIconPath: "/streak/level-6-freeze.png",    label: "Fénix" },
 ] as const
 
 export const MAX_LEVEL = LEVELS[LEVELS.length - 1].level

@@ -151,28 +151,28 @@ describe("computeStreakDayBonus — ciclo de 7 días", () => {
     expect(computeStreakDayBonus(Number.NaN)).toBe(0)
   })
 
-  it("primeros 7 días siguen la tabla [5,7,10,15,20,30,50]", () => {
-    expect(computeStreakDayBonus(1)).toBe(5)
-    expect(computeStreakDayBonus(2)).toBe(7)
-    expect(computeStreakDayBonus(3)).toBe(10)
-    expect(computeStreakDayBonus(4)).toBe(15)
-    expect(computeStreakDayBonus(5)).toBe(20)
-    expect(computeStreakDayBonus(6)).toBe(30)
-    expect(computeStreakDayBonus(7)).toBe(50)
+  it("primeros 7 días siguen la tabla [10,14,20,30,40,60,100]", () => {
+    expect(computeStreakDayBonus(1)).toBe(10)
+    expect(computeStreakDayBonus(2)).toBe(14)
+    expect(computeStreakDayBonus(3)).toBe(20)
+    expect(computeStreakDayBonus(4)).toBe(30)
+    expect(computeStreakDayBonus(5)).toBe(40)
+    expect(computeStreakDayBonus(6)).toBe(60)
+    expect(computeStreakDayBonus(7)).toBe(100)
   })
 
-  it("día 8 vuelve a 5 (loop), día 9 a 7, día 14 a 50, día 15 a 5", () => {
-    expect(computeStreakDayBonus(8)).toBe(5)
-    expect(computeStreakDayBonus(9)).toBe(7)
-    expect(computeStreakDayBonus(14)).toBe(50)
-    expect(computeStreakDayBonus(15)).toBe(5)
-    expect(computeStreakDayBonus(21)).toBe(50)
-    expect(computeStreakDayBonus(22)).toBe(5)
+  it("día 8 vuelve a 10 (loop), día 9 a 14, día 14 a 100, día 15 a 10", () => {
+    expect(computeStreakDayBonus(8)).toBe(10)
+    expect(computeStreakDayBonus(9)).toBe(14)
+    expect(computeStreakDayBonus(14)).toBe(100)
+    expect(computeStreakDayBonus(15)).toBe(10)
+    expect(computeStreakDayBonus(21)).toBe(100)
+    expect(computeStreakDayBonus(22)).toBe(10)
   })
 
   it("la tabla expuesta como constante coincide con los valores spec'd", () => {
-    expect(Array.from(STREAK_DAY_BONUSES)).toEqual([5, 7, 10, 15, 20, 30, 50])
-    expect(STREAK_DAY_BONUSES.reduce((a, b) => a + b, 0)).toBe(137)
+    expect(Array.from(STREAK_DAY_BONUSES)).toEqual([10, 14, 20, 30, 40, 60, 100])
+    expect(STREAK_DAY_BONUSES.reduce((a, b) => a + b, 0)).toBe(274)
   })
 })
 
@@ -184,7 +184,7 @@ describe("buildCycleView — visualización del ciclo de 7 días", () => {
     const todays = slots.filter((s) => s.isToday)
     expect(todays).toHaveLength(1)
     expect(todays[0].day).toBe(1)
-    expect(todays[0].bonus).toBe(5)
+    expect(todays[0].bonus).toBe(10)
   })
 
   it("active día 4 con bonus cobrado: días 1-4 earned, día 4 también es hoy", () => {
@@ -211,7 +211,7 @@ describe("buildCycleView — visualización del ciclo de 7 días", () => {
     const todays = slots.filter((s) => s.isToday)
     expect(todays).toHaveLength(1)
     expect(todays[0].day).toBe(4)
-    expect(todays[0].bonus).toBe(15)
+    expect(todays[0].bonus).toBe(30)
     expect(todays[0].isEarned).toBe(false)
   })
 
@@ -225,19 +225,19 @@ describe("buildCycleView — visualización del ciclo de 7 días", () => {
     const slots = buildCycleView({ state: "active", days: 8, claimedToday: true })
     expect(slots.filter((s) => s.isEarned).map((s) => s.day)).toEqual([1])
     expect(slots.find((s) => s.isToday)?.day).toBe(1)
-    expect(slots.find((s) => s.isToday)?.bonus).toBe(5)
+    expect(slots.find((s) => s.isToday)?.bonus).toBe(10)
   })
 
   it("active día 14 (final segundo ciclo): los 7 earned, el último es hoy", () => {
     const slots = buildCycleView({ state: "active", days: 14, claimedToday: true })
     expect(slots.filter((s) => s.isEarned)).toHaveLength(7)
     expect(slots.find((s) => s.isToday)?.day).toBe(7)
-    expect(slots.find((s) => s.isToday)?.bonus).toBe(50)
+    expect(slots.find((s) => s.isToday)?.bonus).toBe(100)
   })
 
   it("cada slot tiene el bonus correcto correspondiente a su posición", () => {
     const slots = buildCycleView({ state: "dormant", days: 0, claimedToday: false })
-    expect(slots.map((s) => s.bonus)).toEqual([5, 7, 10, 15, 20, 30, 50])
+    expect(slots.map((s) => s.bonus)).toEqual([10, 14, 20, 30, 40, 60, 100])
   })
 })
 
