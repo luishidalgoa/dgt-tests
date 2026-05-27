@@ -452,15 +452,40 @@ const PROVIDERS: ReverseImageProvider[] = [
   new UnsplashProvider(),
 ]
 
-// ── Búsqueda agregada (opcional — combina todos los providers configurados) ──
+// ── Búsqueda agregada ──────────────────────────────────────────────
 
 /**
  * Busca en TODOS los providers configurados y devuelve resultados intercalados.
  * Útil cuando quieres maximizar la cobertura con cero coste recurrente.
  */
 export async function findFromAllProviders(opts: SearchOpts): Promise<Candidate[]> {
-  const providers = getAllProviders()
-  if (providers.length === 0) throw new Error("Ningún provider configurado")
+  return findFromProviders(getAllProviders().map((p) => p.name), opts)
+}
+
+/**
+ * Busca en un SUBCONJUNTO concreto de providers (por nombre) y devuelve
+ * resultados intercalados. Sirve para presentar al usuario opciones
+ * exclusivas en la UI (p.ej. "solo stock APIs gratis" vs "solo Google
+ * Lens de pago") sin saturarle con todos los providers a la vez.
+ *
+ * Filtra silenciosamente los providers no configurados — si pides
+ * ["serpapi","pixabay"] y solo Pixabay tiene key, te devuelve solo
+ * resultados de Pixabay sin error.
+ */
+export async function findFromProviders(
+  names: string[],
+  opts: SearchOpts,
+): Promise<Candidate[]> {
+  const providers = names
+    .map((n) => PROVIDERS.find((p) => p.name === n))
+    .filter((p): p is ReverseImageProvider => Boolean(p && p.isConfigured()))
+
+  if (providers.length === 0) {
+    throw new Error(
+      `Ninguno de los providers pedidos [${names.join(", ")}] está configurado. ` +
+      `Añade su API key en .env / .env.local.`,
+    )
+  }
 
   const perProvider = Math.ceil((opts.max ?? 12) / providers.length)
   const results = await Promise.allSettled(
@@ -473,7 +498,7 @@ export async function findFromAllProviders(opts: SearchOpts): Promise<Candidate[
     .map((r) => r.value)
 
   const interleaved: Candidate[] = []
-  const maxLen = Math.max(...allLists.map((l) => l.length))
+  const maxLen = allLists.length === 0 ? 0 : Math.max(...allLists.map((l) => l.length))
   for (let i = 0; i < maxLen; i++) {
     for (const list of allLists) {
       if (i < list.length) interleaved.push(list[i])

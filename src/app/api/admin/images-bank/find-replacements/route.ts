@@ -5,6 +5,7 @@ import { getJsonFromR2, R2_META_KEYS } from "@/lib/imagesBankR2"
 import { LABEL_METADATA } from "@/app/admin/images-bank/labelMetadata"
 import {
   findFromAllProviders,
+  findFromProviders,
   getProviderByName,
   getAllProviders,
   type Candidate,
@@ -41,9 +42,23 @@ const bodySchema = z.object({
   sha:          z.string().regex(/^[a-f0-9]{64}$/, "sha debe ser hex sha256 (64 chars)"),
   max:          z.number().int().min(1).max(50).optional(),
   imageType:    z.enum(["photo", "illustration", "vector", "any"]).optional(),
+  // providerName fuerza UNO concreto. providerSet elige una agrupación
+  // semántica ("stock" = gratis combinado, "google" = SerpAPI). Si pasas
+  // ambos, providerName gana (más específico). Si no pasas ninguno,
+  // se usan TODOS los providers configurados (comportamiento legacy).
   providerName: z.enum(["pixabay", "pexels", "unsplash", "serpapi"]).optional(),
+  providerSet:  z.enum(["stock", "google"]).optional(),
   keyword:      z.string().min(2).max(100).optional(),
 })
+
+// Composición de cada `providerSet`:
+//   - "stock":  Pixabay + Pexels (free, sin SerpAPI ni Unsplash para evitar
+//                gastar quota cara o el rate limit más estricto de Unsplash).
+//   - "google": SerpAPI exclusivo (Google Images con filtro Creative Commons).
+const PROVIDER_SETS = {
+  stock:  ["pixabay", "pexels"],
+  google: ["serpapi"],
+} as const
 
 interface ClassificationImage {
   filename:  string
@@ -72,7 +87,7 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     )
   }
-  const { sha, max = 12, imageType = "any", providerName, keyword: keywordOverride } = parsed.data
+  const { sha, max = 12, imageType = "any", providerName, providerSet, keyword: keywordOverride } = parsed.data
 
   // ── 1. Determinar el keyword ───────────────────────────────────────
   let keyword: string
@@ -132,18 +147,27 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 2. Llamar al provider ──────────────────────────────────────────
+  // Prioridad de selección:
+  //   1. providerName (más específico, fuerza UN provider concreto)
+  //   2. providerSet  (tab "stock" o "google" del modal)
+  //   3. nada → comportamiento legacy: TODOS los providers configurados
+  const searchOpts = {
+    keyword,
+    max,
+    imageType: imageType as ImageType,
+    lang:      "es",
+  }
   try {
     let candidates: Candidate[]
     let providersUsed: string[]
     if (providerName) {
       const provider = getProviderByName(providerName)
-      candidates = await provider.findSimilar({
-        keyword,
-        max,
-        imageType: imageType as ImageType,
-        lang:      "es",
-      })
+      candidates   = await provider.findSimilar(searchOpts)
       providersUsed = [provider.name]
+    } else if (providerSet) {
+      const names = PROVIDER_SETS[providerSet] as readonly string[]
+      candidates   = await findFromProviders([...names], searchOpts)
+      providersUsed = [...names]
     } else {
       const all = getAllProviders()
       if (all.length === 0) {
@@ -157,12 +181,7 @@ export async function POST(req: NextRequest) {
           { status: 500 },
         )
       }
-      candidates = await findFromAllProviders({
-        keyword,
-        max,
-        imageType: imageType as ImageType,
-        lang:      "es",
-      })
+      candidates = await findFromAllProviders(searchOpts)
       providersUsed = all.map((p) => p.name)
     }
 

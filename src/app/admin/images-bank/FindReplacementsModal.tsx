@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { createPortal } from "react-dom"
 import { useRouter } from "next/navigation"
-import { Search, X, Check, AlertCircle, ExternalLink, Loader2 } from "lucide-react"
+import { Search, X, Check, AlertCircle, ExternalLink, Loader2, RefreshCw, Sparkles, Database } from "lucide-react"
 
 /**
  * Botón + modal "estilo Google Lens" para reemplazar la imagen actual de
@@ -44,6 +44,44 @@ interface FindRepResponse {
   keyword?:      string
   providersUsed?: string[]
   candidates?:   Candidate[]
+}
+
+/** Tab del buscador — cada uno mapea a un `providerSet` del endpoint:
+ *    "stock"  → Pixabay + Pexels (free, calidad media para DGT)
+ *    "google" → SerpAPI (Google Images con licencia CC, gasta quota) */
+type ProviderSet = "stock" | "google"
+
+// ── Cache en sessionStorage ───────────────────────────────────────────
+// Por qué session y no localStorage: queremos que la búsqueda dure SOLO
+// mientras el admin está en /admin/images-bank en esta sesión del navegador.
+// Si cierra la pestaña y vuelve mañana, las stock APIs pueden tener nuevos
+// resultados — no queremos servir un caché viejo. Y sobre todo, evita
+// gastar quota de SerpAPI en cada reapertura del mismo modal.
+const CACHE_PREFIX = "findRepl:v1:"
+function cacheKey(sha: string, set: ProviderSet): string {
+  return `${CACHE_PREFIX}${sha}:${set}`
+}
+function readCache(sha: string, set: ProviderSet): FindRepResponse | null {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = window.sessionStorage.getItem(cacheKey(sha, set))
+    if (!raw) return null
+    return JSON.parse(raw) as FindRepResponse
+  } catch {
+    return null
+  }
+}
+function writeCache(sha: string, set: ProviderSet, data: FindRepResponse): void {
+  if (typeof window === "undefined") return
+  try {
+    window.sessionStorage.setItem(cacheKey(sha, set), JSON.stringify(data))
+  } catch {
+    // QuotaExceededError o similar — ignoramos, el modal funciona igual sin caché.
+  }
+}
+function clearCache(sha: string, set: ProviderSet): void {
+  if (typeof window === "undefined") return
+  try { window.sessionStorage.removeItem(cacheKey(sha, set)) } catch {}
 }
 
 interface ReplaceResponse {
@@ -117,6 +155,9 @@ function FindReplacementsModal({
   onClose,
 }: Props & { onClose: () => void }) {
   const router = useRouter()
+  // Default "stock" porque es free y no gasta la quota cara de SerpAPI.
+  // El admin tiene que clicar el otro tab para activar Google Lens.
+  const [providerSet, setProviderSet] = useState<ProviderSet>("stock")
   const [loading,    setLoading]    = useState(true)
   const [error,      setError]      = useState<string | null>(null)
   const [keyword,    setKeyword]    = useState<string>("")
@@ -124,21 +165,45 @@ function FindReplacementsModal({
   const [providers,  setProviders]  = useState<string[]>([])
   const [replacing,  setReplacing]  = useState<string | null>(null)  // url del candidato en proceso
   const [success,    setSuccess]    = useState<string | null>(null)  // mensaje de éxito
+  const [fromCache,  setFromCache]  = useState(false)
+  // Bump para forzar re-fetch ignorando caché (botón "refrescar")
+  const [refreshTick, setRefreshTick] = useState(0)
 
-  // ── Búsqueda inicial al abrir el modal ─────────────────────────────
+  // ── Búsqueda — se dispara al cambiar de tab o al refrescar ─────────
   useEffect(() => {
     let cancelled = false
+    const set = providerSet
     const run = async () => {
+      // 1. Intento de caché (skip si venimos de refrescar)
+      if (refreshTick === 0) {
+        const cached = readCache(sha, set)
+        if (cached?.candidates) {
+          setKeyword(cached.keyword ?? "")
+          setCandidates(cached.candidates)
+          setProviders(cached.providersUsed ?? [])
+          setError(cached.error ?? null)
+          setFromCache(true)
+          setLoading(false)
+          return
+        }
+      }
+
+      // 2. Hit de red
+      setFromCache(false)
+      setLoading(true)
+      setError(null)
       try {
         const res = await fetch("/api/admin/images-bank/find-replacements", {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ sha, max: 12 }),
+          body:    JSON.stringify({ sha, max: 12, providerSet: set }),
         })
         const data = (await res.json()) as FindRepResponse
         if (cancelled) return
         if (!res.ok || !data.ok) {
           setError(data.error ?? `HTTP ${res.status}`)
+          setCandidates([])
+          setProviders([])
           setLoading(false)
           return
         }
@@ -146,6 +211,8 @@ function FindReplacementsModal({
         setCandidates(data.candidates ?? [])
         setProviders(data.providersUsed ?? [])
         setLoading(false)
+        // 3. Guardar en caché para que la próxima apertura sea instantánea
+        writeCache(sha, set, data)
       } catch (err) {
         if (cancelled) return
         setError(err instanceof Error ? err.message : String(err))
@@ -154,7 +221,15 @@ function FindReplacementsModal({
     }
     run()
     return () => { cancelled = true }
-  }, [sha])
+  }, [sha, providerSet, refreshTick])
+
+  // Invalida la caché del tab actual y re-fetchea desde la red. Útil si
+  // los stock APIs publicaron resultados nuevos o si el admin quiere
+  // gastar otra query de SerpAPI a posta.
+  function handleRefresh() {
+    clearCache(sha, providerSet)
+    setRefreshTick((n) => n + 1)
+  }
 
   // ── Bloquear scroll del body mientras el modal está abierto ──────
   useEffect(() => {
@@ -250,8 +325,7 @@ function FindReplacementsModal({
         <header
           style={{
             display:        "flex",
-            alignItems:     "center",
-            justifyContent: "space-between",
+            flexDirection:  "column",
             padding:        "14px 22px",
             borderBottom:   "1px solid var(--slate-200)",
             background:     "var(--slate-50, #f8fafc)",
@@ -261,37 +335,105 @@ function FindReplacementsModal({
             gap:            12,
           }}
         >
-          <div style={{ minWidth: 0 }}>
-            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, display: "flex", alignItems: "center", gap: 8 }}>
-              <Search size={16} />
-              Buscar reemplazo
-            </h2>
-            <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--slate-500)" }}>
-              SHA: <code>{sha.slice(0, 12)}…</code> · Tag principal: <strong>{topConfidentTag}</strong>
-              {keyword && (
-                <>
-                  {" · "}Keyword: <strong>{keyword}</strong>
-                </>
-              )}
-              {providers.length > 0 && (
-                <>
-                  {" · "}Providers: <em>{providers.join(", ")}</em>
-                </>
-              )}
-            </p>
+          {/* Fila 1: título + cerrar */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            <div style={{ minWidth: 0 }}>
+              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, display: "flex", alignItems: "center", gap: 8 }}>
+                <Search size={16} />
+                Buscar reemplazo
+              </h2>
+              <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--slate-500)" }}>
+                SHA: <code>{sha.slice(0, 12)}…</code> · Tag principal: <strong>{topConfidentTag}</strong>
+                {keyword && (
+                  <>
+                    {" · "}Keyword: <strong>{keyword}</strong>
+                  </>
+                )}
+                {providers.length > 0 && (
+                  <>
+                    {" · "}Providers: <em>{providers.join(", ")}</em>
+                  </>
+                )}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Cerrar"
+              style={{
+                border: 0, background: "transparent", padding: 8,
+                cursor: "pointer", color: "var(--slate-600)",
+                borderRadius: 8, display: "inline-flex",
+              }}
+            >
+              <X size={18} />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Cerrar"
-            style={{
-              border: 0, background: "transparent", padding: 8,
-              cursor: "pointer", color: "var(--slate-600)",
-              borderRadius: 8, display: "inline-flex",
-            }}
-          >
-            <X size={18} />
-          </button>
+
+          {/* Fila 2: tabs de provider set + estado de caché */}
+          <div style={{
+            display:        "flex",
+            alignItems:     "center",
+            justifyContent: "space-between",
+            gap:            10,
+            flexWrap:       "wrap",
+          }}>
+            <div role="tablist" aria-label="Tipo de búsqueda" style={{
+              display: "inline-flex", padding: 3,
+              background: "var(--slate-100)", borderRadius: 10,
+              border: "1px solid var(--slate-200)",
+            }}>
+              <ProviderSetTab
+                active={providerSet === "stock"}
+                onClick={() => setProviderSet("stock")}
+                icon={<Search size={12} />}
+                label="Pexels + Pixabay"
+                hint="Free, calidad media"
+              />
+              <ProviderSetTab
+                active={providerSet === "google"}
+                onClick={() => setProviderSet("google")}
+                icon={<Sparkles size={12} />}
+                label="Google Lens"
+                hint="Gasta cuota SerpAPI"
+                accent
+              />
+            </div>
+
+            {/* Indicador de caché + botón refrescar */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5 }}>
+              {fromCache && !loading && (
+                <span title="Resultados servidos desde sessionStorage — no se gastó cuota de API" style={{
+                  display: "inline-flex", alignItems: "center", gap: 4,
+                  padding: "3px 8px", borderRadius: 999,
+                  background: "rgba(59, 130, 246, 0.10)",
+                  color: "var(--blue-700, #1d4ed8)",
+                  fontWeight: 600,
+                }}>
+                  <Database size={11} />
+                  caché
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={handleRefresh}
+                disabled={loading}
+                title="Forzar búsqueda nueva (ignora caché)"
+                aria-label="Refrescar búsqueda"
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 5,
+                  padding: "5px 10px", border: "1px solid var(--slate-300)",
+                  borderRadius: 8, background: "#fff",
+                  color: "var(--slate-600)", cursor: loading ? "not-allowed" : "pointer",
+                  opacity: loading ? 0.5 : 1,
+                  fontSize: 11.5, fontWeight: 600,
+                }}
+              >
+                <RefreshCw size={12} className={loading ? "spin" : undefined} />
+                Refrescar
+              </button>
+            </div>
+          </div>
         </header>
 
         {/* ── Body ─────────────────────────────────────────────────── */}
@@ -519,5 +661,55 @@ function CandidateCard({
         </div>
       </div>
     </div>
+  )
+}
+
+// ── Tab pill para el selector de provider set ───────────────────────
+function ProviderSetTab({
+  active,
+  onClick,
+  icon,
+  label,
+  hint,
+  accent,
+}: {
+  active:   boolean
+  onClick:  () => void
+  icon:     React.ReactNode
+  label:    string
+  hint:     string
+  /** El tab de "Google Lens" usa accent (indigo) para indicar opción premium */
+  accent?:  boolean
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      title={hint}
+      style={{
+        display:        "inline-flex",
+        alignItems:     "center",
+        gap:            6,
+        padding:        "6px 12px",
+        border:         0,
+        borderRadius:   8,
+        background:     active
+          ? (accent ? "var(--indigo-600, #6366f1)" : "#fff")
+          : "transparent",
+        color:          active
+          ? (accent ? "#fff" : "var(--slate-900)")
+          : "var(--slate-500)",
+        fontSize:       12,
+        fontWeight:     700,
+        cursor:         "pointer",
+        boxShadow:      active && !accent ? "0 1px 3px rgba(0,0,0,0.10)" : undefined,
+        transition:     "background 0.15s, color 0.15s",
+      }}
+    >
+      {icon}
+      {label}
+    </button>
   )
 }
