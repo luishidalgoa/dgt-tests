@@ -114,6 +114,13 @@ export function FindReplacementsButton({ sha, currentTags }: Props) {
           e.preventDefault()
           setOpen(true)
         }}
+        // SwipeableImageTile inicia el drag con onMouseDown/onTouchStart —
+        // si no paramos la propagación AQUÍ, el simple hecho de pulsar la
+        // lupa empieza un swipe accidental. onClick llega tarde porque el
+        // gesto ya arrancó. Mismo patrón que QuestionsListButton.
+        onMouseDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
         title="Buscar reemplazo (Google Lens style)"
         aria-label="Buscar imagen de reemplazo"
         style={{
@@ -129,6 +136,10 @@ export function FindReplacementsButton({ sha, currentTags }: Props) {
           cursor:         "pointer",
           padding:        0,
           flexShrink:     0,
+          // touchAction:none refuerza el bloqueo en móvil: el browser no
+          // tratará el touch como pan/zoom y, sobre todo, lo entrega a
+          // este botón antes que al wrapper de swipe del tile.
+          touchAction:    "none",
         }}
       >
         <Search size={12} />
