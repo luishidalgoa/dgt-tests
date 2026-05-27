@@ -27,6 +27,7 @@ import {
   type QualityTier,
   type GridSort,
   type ClassificationData,
+  type ClassificationTag,
   type ShaAuditGroup,
   type ShaAuditData,
   type DisplayEntry,
@@ -196,25 +197,56 @@ async function loadManualTags(): Promise<Map<string, Array<{
 }
 
 /**
- * Carga meta/alternative_references.json y devuelve un Map<sha, count>
- * para que el tile pueda pintar el badge "X refs descargadas" junto a
- * la lupa. Si el JSON no existe (banco virgen, nadie guardó refs todavía)
- * devuelve Map vacío.
+ * Tipo del registry de refs alternativas. Replicamos aquí en vez de
+ * importarlo de imagesBankR2 para no tener que tirar de toda la lib
+ * en server components (queda más explícito qué consumimos).
  */
-async function loadReferenceCounts(): Promise<Map<string, number>> {
-  const result = new Map<string, number>()
+interface RefEntry {
+  sha:           string
+  ext:           string
+  sourceUrl:     string
+  provider:      string
+  attribution?:  string
+  downloadedAt:  string
+  addedBy?:      string
+}
+
+/**
+ * Carga meta/alternative_references.json una sola vez. Devuelve:
+ *  - countByOriginal: Map<originalSha, número de refs> — para el badge
+ *    sobre la lupa de cada tile original.
+ *  - pendingEntries:  Array de entries VIRTUALES (sha = newSha) para
+ *    las refs que NO están todavía en classification.json. La page
+ *    las mergea con `entriesAll` para que aparezcan en el grid como
+ *    "pendientes de clasificar" antes de que el classifier corra.
+ *    Sus `addedAt` provienen del `downloadedAt` del registry → el
+ *    sort "Más recientes" las saca arriba inmediatamente.
+ */
+async function loadAlternativeReferences(): Promise<{
+  countByOriginal: Map<string, number>
+  raw:             Map<string, { originalSha: string; ref: RefEntry }>
+}> {
+  const countByOriginal = new Map<string, number>()
+  const raw             = new Map<string, { originalSha: string; ref: RefEntry }>()
   try {
-    const data = await getJsonFromR2<{ references?: Record<string, unknown[]> }>(
+    const data = await getJsonFromR2<{ references?: Record<string, RefEntry[]> }>(
       R2_META_KEYS.alternativeReferences,
     )
-    if (!data?.references) return result
-    for (const [sha, arr] of Object.entries(data.references)) {
-      if (Array.isArray(arr) && arr.length > 0) result.set(sha, arr.length)
+    if (!data?.references) return { countByOriginal, raw }
+    for (const [originalSha, arr] of Object.entries(data.references)) {
+      if (!Array.isArray(arr) || arr.length === 0) continue
+      countByOriginal.set(originalSha, arr.length)
+      for (const ref of arr) {
+        // El último write gana si el mismo newSha es referencia de
+        // varios originals (caso raro pero posible si el admin guarda
+        // la misma URL en SHAs distintos).
+        raw.set(ref.sha, { originalSha, ref })
+      }
     }
   } catch {
     // No existe / JSON inválido → vacío
   }
-  return result
+  return { countByOriginal, raw }
 }
 
 /**
@@ -402,9 +434,11 @@ npm run images:upload-metadata`}</pre>
   // "no corresponde" desde el banco (swipe Tinder). Las respetamos
   // en runtime aunque el classifier aún no las haya reprocesado.
   const tagExclusionsMap = await loadTagExclusions()
-  // Map<sha, count> — cuántas referencias alternativas hay descargadas
-  // para cada SHA del banco. Lo pintamos como badge sobre la lupa.
-  const referenceCountsMap = await loadReferenceCounts()
+  // refs alternativas: count por SHA original (badge sobre la lupa) +
+  // raw map newSha→ref para inyectar entries virtuales "pendientes"
+  // si el classifier aún no ha procesado el blob nuevo.
+  const { countByOriginal: referenceCountsMap, raw: alternativeRefsRaw } =
+    await loadAlternativeReferences()
   // Confirmaciones: sha → set(tag_id) que admin marcó "SÍ es". El
   // boost del score se aplica en runtime también para que el filtro
   // de calidad las muestre inmediatamente.
@@ -523,6 +557,54 @@ npm run images:upload-metadata`}</pre>
     }
   })
 
+  // ── Inyectar refs huérfanas como entries virtuales "pendientes" ────
+  // Una ref alternativa guardada por el admin con "Buscar referencias"
+  // está en R2 + en meta/alternative_references.json, PERO NO en
+  // classification.json hasta que el classifier la procese. Si no
+  // hacemos nada, el grid del banco no las muestra → el admin se
+  // queda mirando "¿dónde está la que acabo de guardar?".
+  //
+  // Solución: por cada ref con SHA que NO esté en classification, generamos
+  // un DisplayEntry sintético con tags=[], pendingClassification=true y
+  // `addedAt = downloadedAt`. Así "Más recientes" las saca arriba y el
+  // admin las ve inmediatamente. Los manual_tags se aplican igual (la
+  // función ya los considera por SHA).
+  const knownShas = new Set(entriesAll.map((e) => e.sha))
+  for (const [newSha, { originalSha, ref }] of alternativeRefsRaw) {
+    if (knownShas.has(newSha)) continue   // el classifier ya la procesó
+
+    // manual_tags pueden existir incluso para SHAs pendientes
+    const mt = manualTagsMap.get(newSha) ?? []
+    const tags: ClassificationTag[] = mt.map((m) => ({
+      tag:           m.tag,
+      score:         1.0,
+      confident:     true,
+      humanAssigned: true,
+      assignedAt:    m.assignedAt,
+      assignedBy:    m.assignedBy,
+      reason:        m.reason,
+    }))
+    const downloadedAtMs = Date.parse(ref.downloadedAt)
+    entriesAll.push({
+      sha:           newSha,
+      filename:      `${newSha}.${ref.ext}`,
+      tags,
+      maxScore:      tags.length > 0 ? 1.0 : 0,
+      questionCount: 0,
+      questions:     [],
+      maxQuestionId: 0,
+      addedAt:       Number.isFinite(downloadedAtMs) ? downloadedAtMs : null,
+      taggedAt:      null,
+      pendingClassification: true,
+      pendingSource: {
+        originalSha,
+        sourceUrl:   ref.sourceUrl,
+        provider:    ref.provider,
+        attribution: ref.attribution,
+      },
+    })
+  }
+
   // Punto de partida para los filtros UI: copia de entriesAll que se
   // irá recortando. entriesAll se mantiene intacto para los counts del
   // sidebar (que reflejan exclusiones/confirmaciones aplicadas).
@@ -627,7 +709,9 @@ npm run images:upload-metadata`}</pre>
   const confidentTags: Record<string, number> = {}
   let noTagsCount   = 0
   let noConfCount   = 0
+  let pendingCount  = 0
   for (const e of entriesAll) {
+    if (e.pendingClassification) pendingCount++
     if (e.tags.length === 0) {
       noTagsCount++
       noConfCount++
@@ -711,6 +795,9 @@ npm run images:upload-metadata`}</pre>
         <StatBox label="Sin tag confident" value={noConfCount}
                  sub={`${Math.round((noConfCount / total) * 100)}%`}
                  color={noConfCount > total * 0.5 ? "warn" : "ok"} />
+        {pendingCount > 0 && (
+          <StatBox label="Pendientes clasificar" value={pendingCount} />
+        )}
         <StatBox label="Tags/img (media)"
                  value={classification.stats?.averageTagsPerImage ?? 0} />
         <StatBox label="Confident/img (media)"
@@ -1138,12 +1225,18 @@ function ImageTile({ entry, currentTag, getDisplay, buildTagURL, anchorId, refsC
 }) {
   // Resuelto vía CDN (R2) en prod o /images/ local en dev — ver lib/imageUrl
   const imgSrc = imageUrl(entry.filename)
+  const isPending = entry.pendingClassification === true
   return (
     <div
       id={anchorId}
       style={{
         background:    "#fff",
-        border:        "1px solid var(--slate-200)",
+        // Pending → borde dashed indigo en lugar de sólido gris, para que
+        // sea visualmente claro que la imagen está en el grid pero no
+        // forma parte del banco "oficial" hasta que el classifier corra.
+        border:        isPending
+                         ? "1.5px dashed var(--indigo-400, #818cf8)"
+                         : "1px solid var(--slate-200)",
         borderRadius:  10,
         overflow:      "hidden",
         display:       "flex",
@@ -1153,6 +1246,29 @@ function ImageTile({ entry, currentTag, getDisplay, buildTagURL, anchorId, refsC
       }}
     >
       {isImageNew(entry.addedAt) && <NewImageBadge />}
+      {isPending && (
+        <span
+          aria-label="Pendiente de clasificar"
+          title={`Pendiente de clasificar · ${entry.pendingSource?.provider ?? "?"} · ref de ${entry.pendingSource?.originalSha.slice(0, 8) ?? ""}…`}
+          style={{
+            position:    "absolute",
+            top:         6,
+            right:       6,
+            zIndex:      2,
+            padding:     "2px 7px",
+            background:  "var(--indigo-600, #6366f1)",
+            color:       "white",
+            borderRadius: 999,
+            fontSize:    9,
+            fontWeight:  800,
+            letterSpacing: "0.05em",
+            textTransform: "uppercase",
+            boxShadow:   "0 2px 6px rgba(15, 23, 42, 0.18)",
+          }}
+        >
+          Pendiente
+        </span>
+      )}
       <LazyTileImage src={imgSrc} alt={entry.sha.slice(0, 8)} />
 
       <div style={{ padding: 8, fontSize: 11, display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
@@ -1166,9 +1282,26 @@ function ImageTile({ entry, currentTag, getDisplay, buildTagURL, anchorId, refsC
           <FindReplacementsButton sha={entry.sha} currentTags={entry.tags} refsCount={refsCount} />
         </div>
 
-        <div style={{ color: "var(--slate-600)", fontSize: 10.5 }}>
-          <QuestionsListButton questions={entry.questions} />
-        </div>
+        {isPending && entry.pendingSource ? (
+          <div style={{
+            fontSize:   10,
+            color:      "var(--indigo-700, #4338ca)",
+            background: "rgba(99, 102, 241, 0.06)",
+            padding:    "3px 6px",
+            borderRadius: 4,
+            lineHeight: 1.35,
+          }}>
+            Ref de <code style={{ fontSize: 9.5 }}>{entry.pendingSource.originalSha.slice(0, 8)}…</code>
+            {" · "}<strong>{entry.pendingSource.provider}</strong>
+            {entry.pendingSource.attribution && (
+              <> · <span style={{ color: "var(--slate-500)" }}>{entry.pendingSource.attribution}</span></>
+            )}
+          </div>
+        ) : (
+          <div style={{ color: "var(--slate-600)", fontSize: 10.5 }}>
+            <QuestionsListButton questions={entry.questions} />
+          </div>
+        )}
 
         <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 2 }}>
           {entry.tags.length === 0 ? (

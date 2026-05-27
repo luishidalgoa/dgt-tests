@@ -183,6 +183,20 @@ export interface DisplayEntry {
    *  el JSON viene de antes del feature (sin haberse re-corrido
    *  el classifier — entonces no hay backfill). */
   taggedAt:       number | null
+  /** True si esta entry NO está en classification.json todavía — es
+   *  una referencia alternativa guardada por el admin desde Lens/stock
+   *  y el classifier no la ha procesado aún. UI la pinta atenuada con
+   *  badge "PENDIENTE". El `addedAt` proviene del downloadedAt del
+   *  registry para que aparezca arriba en "Más recientes". */
+  pendingClassification?: boolean
+  /** Solo poblado si pendingClassification === true. Metadatos de la
+   *  fuente original para que el admin sepa de dónde vino. */
+  pendingSource?: {
+    originalSha:  string
+    sourceUrl?:   string
+    provider:     string
+    attribution?: string
+  }
 }
 
 /** Modos de orden del grid:
