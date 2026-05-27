@@ -59,7 +59,15 @@ export interface Candidate {
 export interface SearchOpts {
   /** Keyword para búsqueda por concepto (provider stock APIs) */
   keyword?:       string
-  /** Bytes de imagen original para reverse image search visual (solo SerpAPI / etc.) */
+  /** URL pública de la imagen original para reverse image search VISUAL real
+   *  (Google Lens vía SerpAPI). Tiene que ser accesible desde internet —
+   *  Google la descarga para hacer matching. Si la pasas, SerpAPI usa
+   *  engine=google_lens y devuelve matches visuales (imgs parecidas a
+   *  la ORIGINAL, no a un keyword). Si no, cae a google_images por
+   *  keyword. */
+  imageUrl?:      string
+  /** Bytes de imagen original — reservado para providers que acepten
+   *  upload directo (ninguno implementado todavía). */
   imageBytes?:    Buffer
   /** Máximo de candidatos a devolver. Default 12. */
   max?:           number
@@ -218,21 +226,29 @@ class PexelsProvider implements ReverseImageProvider {
   }
 }
 
-// ── SerpAPI Google Images Provider ───────────────────────────────────
-// Docs: https://serpapi.com/google-images-api
-// Key:  https://serpapi.com/manage-api-key (free tier 100 búsquedas/mes,
-//       después $50/mes para 5000).
+// ── SerpAPI Provider · Google Lens (visual) + Google Images (keyword) ──
+// Docs:   https://serpapi.com/google-lens-api    (Lens reverse image)
+//         https://serpapi.com/google-images-api  (search por keyword)
+// Key:    https://serpapi.com/manage-api-key
+//         Free tier 100 búsquedas/mes · pago $50/mes para 5000.
 //
-// Por qué este es el bueno:
-//   Los stock APIs (Pixabay/Pexels/Unsplash) buscan en un corpus pequeño
-//   de fotos comerciales — para un pictograma DGT o un diagrama didáctico
-//   no tienen NADA. SerpAPI envuelve Google Images, que indexa toda la
-//   web (PDFs de manuales, blogs de autoescuelas, foros, etc.). La calidad
-//   y relevancia es órdenes de magnitud mejor para nuestro caso DGT.
+// Comportamiento:
+//   - Si `opts.imageUrl` está presente → usa engine=google_lens y devuelve
+//     `visual_matches`: imágenes VISUALMENTE PARECIDAS a la original. Esto
+//     es lo que normalmente entendemos por "Google Lens" — le pasas tu
+//     imagen y te devuelve las que se parecen, no las que coinciden con
+//     un texto.
+//   - Si no hay imageUrl pero sí `opts.keyword` → cae a google_images con
+//     filtro Creative Commons. Útil cuando la imagen no es pública aún
+//     (admin acaba de subirla y todavía no tiene CDN URL) o si quieres
+//     forzar búsqueda por concepto.
 //
-// Licencia: por defecto pedimos `tbs=il:cl` (Creative Commons) para que
-//   los resultados sean LEGALMENTE reusables. Sin ese filtro, salen imgs
-//   con copyright que NO se pueden usar comercialmente.
+// AVISO sobre licencias:
+//   Google Lens no expone filtro de licencia — los resultados pueden
+//   tener copyright. Al reemplazar una imagen del banco con un match de
+//   Lens, el admin debe verificar manualmente que la licencia es
+//   compatible. Para algo legalmente blindado, usa el modo keyword (que
+//   sí aplica tbs=il:cl), Pixabay o Pexels.
 
 class SerpApiProvider implements ReverseImageProvider {
   name = "serpapi" as const
@@ -244,32 +260,24 @@ class SerpApiProvider implements ReverseImageProvider {
   async findSimilar(opts: SearchOpts): Promise<Candidate[]> {
     const apiKey = process.env.SERPAPI_API_KEY
     if (!apiKey) throw new Error("SERPAPI_API_KEY no configurada en .env / .env.local")
-    if (!opts.keyword) throw new Error("SerpAPI requiere 'keyword'")
+    if (!opts.imageUrl && !opts.keyword) {
+      throw new Error("SerpAPI requiere 'imageUrl' (Google Lens) o 'keyword' (Google Images)")
+    }
 
+    return opts.imageUrl
+      ? this.searchWithLens(apiKey, opts.imageUrl, opts)
+      : this.searchWithKeyword(apiKey, opts.keyword!, opts)
+  }
+
+  // ─── Google Lens · reverse image visual ─────────────────────────────
+  private async searchWithLens(apiKey: string, imageUrl: string, opts: SearchOpts): Promise<Candidate[]> {
     const max = opts.max ?? 12
-
-    // tbs (Google search filters) — encadenable con `,`:
-    //   il:cl       → license filter Creative Commons (libre uso comercial
-    //                 y modificación). CRÍTICO para no meter copyrighted
-    //                 en el banco DGT.
-    //   itp:photo   → solo fotos (no clipart). Permitimos otros si el
-    //                 caller pide vector/illustration.
-    const tbsParts: string[] = ["il:cl"]
-    if (opts.imageType === "photo") tbsParts.push("itp:photo")
-    else if (opts.imageType === "illustration") tbsParts.push("itp:clipart")
-    else if (opts.imageType === "vector") tbsParts.push("itp:lineart")
-    const tbs = tbsParts.join(",")
-
     const params = new URLSearchParams({
-      engine:  "google_images",
-      q:       opts.keyword,
+      engine:  "google_lens",
+      url:     imageUrl,             // Google fetcha esta URL — debe ser pública
       api_key: apiKey,
       hl:      opts.lang ?? "es",
-      gl:      "es",                          // geo Spain → resultados localizados
-      safe:    "active",
-      tbs,
-      ijn:     "0",                            // primera página
-      num:     String(Math.min(Math.max(10, max * 2), 100)),  // pedimos algo más para filtrar
+      country: "es",                  // geo Spain
     })
 
     const res = await fetch(`https://serpapi.com/search.json?${params.toString()}`, {
@@ -279,13 +287,95 @@ class SerpApiProvider implements ReverseImageProvider {
 
     if (!res.ok) {
       const text = await res.text().catch(() => "")
-      throw new Error(`SerpAPI HTTP ${res.status}: ${text.slice(0, 240)}`)
+      throw new Error(`SerpAPI Lens HTTP ${res.status}: ${text.slice(0, 240)}`)
+    }
+
+    const data = (await res.json()) as {
+      error?: string
+      visual_matches?: Array<{
+        position?:      number
+        title?:         string
+        link?:          string
+        source?:        string
+        thumbnail?:     string
+        image?:         string
+        image_width?:   number
+        image_height?: number
+      }>
+    }
+    if (data.error) throw new Error(`SerpAPI Lens error: ${data.error}`)
+
+    const matches = data.visual_matches ?? []
+
+    // Filtrar: necesitamos al menos thumbnail (Google Lens a veces no da
+    // `image` original, en cuyo caso usamos el thumbnail como fallback).
+    return matches
+      .filter((m) => Boolean(m.thumbnail || m.image))
+      .filter((m) => {
+        const w = m.image_width  ?? 0
+        const h = m.image_height ?? 0
+        const minSize = opts.minSize ?? 0   // Lens no siempre devuelve tamaño → no filtramos por defecto
+        return (w === 0 && h === 0) || (w >= minSize || h >= minSize)
+      })
+      .slice(0, max)
+      .map((m): Candidate => {
+        const url = m.image ?? m.thumbnail!
+        return {
+          url,
+          thumbnailUrl: m.thumbnail ?? url,
+          sourceUrl:    m.link ?? url,
+          provider:     "serpapi",
+          width:        m.image_width  ?? 0,
+          height:       m.image_height ?? 0,
+          imageType:    "photo",
+          // unknown porque Lens no filtra por licencia — el admin debe
+          // verificar manualmente al reemplazar. El modal lo avisa.
+          license:      "unknown",
+          tags:         m.title ? [m.title] : [],
+          attribution:  m.source ?? "Google Lens",
+          contentType:  guessContentType(url),
+        }
+      })
+  }
+
+  // ─── Google Images · search por keyword (fallback) ──────────────────
+  private async searchWithKeyword(apiKey: string, keyword: string, opts: SearchOpts): Promise<Candidate[]> {
+    const max = opts.max ?? 12
+
+    // tbs (Google search filters):
+    //   il:cl       → license filter Creative Commons
+    //   itp:photo   → solo fotos / clipart / lineart según imageType
+    const tbsParts: string[] = ["il:cl"]
+    if (opts.imageType === "photo") tbsParts.push("itp:photo")
+    else if (opts.imageType === "illustration") tbsParts.push("itp:clipart")
+    else if (opts.imageType === "vector") tbsParts.push("itp:lineart")
+    const tbs = tbsParts.join(",")
+
+    const params = new URLSearchParams({
+      engine:  "google_images",
+      q:       keyword,
+      api_key: apiKey,
+      hl:      opts.lang ?? "es",
+      gl:      "es",
+      safe:    "active",
+      tbs,
+      ijn:     "0",
+      num:     String(Math.min(Math.max(10, max * 2), 100)),
+    })
+
+    const res = await fetch(`https://serpapi.com/search.json?${params.toString()}`, {
+      method:  "GET",
+      headers: { Accept: "application/json" },
+    })
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "")
+      throw new Error(`SerpAPI Images HTTP ${res.status}: ${text.slice(0, 240)}`)
     }
 
     const data = (await res.json()) as {
       error?: string
       images_results?: Array<{
-        position?:        number
         thumbnail?:       string
         source?:          string
         title?:           string
@@ -293,28 +383,16 @@ class SerpApiProvider implements ReverseImageProvider {
         original?:        string
         original_width?:  number
         original_height?: number
-        is_product?:      boolean
-        tag?:             string
       }>
     }
+    if (data.error) throw new Error(`SerpAPI Images error: ${data.error}`)
 
-    if (data.error) {
-      throw new Error(`SerpAPI error: ${data.error}`)
-    }
-
-    const results = data.images_results ?? []
-
-    // Filtrar: necesitamos original + dimensiones razonables. Algunos hits
-    // vienen sin `original` (solo thumbnail) — los descartamos porque al
-    // intentar descargarlos en /replace-image fallaría.
-    return results
+    return (data.images_results ?? [])
       .filter((r) => r.original && r.original.startsWith("http"))
       .filter((r) => {
         const w = r.original_width  ?? 0
         const h = r.original_height ?? 0
         const minSize = opts.minSize ?? 480
-        // Si no conocemos las dimensiones, lo dejamos pasar (Google a veces
-        // las omite). Si las conocemos, exigimos mínimo.
         return (w === 0 && h === 0) || (w >= minSize || h >= minSize)
       })
       .slice(0, max)
@@ -326,7 +404,7 @@ class SerpApiProvider implements ReverseImageProvider {
         width:        r.original_width  ?? 0,
         height:       r.original_height ?? 0,
         imageType:    opts.imageType && opts.imageType !== "any" ? opts.imageType : "photo",
-        license:      "cc-by",                                  // tbs=il:cl ≈ CC, asumimos atribución
+        license:      "cc-by",
         tags:         r.title ? [r.title] : [],
         attribution:  r.source ?? "Google Images",
         contentType:  guessContentType(r.original!),

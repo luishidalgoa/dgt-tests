@@ -57,7 +57,9 @@ type ProviderSet = "stock" | "google"
 // Si cierra la pestaña y vuelve mañana, las stock APIs pueden tener nuevos
 // resultados — no queremos servir un caché viejo. Y sobre todo, evita
 // gastar quota de SerpAPI en cada reapertura del mismo modal.
-const CACHE_PREFIX = "findRepl:v1:"
+// v2 → tab "google" pasó de search-por-keyword a Google Lens visual.
+// Las cachés v1 quedan huérfanas (sessionStorage las purga al cerrar).
+const CACHE_PREFIX = "findRepl:v2:"
 function cacheKey(sha: string, set: ProviderSet): string {
   return `${CACHE_PREFIX}${sha}:${set}`
 }
@@ -355,11 +357,18 @@ function FindReplacementsModal({
               </h2>
               <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--slate-500)" }}>
                 SHA: <code>{sha.slice(0, 12)}…</code> · Tag principal: <strong>{topConfidentTag}</strong>
-                {keyword && (
+                {/* En modo Lens la búsqueda es VISUAL (reverse image),
+                    no por palabra clave — mostramos algo más claro que
+                    "Keyword:" para no confundir. */}
+                {providerSet === "google" ? (
+                  <>
+                    {" · "}Modo: <strong>visual (reverse image)</strong>
+                  </>
+                ) : keyword ? (
                   <>
                     {" · "}Keyword: <strong>{keyword}</strong>
                   </>
-                )}
+                ) : null}
                 {providers.length > 0 && (
                   <>
                     {" · "}Providers: <em>{providers.join(", ")}</em>
@@ -399,14 +408,14 @@ function FindReplacementsModal({
                 onClick={() => setProviderSet("stock")}
                 icon={<Search size={12} />}
                 label="Pexels + Pixabay"
-                hint="Free, calidad media"
+                hint="Búsqueda por keyword (tag) · free"
               />
               <ProviderSetTab
                 active={providerSet === "google"}
                 onClick={() => setProviderSet("google")}
                 icon={<Sparkles size={12} />}
                 label="Google Lens"
-                hint="Gasta cuota SerpAPI"
+                hint="Reverse image visual REAL · gasta 1 query SerpAPI"
                 accent
               />
             </div>
@@ -449,10 +458,34 @@ function FindReplacementsModal({
 
         {/* ── Body ─────────────────────────────────────────────────── */}
         <div style={{ padding: 22, flex: 1 }}>
+          {/* Aviso de licencia — solo en modo Google Lens. Google no
+              filtra por copyright, los matches pueden venir de sitios con
+              derechos reservados. El admin tiene que verificar antes de
+              reemplazar (botón "fuente" abre la página original). */}
+          {providerSet === "google" && !loading && candidates.length > 0 && (
+            <div style={{
+              display: "flex", alignItems: "flex-start", gap: 8,
+              padding: "10px 12px", borderRadius: 8, marginBottom: 16,
+              background: "rgba(245, 158, 11, 0.08)",
+              border: "1px solid rgba(245, 158, 11, 0.25)",
+              color: "var(--amber-d, #b45309)", fontSize: 12, lineHeight: 1.45,
+            }}>
+              <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>
+                <strong>Google Lens no filtra por licencia.</strong> Los matches
+                pueden tener copyright. Antes de reemplazar, abre la <em>fuente</em>{" "}
+                del candidato y comprueba que se puede reusar. Para garantías
+                automáticas usa el tab <strong>Pexels + Pixabay</strong>.
+              </span>
+            </div>
+          )}
+
           {loading && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--slate-500)", padding: "20px 0" }}>
               <Loader2 size={16} className="spin" />
-              Buscando candidatos en {providers.length > 0 ? providers.join(", ") : "los providers configurados"}...
+              {providerSet === "google"
+                ? "Google Lens buscando matches visuales…"
+                : `Buscando candidatos en ${providers.length > 0 ? providers.join(", ") : "los providers configurados"}…`}
             </div>
           )}
 

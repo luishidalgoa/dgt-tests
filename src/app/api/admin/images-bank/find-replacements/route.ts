@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server"
 import { z } from "zod"
 import { requireAdmin } from "@/lib/adminGuard"
 import { getJsonFromR2, R2_META_KEYS } from "@/lib/imagesBankR2"
+import { absoluteImageUrl } from "@/lib/imageUrl"
 import { LABEL_METADATA } from "@/app/admin/images-bank/labelMetadata"
 import {
   findFromAllProviders,
@@ -89,37 +90,44 @@ export async function POST(req: NextRequest) {
   }
   const { sha, max = 12, imageType = "any", providerName, providerSet, keyword: keywordOverride } = parsed.data
 
-  // ── 1. Determinar el keyword ───────────────────────────────────────
+  // ── 1. Cargar classification.json (necesario tanto para el keyword
+  //       automático como para el filename → URL pública para Lens) ────
+  let classification: ClassificationData | null = null
+  try {
+    classification = await getJsonFromR2<ClassificationData>(R2_META_KEYS.classification)
+  } catch (err) {
+    return NextResponse.json(
+      {
+        ok:    false,
+        error: `No se pudo leer classification.json de R2: ${err instanceof Error ? err.message : err}`,
+      },
+      { status: 500 },
+    )
+  }
+
+  if (!classification?.images?.[sha]) {
+    return NextResponse.json(
+      {
+        ok:    false,
+        error: `SHA '${sha.slice(0, 12)}…' no existe en classification.json. ` +
+               `Pasa 'keyword' manualmente para buscar de todas formas.`,
+      },
+      { status: 404 },
+    )
+  }
+  const entry = classification.images[sha]
+
+  // URL pública de la imagen original — esto es lo que Google Lens fetcha
+  // para hacer reverse image search visual. absoluteImageUrl() resuelve
+  // al CDN R2 público (NEXT_PUBLIC_IMAGE_CDN_URL) → accesible para Google.
+  const imageUrl = absoluteImageUrl(entry.filename)
+
+  // ── 2. Determinar el keyword (fallback para google_images + necesario
+  //       para stock APIs que no tienen visual search) ──────────────────
   let keyword: string
   if (keywordOverride) {
     keyword = keywordOverride
   } else {
-    // Cargar classification.json para sacar el tag confident principal
-    let classification: ClassificationData | null = null
-    try {
-      classification = await getJsonFromR2<ClassificationData>(R2_META_KEYS.classification)
-    } catch (err) {
-      return NextResponse.json(
-        {
-          ok:    false,
-          error: `No se pudo leer classification.json de R2: ${err instanceof Error ? err.message : err}`,
-        },
-        { status: 500 },
-      )
-    }
-
-    if (!classification?.images?.[sha]) {
-      return NextResponse.json(
-        {
-          ok:    false,
-          error: `SHA '${sha.slice(0, 12)}…' no existe en classification.json. ` +
-                 `Pasa 'keyword' manualmente para buscar de todas formas.`,
-        },
-        { status: 404 },
-      )
-    }
-
-    const entry = classification.images[sha]
     const confidentTags = entry.tags.filter((t) => t.confident).sort((a, b) => b.score - a.score)
     const topTag       = confidentTags[0] ?? entry.tags[0]   // fallback al tag más alto si no hay confident
 
@@ -146,13 +154,19 @@ export async function POST(req: NextRequest) {
     keyword = keyword.replace(/[/]/g, " ").replace(/\s+/g, " ").trim()
   }
 
-  // ── 2. Llamar al provider ──────────────────────────────────────────
+  // ── 3. Llamar al provider ──────────────────────────────────────────
   // Prioridad de selección:
   //   1. providerName (más específico, fuerza UN provider concreto)
   //   2. providerSet  (tab "stock" o "google" del modal)
   //   3. nada → comportamiento legacy: TODOS los providers configurados
+  //
+  // Pasamos AMBOS keyword e imageUrl en searchOpts:
+  //   - Pixabay/Pexels/Unsplash ignoran imageUrl y usan keyword.
+  //   - SerpApiProvider prioriza imageUrl (engine=google_lens, reverse
+  //     image visual REAL) y cae a keyword (engine=google_images) si no.
   const searchOpts = {
     keyword,
+    imageUrl,
     max,
     imageType: imageType as ImageType,
     lang:      "es",
