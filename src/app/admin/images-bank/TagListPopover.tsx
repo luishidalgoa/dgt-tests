@@ -33,11 +33,14 @@ const POPOVER_GAP        = 6   // separación visual con el anchor
 const VIEWPORT_PADDING   = 8   // margen mínimo al borde del viewport
 
 interface Props {
-  anchorRect:  DOMRect | null
-  tags:        readonly ClassificationTag[]
-  sha:         string
-  getDisplay:  (tagId: string) => string
-  onClose:     () => void
+  anchorRect:     DOMRect | null
+  tags:           readonly ClassificationTag[]
+  sha:            string
+  /** Map plano tagId → displayEs precomputado en el Server Component.
+   *  No usamos getDisplay como función porque las funciones no son
+   *  serializables a través de la frontera Server→Client en RSC. */
+  tagDisplayMap:  Readonly<Record<string, string>>
+  onClose:        () => void
 }
 
 interface ComputedPosition {
@@ -50,7 +53,7 @@ interface ComputedPosition {
   placedAbove: boolean
 }
 
-export function TagListPopover({ anchorRect, tags, sha, getDisplay, onClose }: Props) {
+export function TagListPopover({ anchorRect, tags, sha, tagDisplayMap, onClose }: Props) {
   const router       = useRouter()
   const popoverRef   = useRef<HTMLDivElement | null>(null)
   const [position, setPosition] = useState<ComputedPosition | null>(null)
@@ -238,7 +241,7 @@ export function TagListPopover({ anchorRect, tags, sha, getDisplay, onClose }: P
           <PopoverTagRow
             key={t.tag}
             t={t}
-            displayEs={getDisplay(t.tag)}
+            displayEs={tagDisplayMap[t.tag] ?? t.tag}
             isDeleting={deletingTag === t.tag}
             onDeleteManual={t.humanAssigned ? () => handleDeleteManualTag(t.tag) : undefined}
           />
@@ -383,12 +386,13 @@ export function TagOverflowChip({
   sha,
   hiddenCount,
   allTags,
-  getDisplay,
+  tagDisplayMap,
 }: {
-  sha:         string
-  hiddenCount: number
-  allTags:     readonly ClassificationTag[]
-  getDisplay:  (tagId: string) => string
+  sha:            string
+  hiddenCount:    number
+  allTags:        readonly ClassificationTag[]
+  /** Map serializable tagId → displayEs precomputado en el Server. */
+  tagDisplayMap:  Readonly<Record<string, string>>
 }) {
   const buttonRef    = useRef<HTMLButtonElement | null>(null)
   const [mounted, setMounted] = useState(false)
@@ -457,7 +461,7 @@ export function TagOverflowChip({
           anchorRect={anchorRect}
           tags={allTags}
           sha={sha}
-          getDisplay={getDisplay}
+          tagDisplayMap={tagDisplayMap}
           onClose={() => setOpen(false)}
         />,
         document.body,

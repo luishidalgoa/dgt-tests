@@ -1428,7 +1428,7 @@ function ImageTile({ entry, currentTag, getDisplay, buildTagURL, anchorId, refsC
                         sha={entry.sha}
                         hiddenCount={hiddenCount}
                         allTags={sorted}
-                        getDisplay={getDisplay}
+                        tagDisplayMap={Object.fromEntries(sorted.map((t) => [t.tag, getDisplay(t.tag)]))}
                       />
                     </div>
                   )}
