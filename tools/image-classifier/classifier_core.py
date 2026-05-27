@@ -473,6 +473,7 @@ def build_tags_from_scores(
     all_scores:         dict[str, float],
     sha_exclusions:     set[str],
     sha_confirmations:  set[str],
+    sha_manual_tags:    Optional[set[str]] = None,
     threshold:          float = THRESHOLD,
     top_k:              int   = TOP_K,
     always_keep_top:    int   = ALWAYS_KEEP_TOP,
@@ -484,40 +485,81 @@ def build_tags_from_scores(
     de dos niveles (rank 1..N siempre si >= min_score; rank N+1..top_k solo
     si >= threshold).
 
+    `sha_manual_tags` opcional — tags asignados manualmente por el admin
+    (manual_tags.json). Reciben el MISMO boost que confirmations y además
+    se INYECTAN como tags aunque su score sea muy bajo (verdad humana →
+    no se filtran por threshold). UI los pinta con flag `humanAssigned`
+    en lugar de `humanConfirmed`.
+
     Returns:
       (tags: list[dict], all_scores_post_boost: dict[str, float])
-      donde tags entries son {tag, score, confident, humanConfirmed?}.
+      donde tags entries son {tag, score, confident, humanConfirmed?,
+      humanAssigned?}.
       all_scores_post_boost se devuelve por si el caller quiere persistirlo
       con los boosts ya aplicados.
     """
-    # 1. Aplicar CONFIRMACIONES primero — boost del score si era bajo
+    manual = sha_manual_tags or set()
+    # 1. Aplicar BOOST a confirmaciones + manual_tags (ambos cuentan como
+    #    "verdad humana"). manual_tags además gana al menos `confirmed_boost`
+    #    para garantizar que aparezca en el top-K aunque el modelo le diera
+    #    score casi 0.
     scores = dict(all_scores)
     for conf_tag in sha_confirmations:
         if conf_tag in scores and scores[conf_tag] < confirmed_boost:
             scores[conf_tag] = confirmed_boost
+    for man_tag in manual:
+        # Si el classifier no tenía el label en allScores (caso: label
+        # totalmente nuevo, descubierto por el admin), lo añadimos con
+        # score `confirmed_boost`. Si lo tenía pero más bajo, lo boost-eamos.
+        scores[man_tag] = max(scores.get(man_tag, 0.0), confirmed_boost)
 
-    # 2. Aplicar EXCLUSIONES — filter antes del top-K
-    filtered = [(lid, sc) for lid, sc in scores.items() if lid not in sha_exclusions]
+    # 2. Aplicar EXCLUSIONES — filter antes del top-K (pero NO filtramos
+    #    los manual_tags: el admin los asignó explícitamente, gana sobre
+    #    una posible exclusión vieja del mismo admin).
+    filtered = [
+        (lid, sc) for lid, sc in scores.items()
+        if lid not in sha_exclusions or lid in manual
+    ]
     candidates = sorted(filtered, key=lambda x: -x[1])[:top_k]
 
-    # 3. Construir tags con la regla de dos niveles
+    # 3. Construir tags con la regla de dos niveles. Los manual_tags se
+    #    fuerzan siempre — el admin los asignó, deben aparecer.
+    seen: set[str] = set()
     tags: list[dict] = []
     for rank, (lid, score) in enumerate(candidates):
-        if score < min_score:
-            break  # están sorted desc → todo lo siguiente también será < min_score
-        if rank >= always_keep_top and score < threshold:
-            continue  # extras (rank N+1..top_k) solo si pasan threshold
+        if score < min_score and lid not in manual:
+            break  # ordenados desc → resto también será < min_score (excepto manuales)
+        if rank >= always_keep_top and score < threshold and lid not in manual:
+            continue  # extras solo si pasan threshold, salvo manual
         tag_entry: dict = {
             "tag":       lid,
             "score":     round(float(score), 4),
-            "confident": score >= threshold,
+            "confident": score >= threshold or lid in manual,
         }
-        # Marcar el flag humanConfirmed para que la UI muestre el badge verde
-        # y el JSON sea self-contained sin necesidad de cruzar con
-        # tag_confirmations.json en runtime.
+        # Flags: humanAssigned tiene prioridad visual sobre humanConfirmed
+        # (los manuales son "más fuertes" en términos de aprendizaje del modelo).
+        if lid in manual:
+            tag_entry["humanAssigned"] = True
         if lid in sha_confirmations:
             tag_entry["humanConfirmed"] = True
         tags.append(tag_entry)
+        seen.add(lid)
+
+    # 4. Si algún manual_tag NO entró en el top-K (raro porque ya pusimos
+    #    score al menos confirmed_boost), lo añadimos al final para garantizar
+    #    su presencia. Mantiene el invariante "lo que asignó el admin SIEMPRE
+    #    aparece en classification.json".
+    for man_tag in manual:
+        if man_tag in seen:
+            continue
+        forced_score = scores.get(man_tag, confirmed_boost)
+        tags.append({
+            "tag":           man_tag,
+            "score":         round(float(forced_score), 4),
+            "confident":     True,
+            "humanAssigned": True,
+        })
+
     return tags, scores
 
 
@@ -543,6 +585,152 @@ def build_rejected_suggestions_payload() -> Optional[dict]:
 def reset_rejected_suggestions() -> None:
     """Vacía el buffer global. Útil entre runs si el caller comparte proceso."""
     REJECTED_SUGGESTIONS.clear()
+
+
+# ── Manual tags (admin-asignados desde /admin/images-bank) ──────────────
+# Vía paralela a tag_confirmations: el admin asigna directamente a una
+# imagen un label_id (puede ser un label existente o uno nuevo). El
+# classifier los trata como verdad humana — score boost, prototipos kNN,
+# y el flag `humanAssigned` en classification.json.
+#
+# Después de un run exitoso, las entradas de manual_tags MIGRAN a
+# tag_confirmations.json (ven la sección `promote_manual_tags_*` abajo)
+# para que el JSON quede consolidado y manual_tags.json no acumule
+# estado a perpetuidad. El cleanup es atómico desde la perspectiva del
+# caller — o se hace tras un run completo o no se hace.
+
+# Schema del JSON:
+#   {
+#     "version": 1,
+#     "entries": {
+#       "<sha>": [
+#         { "tag": "trailer",
+#           "assignedAt": "ISO",
+#           "assignedBy": "luis",
+#           "reason": "se ve un camión con remolque al fondo" }
+#       ]
+#     }
+#   }
+
+
+def parse_manual_tags(data: Optional[dict]) -> dict[str, list[dict]]:
+    """Normaliza un dict cargado de manual_tags.json. Devuelve
+    {sha: [{tag, assignedAt, assignedBy, reason?}, ...]} con strings
+    sanitizados. Si la entrada es None o malformada, devuelve {}.
+
+    No filtra ids inválidos (eso es trabajo del endpoint); aquí solo
+    aseguramos shape para downstream.
+    """
+    if not isinstance(data, dict):
+        return {}
+    entries = data.get("entries")
+    if not isinstance(entries, dict):
+        return {}
+    out: dict[str, list[dict]] = {}
+    for sha, arr in entries.items():
+        if not isinstance(sha, str) or not isinstance(arr, list):
+            continue
+        clean: list[dict] = []
+        for item in arr:
+            if not isinstance(item, dict):
+                continue
+            tag = item.get("tag")
+            if not isinstance(tag, str) or not tag:
+                continue
+            entry = {"tag": tag}
+            for opt_key in ("assignedAt", "assignedBy", "reason"):
+                v = item.get(opt_key)
+                if isinstance(v, str) and v:
+                    entry[opt_key] = v
+            clean.append(entry)
+        if clean:
+            out[sha] = clean
+    return out
+
+
+def manual_tags_to_id_sets(parsed: dict[str, list[dict]]) -> dict[str, set[str]]:
+    """De {sha: [{tag, ...}]} a {sha: set(tag)} — el shape que consume
+    build_tags_from_scores y build_proto_tensors."""
+    return {sha: {e["tag"] for e in arr if e.get("tag")} for sha, arr in parsed.items()}
+
+
+def merge_manual_into_confirmations(
+    manual_tags:        dict[str, list[str] | list[dict]],
+    existing_conf_data: Optional[dict],
+) -> dict:
+    """Funde manual_tags dentro del JSON shape de tag_confirmations.json.
+
+    `manual_tags` puede ser {sha: [str, ...]} o {sha: [{tag, ...}, ...]}
+    para ergonomía — el manual_tags.json oficial usa lista de dicts, pero
+    a veces el caller pasa solo ids.
+
+    `existing_conf_data` es el JSON cargado de tag_confirmations.json:
+        {"confirmations": {sha: [tag, ...]}, ...metadata}
+    Si es None se crea desde cero.
+
+    Devuelve el nuevo dict listo para serializar y subir a R2. Es estable:
+    los tags se ordenan alfabéticamente dentro de cada SHA, y SHAs sin
+    cambios mantienen el orden original.
+    """
+    base = dict(existing_conf_data) if isinstance(existing_conf_data, dict) else {}
+    conf_map = base.get("confirmations")
+    confirmations: dict[str, list[str]] = (
+        {k: list(v) for k, v in conf_map.items() if isinstance(k, str) and isinstance(v, list)}
+        if isinstance(conf_map, dict) else {}
+    )
+    for sha, items in manual_tags.items():
+        if not isinstance(sha, str):
+            continue
+        new_tags: set[str] = set()
+        for it in items or []:
+            if isinstance(it, str):
+                new_tags.add(it)
+            elif isinstance(it, dict):
+                t = it.get("tag")
+                if isinstance(t, str) and t:
+                    new_tags.add(t)
+        if not new_tags:
+            continue
+        existing = set(confirmations.get(sha, []))
+        merged = sorted(existing | new_tags)
+        confirmations[sha] = merged
+    base["confirmations"] = confirmations
+    base["generatedAt"] = datetime.now(timezone.utc).isoformat()
+    return base
+
+
+def build_empty_manual_tags_payload() -> dict:
+    """Payload `manual_tags.json` "vacío" que respeta el schema y deja
+    constancia del cleanup más reciente. Se sube tras la migración."""
+    return {
+        "version":     1,
+        "entries":     {},
+        "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "note":        "Limpiado tras run del classifier — entradas migradas a tag_confirmations.json",
+    }
+
+
+def build_manual_tags_audit_entry(
+    parsed_manual_tags: dict[str, list[dict]],
+    run_started_at:     str,
+    run_succeeded:      bool,
+) -> dict:
+    """Snapshot inmutable de qué se migró durante este run. El caller lo
+    persiste en `meta/manual_tags_history.json` (append) para audit trail.
+    Si run_succeeded=False se persiste como skipped — útil para depurar
+    runs fallidos.
+    """
+    n_shas = len(parsed_manual_tags)
+    n_tags = sum(len(arr) for arr in parsed_manual_tags.values())
+    return {
+        "runStartedAt": run_started_at,
+        "finishedAt":   datetime.now(timezone.utc).isoformat(),
+        "succeeded":    run_succeeded,
+        "shasMigrated": n_shas if run_succeeded else 0,
+        "tagsMigrated": n_tags if run_succeeded else 0,
+        # Guardamos los datos para poder reconstruir si hace falta
+        "snapshot":     parsed_manual_tags if run_succeeded else {},
+    }
 
 
 # ── Self-test ───────────────────────────────────────────────────────────
@@ -584,5 +772,30 @@ if __name__ == "__main__":
     print(f"\nbuild_tags_from_scores: {len(tags)} tags emitidos:")
     for t in tags:
         print(f"  {t}")
+
+    # Test build_tags_from_scores con manual_tags
+    tags_m, _ = build_tags_from_scores(
+        {"a": 0.42, "b": 0.05},
+        sha_exclusions=set(),
+        sha_confirmations=set(),
+        sha_manual_tags={"newlabel", "b"},
+    )
+    print(f"\nbuild_tags_from_scores(manual_tags): {len(tags_m)} tags:")
+    for t in tags_m:
+        print(f"  {t}")
+    # newlabel debe existir con humanAssigned (label nuevo no presente en allScores)
+    assert any(t["tag"] == "newlabel" and t.get("humanAssigned") for t in tags_m), \
+        "manual_tag 'newlabel' debe estar presente con humanAssigned=True"
+    assert any(t["tag"] == "b" and t.get("humanAssigned") and t["score"] >= CONFIRMED_BOOST for t in tags_m), \
+        "manual_tag 'b' debe haber sido boost-eado a >= CONFIRMED_BOOST"
+
+    # Test promote_manual_tags_to_confirmations (sin tocar R2 — solo la lógica de merge)
+    manual = {"sha1": ["tag_a", "tag_b"], "sha2": ["tag_c"]}
+    existing_conf = {"confirmations": {"sha1": ["tag_a", "tag_z"]}}
+    merged = merge_manual_into_confirmations(manual, existing_conf)
+    assert set(merged["confirmations"]["sha1"]) == {"tag_a", "tag_b", "tag_z"}, \
+        f"merge debe unir tags sin duplicar — got {merged['confirmations']['sha1']}"
+    assert merged["confirmations"]["sha2"] == ["tag_c"], "sha2 debe ser nuevo en confirmations"
+    print(f"\nmerge_manual_into_confirmations: OK")
 
     print(f"\n[OK] classifier_core.py self-test passed")
