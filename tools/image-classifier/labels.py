@@ -139,6 +139,12 @@ LABELS: list[tuple[str, list[str]]] = [
         "a truck or lorry pulling a semi-trailer or large freight trailer on a highway with the articulated coupling visible between cab and trailer",
         "a vehicle towing a utility trailer or boat trailer on a road with the trailer visibly attached to the towing vehicle from behind",
         "a 3D illustration of a car or motorcycle towing a trailer or caravan in a driving test image showing the towed unit attached at the rear",
+        # Escena mixta: en autovía real, solo UNO de varios coches lleva
+        # remolque. SigLIP penalizaba estos casos porque los negativos
+        # "coche solo sin remolque" se activaban por los otros vehículos.
+        # Este prompt enfatiza la PRESENCIA del remolque aunque haya
+        # tráfico heterogéneo alrededor.
+        "a highway or road traffic scene where at least one vehicle is towing a trailer or caravan while other unrelated cars without trailers also share the road",
     ]),
     ("motorcycle", [
         "a motorcycle",
@@ -268,11 +274,28 @@ LABELS: list[tuple[str, list[str]]] = [
         # Las señales de obras españolas tienen FONDO AMARILLO (no blanco).
         # Cubre tanto señales verticales aisladas como escenas reales de carretera
         # con balizamiento amarillo, conos y pintadas en el asfalto.
-        # ── Señales verticales aisladas ──
+        # ── Señal canónica DGT triangular de obras ──
+        # CASO TÍPICO DEL EXAMEN: triángulo equilátero rojo con fondo
+        # amarillo brillante mostrando la silueta NEGRA de un obrero
+        # cavando con pala. Coexiste con sign_warning (también triangular)
+        # — el modelo puede emitir ambos labels para esta imagen, lo cual
+        # es correcto (es peligro + es obras).
+        "a classic Spanish DGT road works warning sign with triangular shape red border and bright YELLOW or amber background showing a black silhouette of a worker digging shoveling or working with a shovel and dirt mound symbol",
+        "an isolated triangular traffic sign with a red border and a YELLOW background featuring a black worker icon with a pickaxe shovel or excavation tool — this is the standard road works ahead warning sign",
+        # ── Señales verticales aisladas con símbolo de obrero ──
         "a warning sign showing a worker shoveling or digging with a yellow amber background indicating road works ahead",
         "a triangular road works warning sign with yellow or amber background and a black worker shoveling symbol inside a red border",
         "a yellow background road works construction warning sign of any shape with worker or machinery symbols on yellow",
         "an illustration of a roadworks ahead traffic sign with yellow background",
+        # ── Señales REGULATORIAS convencionales pero en fondo AMARILLO ──
+        # En España toda señal convencional (velocidad, prohibido, indicación)
+        # rendered en YELLOW en lugar del blanco habitual significa "señal
+        # temporal por obras". Esto cubre el caso típico de DGT: límite 80
+        # o 100 amarillo en autovía con asfalto recién extendido pero sin
+        # conos ni obreros visibles ya en escena.
+        "a circular speed limit sign showing a red border with a number such as 80 or 100 inside but displayed on a YELLOW or amber background instead of the usual white indicating a temporary road works restriction",
+        "any standard regulatory traffic sign such as a speed limit prohibition or mandatory direction rendered on a YELLOW background instead of the standard white indicating it is a temporary road works sign",
+        "a road scene with a yellow background regulatory sign such as a speed limit or no overtaking sign on a freshly paved highway indicating an active or recently completed road works zone",
         # ── Escena real de carretera con señalización de obras ──
         "a real road or highway scene with temporary yellow background signs and orange cones or barriers diverting traffic through an active road works zone",
         "a photograph of a road construction zone where yellow temporary signs with black text or symbols are placed alongside the carriageway guiding vehicles around works",
@@ -297,20 +320,73 @@ LABELS: list[tuple[str, list[str]]] = [
         "an illustration of a dashboard warning icon lit up",
     ]),
     ("mechanical", [
-        # Reescrito 26/05: los prompts previos eran demasiado abstractos
-        # ("suspension assembly" / "shock absorber") y SigLIP no los
-        # vinculaba a las ilustraciones de mecánica de los libros DGT
-        # (esquemas COLOREADOS con muelle verde, amortiguador rojo,
-        # palancas naranjas, etc).
+        # CONSOLIDADO 27/05 (segunda iteración): TODOS los aspectos del
+        # FACTOR VEHÍCULO en un solo label, por decisión explícita del user.
+        # Cubre: esquemas 2D DGT, render 3D transparente, neumáticos/ruedas
+        # (fusionado desde `tires_wheels`), revisión de fluidos (aceite,
+        # refrigerante), piezas aisladas (filtros, batería).
+        #
+        # ⚠ Riesgo conocido: con tantos prompts visualmente divergentes,
+        # el embedding promedio se DILUYE — el modelo puede dejar de
+        # reconocer bien casos muy específicos. Si tras swipear se ve
+        # que falla algún subset (e.g., baja precisión en filtros aislados
+        # o en suspensión 2D), considerar separar en sub-labels otra vez.
+        #
+        # Mitigación: prompts redactados con vocabulario unificado
+        # ("automotive mechanical component", "vehicle factor", "DGT
+        # technical illustration") para que el promedio quede centrado en
+        # "mecánica" genérica. El último prompt es comodín que abraza
+        # todos los casos.
+
+        # ── Esquemas DGT 2D coloreados (suspensión, motor, transmisión) ──
         "a colored cutaway illustration of a car engine showing pistons valves cylinders and internal mechanical parts in red blue and yellow",
         "a side-view diagram of a car wheel suspension with a coiled spring shock absorber and control arms drawn in bright colors",
-        "an educational schematic of automotive mechanical parts like brakes pistons or transmission shown in cross-section with colored components",
+        "an educational schematic of automotive mechanical parts like brakes pistons transmission or suspension shown in cross-section with colored components for a DGT manual",
+        # ── Render 3D transparente / wireframe del vehículo ──
+        "a 3D rendered transparent or wireframe car body viewed from above or in perspective with the suspension struts shock absorbers and chassis components highlighted in bright magenta or red inside the translucent vehicle outline",
+        "a see-through technical illustration of a complete passenger car showing internal mechanical components such as wheel assemblies dampers and control arms visible through the transparent body",
+        # ── Neumáticos / ruedas (multiple variantes: flanco, pictograma, presión) ──
+        "a close-up photograph of a car tire showing the SIDEWALL with embossed text such as size markings like 185/60 R14 82H load index speed rating brand and safety warnings on the rubber surface",
+        "a macro photograph of a tire tread pattern with deep grooves rubber blocks and sipes visible showing the contact surface that meets the road",
+        "an isolated photograph of a vehicle tire or wheel rim viewed from the side or in three-quarter angle with the rubber sidewall tread and aluminium alloy or steel rim clearly visible against a plain background",
+        # Vista cenital / vertical del neumático apoyado sobre asfalto
+        # (típico DGT para preguntas de dibujo/desgaste del neumático)
+        "a top-down or vertical photograph of a single car tire standing upright on asphalt or concrete pavement viewed from above showing the full tread pattern grooves and rubber shoulders against the road surface",
+        # Neumático PINCHADO / DESINFLADO — caso DGT importante de avería
+        "a close-up photograph of a flat or deflated car tire visibly sagging and deformed against the road surface with the vehicle body weight pressing the rubber down at an unnatural angle showing a puncture or loss of air pressure",
+        "a low-pressure or flat punctured automotive tire on a parked car with the sidewall bulging outward and the rim almost touching the ground due to lack of air inside the tire chamber",
+        # Pictogramas de neumático en corte transversal (presión / contacto)
+        "a 3D illustration or pictogram of a vehicle tire shown in CROSS-SECTION cutaway view revealing the internal structure carcass beads and air chamber resting on a flat surface with text labels indicating 'superficie de contacto' or contact patch",
+        "a diagram comparing tire cross-sections with correct versus incorrect inflation pressure showing the deformation of the tire against the road surface and the contact patch area",
+        "a colored technical illustration of an inflated and deflated vehicle tire in front-view cross-section displaying the contact area with the asphalt and labels in Spanish such as 'presión' or 'superficie de contacto'",
+        # ── Revisión / cambio de fluidos del vehículo ──
+        "a close-up photograph of an oil dipstick being pulled out of a car engine with the operator holding a paper or rag to wipe the stick and check the oil level under the open bonnet",
+        # Reescrito con vocabulario más visual / fotográfico para que SigLIP
+        # capture mejor las fotos comerciales de aceite (el prompt anterior
+        # era demasiado descriptivo en lugar de visual).
+        "a dramatic close-up product photograph of golden amber motor oil being poured in a viscous stream from a black plastic engine oil bottle into the oil filler neck of a car engine with bokeh background and dark engine components",
+        "an automotive engine oil change scene showing yellow or amber colored lubricant flowing from a container into the open oil cap of a vehicle engine bay with reflective metallic surfaces around",
+        "a hand checking the coolant level in an automotive antifreeze reservoir or overflow tank showing the colored liquid between MIN and MAX marks under the bonnet",
+        # ── Piezas aisladas del motor (filtros, batería, mangueras) ──
+        "an isolated close-up product photograph of a cylindrical automotive air filter with a black rubber rim outer mesh grille and pleated yellow paper element on a plain background",
+        "a close-up isolated photo of a 12 volt car battery rectangular black plastic case with positive and negative terminals on top",
+        # ── Suspensión real de moto/coche (foto, no diagrama) ──
+        "a close-up photograph of a real motorcycle or car rear suspension showing a chrome coil spring shock absorber strut and exhaust pipe components viewed from the side at ground level",
+        # ── Vista del COMPARTIMENTO DEL MOTOR (engine bay) con fluidos y batería ──
+        # Caso DGT típico: foto del capó abierto mostrando varios depósitos
+        # (refrigerante color naranja/rojo o anticongelante azul/verde),
+        # depósito de líquido de frenos, batería 12V con tapas, mangueras,
+        # filtros. Vista panorámica del engine bay.
+        "a photograph of an open car engine bay showing multiple plastic fluid reservoirs the orange or red coolant overflow tank a 12 volt battery brake fluid container and various hoses cables and engine components organized in the engine compartment",
+        "an under-the-bonnet view of a vehicle's engine compartment with the coolant expansion tank brake fluid reservoir power steering tank and lead-acid battery visible alongside engine cover hoses and clamps",
+        "a wide shot of the car engine compartment from above with the hood propped open revealing the antifreeze reservoir battery with positive and negative terminals washer fluid tank and air intake system",
+        # ── Prompt comodín que abraza todos los casos para anclar el embedding ──
+        "any automotive mechanical component or vehicle factor element such as engine parts suspension brakes transmission tires filters batteries or fluid inspection shown as a technical diagram colored cutaway 3D render isolated photograph or engine bay maintenance scene for DGT vehicle factor preguntas",
     ]),
-    ("tires_wheels", [
-        "close-up of car tires or wheels",
-        "an illustration of vehicle tires with tread pattern",
-        "automotive wheels and tires viewed up close",
-    ]),
+    # `tires_wheels` ELIMINADO 27/05 — fusionado en `mechanical` (factor
+    # vehículo consolidado). Si en el futuro tires necesita aislarse
+    # (e.g., para preguntas DGT específicas de presión / dibujo del
+    # neumático), restaurar como label independiente.
     ("car_mirror", [
         "a car rear-view or side mirror",
         "the reflection inside a vehicle mirror",
@@ -397,6 +473,34 @@ LABELS: list[tuple[str, list[str]]] = [
         "a traffic accident scene showing a crashed or colliding car and motorcycle in close contact on an urban road without emergency services present",
         "a road accident with damaged crashed vehicles debris on the road and emergency responders in high-visibility vests attending the scene",
         "a car crash at an intersection with multiple damaged vehicles and rescue personnel responding to the collision",
+        # Colisión coche-coche de baja energía en aparcamiento — sin moto,
+        # sin emergencias, sin daños espectaculares. Es el caso DGT típico
+        # de incidente cotidiano: un vehículo en posición de impacto contra
+        # otro al maniobrar en zona de parking o explanada.
+        "a low-energy collision between two passenger cars in a parking lot or open paved area with one car positioned at an angle touching the side or rear of another after a maneuvering accident",
+        "two cars stopped in close contact in a parking area asphalt or industrial yard where one vehicle has just bumped into another while parking or pulling out with no emergency services present",
+    ]),
+    ("vehicle_collision_risk", [
+        # RIESGO de colisión INMINENTE entre VEHÍCULOS — todavía NO hay
+        # contacto, NO hay accidente consumado, pero la escena muestra
+        # una situación de peligro próximo entre coches (típicamente en
+        # maniobras de aparcamiento, marcha atrás, salidas de plaza,
+        # ángulos muertos). Concepto DGT específico — diferenciado de
+        # `traffic_accident` (colisión ya producida) y de los labels de
+        # peatones (`yielding_to_pedestrian`, `jaywalking`, `crosswalk`)
+        # que cubren riesgos peatón-vehículo, NO vehículo-vehículo.
+        #
+        # Visualmente típico:
+        #  - Vista cenital de aparcamiento con coche saliendo de plaza
+        #    mientras otro circula por el pasillo (riesgo lateral)
+        #  - Ilustración 3D DGT con triángulos amarillos de alerta o
+        #    radares/sensores de proximidad visualizados
+        #  - Maniobras de marcha atrás con vehículos próximos
+        "a top-down aerial view of a parking lot where one car is pulling out of a parking space while another vehicle is approaching down the aisle creating a risk of side or rear collision between the two cars without any pedestrians involved",
+        "an overhead illustration of cars in angled or perpendicular parking spaces where one vehicle is reversing or exiting and another car is passing close by with imminent risk of vehicle-to-vehicle contact",
+        "a 3D rendered DGT-style illustration showing parking maneuver risk between two cars with proximity sensor radars warning triangles or alert icons highlighting the inter-vehicle collision danger zone",
+        "a parking lot scene from above where vehicles in adjacent spaces are involved in a backing-out maneuver creating a near-miss situation with another car driving by but no physical contact yet between the vehicles",
+        "an illustration of vehicles in close maneuvering proximity such as one car reversing out of a parking bay while another approaches showing warning symbols or sensor halos indicating a potential car-to-car impact zone without any pedestrians or completed collision",
     ]),
     # `merging_into_traffic` ELIMINADO — precisión real ~3%. Datos del
     # run del 25/05: de 30 imgs con score>=0.85, solo 1 era "merging
@@ -501,10 +605,11 @@ LABELS: list[tuple[str, list[str]]] = [
         "a roadside assistance scene with a worker in a yellow high-visibility vest hooking up a disabled car with its hood open to a tow vehicle ramp",
         "a vehicle breakdown on a highway shoulder being recovered by a flatbed tow truck with the car's bonnet open and assistance personnel attending",
     ]),
-    ("itv_sticker", [
+    ("itv", [
         # Pegatinas españolas de la ITV (Inspección Técnica de Vehículos):
         # rectangulares, colores rojo/verde/amarillo, con números romanos
         # I-XII (meses) y un número grande de año "Válido hasta".
+        # Label renombrado de `itv_sticker` → `itv` (más corto, intuitivo).
         "a colored rectangular ITV inspection sticker for Spanish vehicles with Roman numerals I to XII at the top showing months and a large bold year number under 'Válido hasta' text",
         "Spanish technical vehicle inspection certificate stickers in red green or yellow with month markings I-XII and an expiration year prominently displayed",
         "three overlapping ITV revision stickers attached to a windshield with Comunidad de Madrid logo Roman numeral months and validity year",
@@ -525,6 +630,27 @@ LABELS: list[tuple[str, list[str]]] = [
         "a first-person driver POV photograph of a deserted asphalt road at night with only the road markings illuminated by headlights and complete darkness on both sides",
         "a nighttime driving view from the windshield of an open highway in pitch darkness showing white edge and center lines barely visible in the headlight beam",
         "an extremely dark rural road scene from inside a moving car at night with very low visibility and the headlights revealing only a few meters of pavement ahead",
+    ]),
+    ("lighting", [
+        # Meta-label "uso de alumbrado". Cubre TANTO:
+        #   - SITUACIONES de uso obligatorio (noche, atardecer, túnel,
+        #     niebla, lluvia intensa) — escenas reales O ilustradas.
+        #   - PICTOGRAMAS / esquemas 3D mostrando conos de luz proyectados
+        #     desde los faros, testigos del cuadro de mandos (faros corto,
+        #     largo, antiniebla, posición), tipos de iluminación.
+        # Coexiste con `night`, `tunnel`, `dashboard` — es un AGRUPADOR
+        # conceptual para preguntas DGT sobre "¿qué luces debe usar?".
+        # ── Pictogramas con haces de luz visualizados ──
+        "a top-down 3D illustration of cars on a road with cone-shaped beams of light extending from their front headlights showing the illumination pattern projected onto the road surface",
+        "a diagram showing the headlight beam coverage of a vehicle at night with visible cones of bright light projected ahead from low or high beam lamps on dark road background",
+        "an illustration of two vehicles approaching each other on a curved road at night with their headlights drawn as bright triangular cones lighting up the asphalt and lane markings",
+        # ── Testigos del cuadro de mandos relacionados con luces ──
+        "a close-up of dashboard indicator icons for vehicle lighting such as low beam high beam fog lights or parking lights shown as colored symbols with arrows or beam lines",
+        "a panel of automotive light indicator pictograms including the headlight symbol with diagonal lines representing illumination angles or beam direction",
+        # ── Situaciones reales / ilustradas de uso de alumbrado ──
+        "a road scene at dusk or twilight with reduced ambient light where vehicles need to switch on their headlights even though the sky still shows orange or pink colors",
+        "a vehicle interior or exterior scene in heavy fog or rain where the driver must use fog lights or low beams due to severely reduced visibility in adverse weather",
+        "an illustration of a car entering or driving inside a tunnel where headlights are required even during daytime to ensure visibility inside the dark passage",
     ]),
     ("construction_vehicle", [
         # Maquinaria pesada de obra: retroexcavadora, excavadora,
@@ -669,6 +795,50 @@ LABELS: list[tuple[str, list[str]]] = [
         "a person at the steering wheel using a white tissue or kleenex to cover the nose during a sneeze with paper visible across the face",
         "a motorist inside a vehicle holding a folded white paper tissue up to the nose in an allergy sneeze pose with watery eyes",
     ]),
+    ("medication_health", [
+        # Label consolidado de SALUD / MEDICAMENTOS. Cubre los casos DGT
+        # típicos donde la pregunta trata sobre la aptitud del conductor
+        # respecto a medicación: cajas de pastillas, blisters con
+        # comprimidos, sobres en polvo, persona enferma tomando pastilla,
+        # logos de salud (OMS), ilustraciones de antihistamínicos.
+        # Categoría: Factor humano (afecta capacidad del conductor).
+        #
+        # Por ahora UN solo label que abraza todos los casos. Si en el
+        # futuro el embedding promedio se diluye y deja de capturar
+        # casos específicos, separar en sub-labels (e.g., medication_box,
+        # sick_person, health_logo).
+
+        # ── Cajas y blisters de medicamentos ──
+        "a photograph of multiple Spanish pharmacy medication boxes and pill blister packs of various brands laid on a table with names like Zantac Antalgin Gelocatil Prenadol or Zoltran visible",
+        "a flat-lay photograph of medication packaging including cardboard boxes with brand names blister packs of pills sachets and ampoules typical of Spanish farmacia products",
+        "a close-up of a single medication box with the word 'Antalgin' 'Gelocatil' 'Paracetamol' or similar Spanish drug name visible alongside its blister pack of pills",
+        # ── Ilustraciones / dibujos de medicamentos ──
+        "an illustration or cartoon drawing of a medication box labeled 'Antihistamínico' or 'Paracetamol' shown with pills spilling out next to a blister pack on a flat surface",
+        "a colored DGT-style illustration of a pharmacy box with pills and blister sheets typically used in driving theory questions about medication and driving capacity",
+        # ── Persona enferma / tomando pastilla ──
+        "a photograph or illustration of a sick person in bed or sitting taking a pill out of a green or colored medication blister pack holding it near the mouth with a tired or ill expression",
+        "an unwell-looking individual at home holding a tablet or capsule between fingers about to swallow it with a pill blister pack visible in the other hand",
+        # Close-up de perfil de persona llevando pastilla a la boca — caso
+        # más neutral SIN signos visibles de enfermedad ni blister visible.
+        # La imagen del examen DGT muestra solo cara/mano/pastilla en
+        # primer plano lateral con boca entreabierta y dedos sosteniendo
+        # el comprimido blanco u óvalo.
+        "a close-up side profile photograph of a person bringing a small white pill or tablet to their slightly opened mouth holding the medication between fingers about to swallow it with the lips face and hand sharply in focus",
+        "a macro photograph of someone's hand fingers holding a small round or oval white medication tablet right in front of the lips about to be placed inside the mouth seen from a lateral angle close-up",
+        "an extreme close-up of a person taking a single pill capsule or tablet between thumb and index finger approaching the opened mouth in a profile view emphasizing the action of swallowing oral medication",
+        # ── Logos de instituciones de salud ──
+        "the official logo of the Organización Mundial de la Salud OMS or World Health Organization WHO showing the white emblem with serpent staff and laurel wreath on a blue background with text",
+        "an official health authority emblem or logo such as Organización Mundial de la Salud WHO or Ministerio de Sanidad shown on a blue or white background with formal text",
+        # ── Consulta médica / instrumentos sanitarios ──
+        # Caso DGT típico: foto en consultorio mostrando tensión arterial,
+        # estetoscopio, médico examinando paciente. Distinguir de
+        # `breathalyzer_device` (que es POLICIAL — Drager amarillo en
+        # carretera) y de `driver_allergy_symptoms` (con kleenex).
+        "a photograph of a doctor or nurse in a white coat taking a patient's blood pressure with a sphygmomanometer cuff wrapped around the upper arm and the rubber tube hanging down in a clinical setting",
+        "a close-up of medical blood pressure measurement showing the inflatable arm cuff with velcro strap a stethoscope tube and a healthcare professional in white scrubs performing the reading in a doctor's office",
+        "a clinical scene of a person undergoing a routine medical exam with their arm extended on a table while a nurse or doctor wearing a white coat applies the tensiómetro blood pressure cuff and reads the gauge",
+        "an image of medical examination tools such as a stethoscope blood pressure monitor thermometer or syringe being used on a patient by a healthcare provider in a clinic hospital or consultation room",
+    ]),
 
     # ── Controles policiales ────────────────────────────────────────
     # Alcoholímetros (dispositivo y test policial), drogas, controles
@@ -693,6 +863,29 @@ LABELS: list[tuple[str, list[str]]] = [
         "a highway or dual carriageway where a lane splits off or merges in with a white triangular painted nose island separating the main road from the new lane",
         "a road fork or merge point showing the triangular hatched area at the tip where two lanes diverge or converge on a motorway",
         "a vehicle accelerating on an entry slip lane or decelerating on an exit lane at a motorway junction with the triangular road marking nose visible ahead",
+        # Caso "fin de carril / lane drop": flecha CURVA pintada en el
+        # asfalto que indica al conductor que debe cambiar de carril
+        # porque el suyo se acaba. Visualmente clave: la flecha es
+        # ELEMENTO PRINCIPAL en la imagen + se ve un vehículo cambiando
+        # carril o dos vehículos en posición de incorporación.
+        # Añadido 27/05 para cubrir el caso DGT típico que los prompts
+        # anteriores (que requerían 'triangular nose island') no captaban.
+        "a road scene showing a large curved white arrow painted on the asphalt indicating that the current lane is ending and vehicles must merge into the adjacent lane with at least one car visibly moving between lanes",
+        "a multi-lane road or highway with a lane drop scenario where the pavement marking is a prominent curved arrow directing traffic from a terminating lane into the remaining lane while a vehicle performs the lane change",
+        "two vehicles side by side on a 3D illustrated road at sunset or daytime with one car shifting lanes towards the other and a curved arrow painted on the asphalt below indicating the lane merge or lane ending",
+    ]),
+    ("incorporation", [
+        # Concepto DGT específico: vehículo que se INTEGRA al tráfico desde
+        # un sitio estacionado, zona lateral, vía secundaria o aparcamiento
+        # al carril principal en circulación. Diferente de lane_merge_diverge
+        # (que es autopista con isla pintada). Aquí es maniobra urbana:
+        # salir de aparcamiento en línea/batería, salir de gasolinera,
+        # incorporarse desde camino lateral, etc. El vehículo tiene
+        # obligación de ceder paso a los que ya circulan.
+        "a car pulling out of a roadside parking spot or angled parking space and joining the active lane of moving traffic on an urban street",
+        "an urban street scene where one vehicle is leaving a row of parallel parked cars and merging into the flowing traffic lane while other cars approach from behind",
+        "a vehicle entering a main road from a side street parking area or driveway with the joining car cutting across to merge with vehicles already in motion",
+        "a 3D illustration of a car merging from a side parking lane or service road into the main traffic flow of an urban or suburban road",
     ]),
     ("intersection_maneuver", [
         "a 3D illustration of cars maneuvering at a roundabout or junction with potential conflict between vehicles approaching from different directions",
@@ -852,12 +1045,43 @@ LABEL_NEGATIVES: dict[str, list[str]] = {
         "a car safely overtaking another vehicle on the road with both cars moving normally and no contact between them",
         "vehicles driving in heavy traffic or a traffic queue with cars close together but all moving normally without any collision",
         "a motorcycle or scooter riding alongside a car in normal traffic with no collision no contact and both riders in full control",
+        # NEG cruzado con vehicle_collision_risk: la escena de RIESGO
+        # próximo (sin contacto) NO es traffic_accident — eso es para
+        # contacto consumado. Sin este negativo, las imgs de maniobra
+        # peligrosa en parking saturaban traffic_accident.
+        "a parking lot maneuver showing risk of vehicle-to-vehicle proximity with no contact yet — this is a near-miss risk scenario not an actual completed collision",
+    ],
+    # vehicle_collision_risk: RIESGO ≠ colisión consumada ≠ peatón en riesgo.
+    # Cubre el caso DGT de maniobras peligrosas entre coches en aparcamiento.
+    # Sin negativos cruzados saturaría a traffic_accident (colisión consumada)
+    # o a yielding_to_pedestrian/jaywalking (peatón en peligro).
+    "vehicle_collision_risk": [
+        # ── NO confundir con colisión CONSUMADA (traffic_accident) ──
+        "two vehicles already in physical contact after an accident with bumpers touching bodies damaged or one car pressed against another at impact",
+        "a crashed scene showing two cars in collision with visible deformation contact between them or debris on the road from a completed impact",
+        # ── NO confundir con riesgo PEATÓN-vehículo ──
+        "a pedestrian crossing the road in front of a car or being approached by a vehicle in a crosswalk scenario where the risk is to a person not between vehicles",
+        "a zebra crossing scene with a person walking across and a car nearby where the danger involves a pedestrian rather than vehicle-to-vehicle proximity",
+        # ── NO confundir con aparcamiento NORMAL (sin maniobra de riesgo) ──
+        "a parking lot or street with vehicles parked statically in their spaces without any car in motion exiting reversing or maneuvering — no risk situation present",
+        "an aerial or street view of parked cars in a parking area with all vehicles stationary in their lanes and no active maneuver or proximity warning indicators",
     ],
     # vehicle_breakdown no debe disparar en coches normales aparcados ni accidentes de colisión
     "vehicle_breakdown": [
         "a car driving normally on the road with all doors and boot closed and no visible mechanical problem",
         "a car parked in a car park or residential street with nothing unusual or broken visible",
         "a traffic accident with collision damage between two or more cars rather than a single stopped broken down vehicle",
+    ],
+    # mechanical NO debe disparar en escenas de tráfico / coche entero — solo
+    # cuando la imagen MUESTRA componentes mecánicos como tema principal
+    # (esquemas técnicos, render 3D transparente, ruedas close-up, piezas
+    # aisladas, fluidos del motor). Sin estos negativos, el embedding
+    # consolidado de mechanical puede sobre-disparar en cualquier coche.
+    "mechanical": [
+        "a complete passenger car driving normally on a road or highway shown as a full vehicle in motion with no mechanical components highlighted or revealed",
+        "a road traffic scene with one or more cars circulating in their lanes where the vehicles appear opaque and intact with no internal parts visible",
+        "a parked car in a parking lot or residential street viewed from outside with no engine bay open and no mechanical inspection or diagnostic activity",
+        "an exterior photograph of a vehicle such as a sedan SUV hatchback motorcycle or truck where the body is fully opaque and no internal mechanical components suspension or engine parts are exposed or illustrated",
     ],
 }
 

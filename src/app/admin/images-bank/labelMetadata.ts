@@ -83,6 +83,8 @@ export const LABEL_METADATA: Record<string, LabelMetadata> = {
   level_crossing:      { displayEs: "Paso a nivel",                category: "Escenas", addedAt: "2026-05-26" },
   intersection:                  { displayEs: "Intersección",                  category: "Escenas" },
   lane_merge_diverge:            { displayEs: "Incorporación / bifurcación",   category: "Escenas", addedAt: "2026-05-26" },
+  incorporation:                 { displayEs: "Incorporación a la vía",        category: "Escenas", addedAt: "2026-05-27" },
+  vehicle_collision_risk:        { displayEs: "Riesgo entre vehículos",        category: "Escenas", addedAt: "2026-05-27" },
   intersection_maneuver:         { displayEs: "Maniobra en intersección",      category: "Escenas", addedAt: "2026-05-25" },
   intersection_priority_diagram: { displayEs: "Prioridad en cruce (diagrama)", category: "Escenas", addedAt: "2026-05-26" },
   crosswalk:           { displayEs: "Paso de peatones",            category: "Escenas" },
@@ -149,13 +151,18 @@ export const LABEL_METADATA: Record<string, LabelMetadata> = {
   // ── Factor vehículo (mantenimiento) ──────────────────────────────
   // Imágenes sobre el estado/mantenimiento del coche: neumáticos,
   // mecánica, ITV, repostaje, comprobación de presión, etc.
-  tires_wheels:               { displayEs: "Neumáticos / Ruedas",         category: "Factor vehículo" },
+  // `tires_wheels` eliminado — fusionado en `mechanical` (factor vehículo consolidado).
+  // `mechanical` consolidado: cubre TODO el factor vehículo — esquemas 2D
+  // DGT, render 3D transparente, neumáticos/ruedas (antes `tires_wheels`),
+  // revisión de fluidos, piezas aisladas (filtro, batería). Si la dilución
+  // del embedding promedio se vuelve problemática (algún subset deja de
+  // reconocerse), considerar separar otra vez en sub-labels.
   mechanical:                 { displayEs: "Mecánica / Motor / Esquema",  category: "Factor vehículo" },
   tire_inflation_check:       { displayEs: "Inflar / comprobar rueda",    category: "Factor vehículo", addedAt: "2026-05-25" },
   vehicle_maintenance_general:{ displayEs: "Mantenimiento general",       category: "Factor vehículo", addedAt: "2026-05-25" },
   tow_truck_assistance:       { displayEs: "Grúa / asistencia carretera", category: "Factor vehículo", addedAt: "2026-05-26" },
   vehicle_breakdown:          { displayEs: "Avería de vehículo",          category: "Factor vehículo", addedAt: "2026-05-26" },
-  itv_sticker:                { displayEs: "Pegatina ITV",                category: "Factor vehículo", addedAt: "2026-05-26" },
+  itv:                        { displayEs: "ITV",                         category: "Factor vehículo", addedAt: "2026-05-26" },
   auto_part_isolated:         { displayEs: "Componente / pieza aislada",  category: "Factor vehículo", addedAt: "2026-05-26" },
   vehicle_documents:          { displayEs: "Documentación vehículo/conductor", category: "Factor vehículo", addedAt: "2026-05-26" },
 
@@ -168,6 +175,7 @@ export const LABEL_METADATA: Record<string, LabelMetadata> = {
   family_safety_in_car:       { displayEs: "Familia + sillita + cinturones",  category: "Factor humano", addedAt: "2026-05-26" },
   fatigue_warning_dashboard:  { displayEs: "Alerta fatiga (cuadro mandos)",   category: "Factor humano", addedAt: "2026-05-26" },
   driver_allergy_symptoms:    { displayEs: "Alergias",                        category: "Factor humano", addedAt: "2026-05-26" },
+  medication_health:          { displayEs: "Medicación / Salud",              category: "Factor humano", addedAt: "2026-05-27" },
   alcohol_consumption:        { displayEs: "Consumo de alcohol",               category: "Factor humano", addedAt: "2026-05-26" },
 
   // ── Controles policiales ──────────────────────────────────────────
@@ -180,6 +188,7 @@ export const LABEL_METADATA: Record<string, LabelMetadata> = {
   night:                        { displayEs: "Noche",                        category: "Condiciones" },
   night_highway_lit:            { displayEs: "Autopista iluminada (noche)",   category: "Condiciones", addedAt: "2026-05-26" },
   night_driving_low_visibility: { displayEs: "Noche · baja visibilidad POV",  category: "Condiciones", addedAt: "2026-05-26" },
+  lighting:                     { displayEs: "Iluminación / Alumbrado",       category: "Condiciones", addedAt: "2026-05-27" },
   rain:         { displayEs: "Lluvia",               category: "Condiciones" },
   fog:          { displayEs: "Niebla",               category: "Condiciones" },
   snow:         { displayEs: "Nieve",                category: "Condiciones" },
