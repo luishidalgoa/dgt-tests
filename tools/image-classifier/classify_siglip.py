@@ -153,8 +153,9 @@ TOP_RELEVANT_FOR_DISCOVERY = 25
 # Variables que se asignan en main() leyendo los args. Las dejamos como
 # placeholder a nivel de módulo para que las funciones auxiliares (write_output,
 # _build_payload) puedan referenciarlas sin pasarlas explícitamente.
-INPUT_DIR: Path = DEFAULT_INPUT_DIR
-OUTPUT:    Path = DEFAULT_OUTPUT
+INPUT_DIR: Path           = DEFAULT_INPUT_DIR
+OUTPUT:    Path           = DEFAULT_OUTPUT
+GENERATED_AT_BEGIN: str   = ""
 
 # ── Auto-discovery con Gemini (opcional) ────────────────────────────────
 # Cuando SigLIP no consigue un tag confident para una imagen, opcionalmente
@@ -184,8 +185,10 @@ PROTOTYPES_PATH        = ROOT / "tools" / "image-audit" / "prototypes.json"
 # Gestionado por el admin desde el banco web (swipe Tinder). El
 # classifier las respeta — tags excluidos NO se emiten aunque el score
 # sea alto. Si el archivo no existe, no hay exclusiones.
-TAG_EXCLUSIONS_PATH    = ROOT / "tools" / "image-audit" / "tag_exclusions.json"
-TAG_CONFIRMATIONS_PATH = ROOT / "tools" / "image-audit" / "tag_confirmations.json"
+TAG_EXCLUSIONS_PATH         = ROOT / "tools" / "image-audit" / "tag_exclusions.json"
+TAG_CONFIRMATIONS_PATH      = ROOT / "tools" / "image-audit" / "tag_confirmations.json"
+MANUAL_TAGS_PATH            = ROOT / "tools" / "image-audit" / "manual_tags.json"
+MANUAL_TAGS_HISTORY_PATH    = ROOT / "tools" / "image-audit" / "manual_tags_history.json"
 
 # CONFIRMED_TAG_MIN_SCORE viene de classifier_core (re-import al inicio
 # del archivo, con alias `CONFIRMED_BOOST as CONFIRMED_TAG_MIN_SCORE`).
@@ -488,6 +491,21 @@ def load_tag_confirmations() -> dict[str, set[str]]:
     si el score real es menor, para que el tag aparezca en filtro
     "Calidad medio" o superior."""
     return _load_sha_tag_map(TAG_CONFIRMATIONS_PATH, "confirmations")
+
+
+def load_manual_tags_raw() -> dict:
+    """Lee meta/manual_tags.json local. Modo permisivo: si no existe o
+    está corrupto, devuelve un dict vacío con el shape esperado.
+    Devuelve el JSON tal cual para luego pasarlo a
+    `parse_manual_tags` (que normaliza el shape).
+    """
+    if not MANUAL_TAGS_PATH.exists():
+        return {"version": 1, "entries": {}}
+    try:
+        data = json.loads(MANUAL_TAGS_PATH.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {"version": 1, "entries": {}}
+    except (json.JSONDecodeError, OSError):
+        return {"version": 1, "entries": {}}
 
 
 def _mime_of(path: Path) -> str:
@@ -1089,10 +1107,14 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
-    global INPUT_DIR, OUTPUT
+    global INPUT_DIR, OUTPUT, GENERATED_AT_BEGIN
     args      = _parse_args()
     INPUT_DIR = args.input_dir
     OUTPUT    = args.output
+    # Marca temporal del INICIO del run — la usa el audit log de
+    # manual_tags_history.json para correlacionar la migración con el
+    # run concreto del classifier que la disparó.
+    GENERATED_AT_BEGIN = datetime.now(timezone.utc).isoformat()
 
     print(f"🔍 SigLIP multi-label classifier")
     print(f"   Input:  {INPUT_DIR}")
@@ -1267,6 +1289,17 @@ def main() -> None:
     if tag_confirmations:
         total_conf = sum(len(v) for v in tag_confirmations.values())
         print(f"✅ Confirmaciones manuales cargadas: {len(tag_confirmations)} shas, {total_conf} tags confirmados (boost a {CONFIRMED_TAG_MIN_SCORE})")
+    # Manual tags asignados directamente por el admin desde /admin/images-bank.
+    # Mismos efectos que tag_confirmations + se INYECTAN en classification.json
+    # aunque el classifier no los detectara (verdad humana → invariante).
+    # Tras un run exitoso se migran a tag_confirmations.json (cleanup).
+    from classifier_core import parse_manual_tags, manual_tags_to_id_sets  # noqa: E402
+    raw_manual_tags        = load_manual_tags_raw()
+    parsed_manual_tags     = parse_manual_tags(raw_manual_tags)
+    manual_tags_by_sha     = manual_tags_to_id_sets(parsed_manual_tags)
+    if manual_tags_by_sha:
+        total_man = sum(len(v) for v in manual_tags_by_sha.values())
+        print(f"👤 Manual tags cargados: {len(manual_tags_by_sha)} shas, {total_man} tags asignados (boost a {CONFIRMED_TAG_MIN_SCORE} + inyectados al output, migrarán a confirmations tras este run)")
     retried_shas: set[str] = set()
     if existing:
         if args.retry_no_tags:
@@ -1828,30 +1861,48 @@ def main() -> None:
                     if conf_tag in all_scores and all_scores[conf_tag] < CONFIRMED_TAG_MIN_SCORE:
                         all_scores[conf_tag] = CONFIRMED_TAG_MIN_SCORE
 
+            # Manual tags asignados por el admin desde /admin/images-bank.
+            # Misma semántica que confirmations + ADEMÁS:
+            #   - Inyectan el label en all_scores aunque no estuviera (label nuevo)
+            #   - Se preservan SIEMPRE en el output (sin filtros por threshold)
+            #   - Marcan flag `humanAssigned` en el output
+            sha_manual_tags = manual_tags_by_sha.get(sha, set())
+            if sha_manual_tags:
+                for man_tag in sha_manual_tags:
+                    all_scores[man_tag] = max(all_scores.get(man_tag, 0.0), CONFIRMED_TAG_MIN_SCORE)
+
             # Aplicar exclusiones manuales: filtrar candidates antes
             # del top-K para que no "ocupen" hueco. Si el admin marcó
             # esta sha-tag como "no corresponde" desde el banco, se
-            # excluye aunque tenga score 0.99.
+            # excluye aunque tenga score 0.99. EXCEPCIÓN: los manual_tags
+            # ganan sobre exclusions (el admin las asignó a propósito).
             sha_exclusions = tag_exclusions.get(sha, set())
             scored_filtered = [
                 (lid, sc) for lid, sc in all_scores.items()
-                if lid not in sha_exclusions
+                if lid not in sha_exclusions or lid in sha_manual_tags
             ]
             candidates = sorted(scored_filtered, key=lambda x: -x[1])[:TOP_K]
             tags: list[dict] = []
+            seen_in_tags: set[str] = set()
             for rank, (lid, score) in enumerate(candidates):
-                if score < MIN_SCORE:
+                # Los manuales no se filtran por threshold (verdad humana).
+                if score < MIN_SCORE and lid not in sha_manual_tags:
                     # Como están ordenados desc, los siguientes también
                     # serán < MIN_SCORE → cortamos aquí.
                     break
-                if rank >= ALWAYS_KEEP_TOP and score < THRESHOLD:
+                if rank >= ALWAYS_KEEP_TOP and score < THRESHOLD and lid not in sha_manual_tags:
                     # Tag "extra" (4º, 5º) que no pasa threshold de calidad
                     continue
                 tag_entry: dict = {
                     "tag":       lid,
                     "score":     score,
-                    "confident": score >= THRESHOLD,
+                    "confident": score >= THRESHOLD or lid in sha_manual_tags,
                 }
+                # `humanAssigned` tiene prioridad visual sobre `humanConfirmed`
+                # (asignación directa del admin → señal más fuerte que
+                # confirmar un guess del modelo).
+                if lid in sha_manual_tags:
+                    tag_entry["humanAssigned"] = True
                 # `humanConfirmed`: si el admin marcó "SÍ es" para esta
                 # (sha, lid) desde el banco, persistimos el flag. Esto hace
                 # el classification.json self-contained: la UI puede pintar
@@ -1864,6 +1915,21 @@ def main() -> None:
                 if lid in sha_confirmations:
                     tag_entry["humanConfirmed"] = True
                 tags.append(tag_entry)
+                seen_in_tags.add(lid)
+
+            # Garantizar invariante: TODOS los manual_tags están en el
+            # output, aunque no entraran al top-K (caso raro porque ya
+            # los boost-eamos a CONFIRMED_TAG_MIN_SCORE, pero defensivo).
+            for man_tag in sha_manual_tags:
+                if man_tag in seen_in_tags:
+                    continue
+                forced_score = all_scores.get(man_tag, CONFIRMED_TAG_MIN_SCORE)
+                tags.append({
+                    "tag":           man_tag,
+                    "score":         round(float(forced_score), 4),
+                    "confident":     True,
+                    "humanAssigned": True,
+                })
             results[sha] = {
                 "filename":  path.name,
                 "tags":      tags,
@@ -1970,6 +2036,71 @@ def main() -> None:
         gemini_stats=gemini_stats_payload,
         groq_stats=groq_stats_payload,
     ))
+
+    # ── Cleanup: promover manual_tags → tag_confirmations ────────────
+    # write_output ha completado sin excepción → consideramos el run
+    # exitoso. Migramos las entradas de manual_tags.json al
+    # tag_confirmations.json local (preservando confirmaciones previas),
+    # vaciamos manual_tags.json y dejamos un audit log.
+    #
+    # Idempotencia: si manual_tags.json estaba vacío, todo es no-op.
+    # Atomicidad: cada escritura es independiente; si una falla, la
+    # otra puede haber quedado a medias — los JSONs son commit-friendly
+    # y el admin verá el estado parcial en local. El próximo run reintenta.
+    #
+    # NOTA: este cleanup solo afecta los archivos LOCALES. Los R2 se
+    # actualizan cuando el admin corra `npm run images:upload-metadata`
+    # tras este script. El flujo del workflow ya lo recomienda en help.ts.
+    if parsed_manual_tags:
+        from classifier_core import (  # noqa: E402
+            merge_manual_into_confirmations,
+            build_empty_manual_tags_payload,
+            build_manual_tags_audit_entry,
+        )
+        try:
+            existing_conf_raw: dict | None = None
+            if TAG_CONFIRMATIONS_PATH.exists():
+                try:
+                    existing_conf_raw = json.loads(TAG_CONFIRMATIONS_PATH.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, OSError):
+                    existing_conf_raw = None
+            merged = merge_manual_into_confirmations(parsed_manual_tags, existing_conf_raw)
+            TAG_CONFIRMATIONS_PATH.parent.mkdir(parents=True, exist_ok=True)
+            TAG_CONFIRMATIONS_PATH.write_text(
+                json.dumps(merged, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            MANUAL_TAGS_PATH.write_text(
+                json.dumps(build_empty_manual_tags_payload(), indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            # Append-only audit
+            history_list: list[dict] = []
+            if MANUAL_TAGS_HISTORY_PATH.exists():
+                try:
+                    prev_hist = json.loads(MANUAL_TAGS_HISTORY_PATH.read_text(encoding="utf-8"))
+                    if isinstance(prev_hist, list):
+                        history_list = prev_hist
+                    elif isinstance(prev_hist, dict) and isinstance(prev_hist.get("entries"), list):
+                        history_list = prev_hist["entries"]
+                except (json.JSONDecodeError, OSError):
+                    history_list = []
+            history_list.append(build_manual_tags_audit_entry(
+                parsed_manual_tags,
+                run_started_at=GENERATED_AT_BEGIN,
+                run_succeeded=True,
+            ))
+            MANUAL_TAGS_HISTORY_PATH.write_text(
+                json.dumps({"entries": history_list}, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            total_man = sum(len(v) for v in parsed_manual_tags.values())
+            print(f"\n🧹 Cleanup: {len(parsed_manual_tags)} shas / {total_man} manual_tags migrados a tag_confirmations.json")
+            print(f"   ↑ Recuerda: `npm run images:upload-metadata` sube los JSONs actualizados a R2")
+        except OSError as err:
+            # No es fatal — el run principal ya guardó classification.json.
+            # El admin puede reintentar el cleanup en el siguiente run.
+            print(f"\n⚠️  Cleanup manual_tags FAILED (run de classifier OK): {err}", flush=True)
 
     # Guardar discovered final (idempotente — ya se guarda tras cada
     # descubrimiento, esto es por si hubo algo en el último batch).
