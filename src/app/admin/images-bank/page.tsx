@@ -252,9 +252,14 @@ export default async function ImagesBankPage({ searchParams }: PageProps) {
   //   - "auto"   (default): divisores por addedAt (mtime). Dentro de
   //     cada bucket el orden lo decide el criterio intrínseco del
   //     filtro base (más usadas, peores primero, etc).
+  //   - "recent": divisores por addedAt y orden POR addedAt desc
+  //     dentro de cada bucket. Las más nuevas siempre primero.
   //   - "tagged": divisores por taggedAt. Sobreescribe el orden con
   //     fecha de tagging desc.
-  const gridSort: GridSort = params.gridsort === "tagged" ? "tagged" : "auto"
+  const gridSort: GridSort =
+    params.gridsort === "tagged" ? "tagged"
+    : params.gridsort === "recent" ? "recent"
+    : "auto"
   // Validar quality contra el enum — invalid silently ignored
   const qualityFilter: QualityTier | null =
     (QUALITY_TIERS.find((t) => t.id === params.quality)?.id ?? null) as QualityTier | null
@@ -482,13 +487,24 @@ npm run images:upload-metadata`}</pre>
   }
 
   // ── Sort ────────────────────────────────────────────────────────────
-  // "tagged" sobreescribe TODO por taggedAt desc. "auto" aplica el
-  // orden intrínseco — ese orden se preserva DENTRO de cada bucket
-  // cuando luego agrupamos por addedAt para los divisores.
+  // "tagged" sobreescribe TODO por taggedAt desc. "recent" sobreescribe
+  // por addedAt desc. "auto" aplica el orden intrínseco — ese orden se
+  // preserva DENTRO de cada bucket cuando luego agrupamos por addedAt
+  // para los divisores.
   if (gridSort === "tagged") {
     entries.sort((a, b) => {
       const da  = a.taggedAt ?? FALLBACK_IMAGE_DATE_MS
       const dbb = b.taggedAt ?? FALLBACK_IMAGE_DATE_MS
+      if (da !== dbb) return dbb - da
+      return b.maxQuestionId - a.maxQuestionId
+    })
+  } else if (gridSort === "recent") {
+    // Por addedAt desc. Las que no tienen addedAt (caso prod sin filesystem
+    // local, o ficheros que desaparecieron) caen al final con FALLBACK.
+    // Tie-break por maxQuestionId desc para que sea estable.
+    entries.sort((a, b) => {
+      const da  = a.addedAt ?? FALLBACK_IMAGE_DATE_MS
+      const dbb = b.addedAt ?? FALLBACK_IMAGE_DATE_MS
       if (da !== dbb) return dbb - da
       return b.maxQuestionId - a.maxQuestionId
     })
@@ -786,6 +802,12 @@ npm run images:upload-metadata`}</pre>
               href={buildFilterURL({ tag: tagFilter, untagged: untaggedFilter, lowconf: lowConfFilter, tagged: withTagsFilter, quality: qualityFilter, sort: sortDir, gridsort: "auto" })}
             />
             <SortToggle
+              active={gridSort === "recent"}
+              label="🕐 Más recientes"
+              title="Ordena por addedAt desc (mtime del archivo). Las imágenes recién subidas al banco salen primero."
+              href={buildFilterURL({ tag: tagFilter, untagged: untaggedFilter, lowconf: lowConfFilter, tagged: withTagsFilter, quality: qualityFilter, sort: sortDir, gridsort: "recent" })}
+            />
+            <SortToggle
               active={gridSort === "tagged"}
               label="🏷️ Nuevas tagueadas"
               title="Ordena por fecha de tagging del classifier (útil tras añadir labels nuevos)"
@@ -902,6 +924,8 @@ npm run images:upload-metadata`}</pre>
             // Siempre con divisores temporales:
             //   - "auto"   → divisores por addedAt (mtime). Dentro de
             //               cada bucket conserva el orden intrínseco.
+            //   - "recent" → divisores por addedAt + orden POR addedAt
+            //               desc dentro de cada bucket.
             //   - "tagged" → divisores por taggedAt (orden ya por fecha).
             <>
               {groupByDateBucket(

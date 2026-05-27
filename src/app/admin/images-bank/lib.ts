@@ -177,12 +177,16 @@ export interface DisplayEntry {
  *               siempre con divisores por fecha de agregado (mtime del
  *               archivo). Dentro de cada bucket el orden lo decide el
  *               criterio intrínseco.
+ *   - "recent": ignora el orden intrínseco y ordena POR FECHA addedAt
+ *               desc dentro de cada bucket. Las imágenes recién añadidas
+ *               al banco salen primero. Útil tras descargar referencias
+ *               nuevas o tras procesar SHAs nuevos.
  *   - "tagged": ordena por fecha de tagging desc + divisores por la
  *               misma fecha. Sobreescribe el orden intrínseco. Útil
  *               tras añadir labels nuevos para ver qué imágenes acaba
  *               de procesar el classifier.
- *  En AMBOS modos hay divisores temporales (Hoy / Esta semana / …). */
-export type GridSort = "auto" | "tagged"
+ *  En TODOS los modos hay divisores temporales (Hoy / Esta semana / …). */
+export type GridSort = "auto" | "recent" | "tagged"
 
 /** Buckets temporales para los divisores del grid en modo "más recientes".
  *  Orden = orden visual (de más reciente a más antiguo). */
