@@ -33,6 +33,7 @@ import {
 } from "./lib"
 import { FilterPill, QualityPill, SortToggle, SidebarHeader, DateDivider, QuestionsListButton, NewImageBadge, SwipeableImageTile, ScrollToHashTarget, CardHashUpdater, TagSearchInput } from "./BankUi"
 import { FindReplacementsButton } from "./FindReplacementsModal"
+import { AddManualTagButton, type AvailableLabel } from "./AddManualTagModal"
 
 export const dynamic = "force-dynamic"
 
@@ -297,6 +298,27 @@ export default async function ImagesBankPage({ searchParams }: PageProps) {
     LABEL_METADATA[id]?.displayEs ?? discoveredMeta[id]?.displayEs ?? id
   const labelCategory = (id: string): Category =>
     LABEL_METADATA[id]?.category ?? discoveredMeta[id]?.category ?? "Especiales"
+
+  // Catálogo plano de labels disponibles para el modal "Añadir tag manual".
+  // Unimos LABEL_METADATA (estático, ~110) + discoveredMeta (dinámico).
+  // Se serializa al cliente → tenerlo pre-construido ahorra cómputo en cada
+  // apertura de modal. Marcamos los descubiertos con flag `discovered: true`
+  // para que el UI los muestre con etiqueta "nuevo" amarilla.
+  const availableLabels: AvailableLabel[] = [
+    ...Object.entries(LABEL_METADATA).map(([id, m]) => ({
+      id,
+      displayEs: m.displayEs,
+      category:  m.category,
+    })),
+    ...Object.entries(discoveredMeta)
+      .filter(([id]) => !(id in LABEL_METADATA))   // evita duplicar los que ya están en el estático
+      .map(([id, m]) => ({
+        id,
+        displayEs:  m.displayEs,
+        category:   m.category,
+        discovered: true,
+      })),
+  ]
 
   if (!classification || !audit) {
     return (
@@ -1019,6 +1041,7 @@ npm run images:upload-metadata`}</pre>
                           getDisplay={labelEs}
                           anchorId={tagFilter ? undefined : anchorId}
                           refsCount={referenceCountsMap.get(entry.sha) ?? 0}
+                          availableLabels={availableLabels}
                           buildTagURL={(tag) => {
                             const url = buildFilterURL({
                               tag:      tag === tagFilter ? undefined : tag,
@@ -1092,7 +1115,7 @@ function StatBox({ label, value, sub, color }: {
   )
 }
 
-function ImageTile({ entry, currentTag, getDisplay, buildTagURL, anchorId, refsCount }: {
+function ImageTile({ entry, currentTag, getDisplay, buildTagURL, anchorId, refsCount, availableLabels }: {
   entry:      DisplayEntry
   currentTag: string | undefined
   getDisplay: (id: string) => string
@@ -1108,6 +1131,9 @@ function ImageTile({ entry, currentTag, getDisplay, buildTagURL, anchorId, refsC
   /** Cuántas referencias alternativas se han descargado para esta SHA.
    *  El botón lupa pinta un badge con este número si > 0. */
   refsCount:   number
+  /** Catálogo serializado al cliente para autocomplete del modal de
+   *  "Añadir tag manual". */
+  availableLabels: AvailableLabel[]
 }) {
   // Resuelto vía CDN (R2) en prod o /images/ local en dev — ver lib/imageUrl
   const imgSrc = imageUrl(entry.filename)
@@ -1226,6 +1252,17 @@ function ImageTile({ entry, currentTag, getDisplay, buildTagURL, anchorId, refsC
               )
             })
           )}
+
+          {/* Botón "Añadir tag manual" — siempre visible (admin only por
+              layout). Click abre modal con autocomplete; el modal se
+              queda abierto para añadir varios en una sola apertura. */}
+          <div style={{ marginTop: entry.tags.length > 0 ? 4 : 0 }}>
+            <AddManualTagButton
+              sha={entry.sha}
+              existingTagIds={entry.tags.map((t) => t.tag)}
+              availableLabels={availableLabels}
+            />
+          </div>
         </div>
       </div>
     </div>
