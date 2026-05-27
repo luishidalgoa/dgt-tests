@@ -54,6 +54,12 @@ export interface Candidate {
   attribution?: string
   /** Mime type guessed */
   contentType?: string
+  /** True si esta imagen YA fue descargada en una sesión anterior
+   *  (su URL aparece como sourceUrl en alternative_references.json).
+   *  El endpoint find-replacements lo computa cruzando con el registry
+   *  para que el admin no vuelva a descargarla por equivocación.
+   *  La UI pinta el botón en verde con "Guardada". */
+  alreadyDownloaded?: boolean
 }
 
 export interface SearchOpts {

@@ -12,6 +12,7 @@ import {
   type Candidate,
   type ImageType,
 } from "@/lib/reverseImageSearch"
+import type { AlternativeReferencesData } from "@/lib/imagesBankR2"
 
 /**
  * POST /api/admin/images-bank/find-replacements
@@ -197,6 +198,36 @@ export async function POST(req: NextRequest) {
       }
       candidates = await findFromAllProviders(searchOpts)
       providersUsed = all.map((p) => p.name)
+    }
+
+    // ── Marcar candidatos ya descargados anteriormente ───────────────
+    // Leemos meta/alternative_references.json y construimos un set con
+    // todas las URLs registradas en cualquier originalSha (no solo el
+    // que disparó esta búsqueda — una misma URL de Pixabay puede haber
+    // sido guardada como ref de varias imágenes del banco). Marcamos
+    // cada candidato cuya sourceUrl o url aparezca en el set para que
+    // el modal pueda pintarlo como "Guardada" sin tener que descargar
+    // el binario para calcular el SHA y compararlo.
+    try {
+      const registry = await getJsonFromR2<AlternativeReferencesData>(R2_META_KEYS.alternativeReferences)
+      if (registry?.references) {
+        const downloadedSourceUrls = new Set<string>()
+        for (const arr of Object.values(registry.references)) {
+          for (const r of arr ?? []) {
+            if (r.sourceUrl) downloadedSourceUrls.add(r.sourceUrl)
+          }
+        }
+        if (downloadedSourceUrls.size > 0) {
+          candidates = candidates.map((c) => ({
+            ...c,
+            alreadyDownloaded:
+              downloadedSourceUrls.has(c.sourceUrl) ||
+              downloadedSourceUrls.has(c.url),
+          }))
+        }
+      }
+    } catch {
+      // Si el registry no carga seguimos sin marcado — no es fatal.
     }
 
     return NextResponse.json({

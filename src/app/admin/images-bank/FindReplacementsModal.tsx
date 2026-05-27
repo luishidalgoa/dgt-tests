@@ -42,6 +42,11 @@ interface Candidate {
   tags?:        string[]
   attribution?: string
   contentType?: string
+  /** True si esta sourceUrl/url ya aparece en alternative_references.json
+   *  (descargada en una sesión anterior). El backend lo marca cruzando con
+   *  el registry. Si es true → la card aparece "Guardada" en verde sin
+   *  tener que descargar el binario para deducirlo. */
+  alreadyDownloaded?: boolean
 }
 
 interface FindRepResponse {
@@ -363,6 +368,13 @@ function FindReplacementsModal({
           ? `Ya estaba guardada — refs totales: ${data.totalForOriginal ?? refsCount}`
           : `Guardada ✓ SHA ${data.newSha?.slice(0, 10)}… · refs: ${data.totalForOriginal ?? refsCount + 1}`,
       )
+      // Invalida la caché del SHA+tab actual para que la próxima
+      // apertura del modal vuelva a hacer fetch y el backend marque
+      // los candidatos con el `alreadyDownloaded` actualizado. En
+      // memoria ya está cubierto por savedCandidateUrls (para esta
+      // apertura), pero al cerrar+reabrir queremos que el backend
+      // diga la verdad fresca.
+      clearCache(sha, providerSet)
       setSaving(null)
       // No cerramos el modal — el admin probablemente quiere guardar varias
       // referencias para el mismo SHA en una sola apertura. Que cierre él.
@@ -670,7 +682,11 @@ function FindReplacementsModal({
                   candidate={c}
                   onSave={() => handleSave(c)}
                   saving={saving === c.url}
-                  alreadySaved={savedCandidateUrls.has(c.url)}
+                  // "Guardada" combina dos fuentes:
+                  //   - savedCandidateUrls: lo guardado AHORA, en esta apertura
+                  //   - c.alreadyDownloaded: lo guardado en una sesión anterior
+                  //     (lo computa el backend cruzando con el registry)
+                  alreadySaved={savedCandidateUrls.has(c.url) || c.alreadyDownloaded === true}
                   disabled={Boolean(saving)}
                 />
               ))}
