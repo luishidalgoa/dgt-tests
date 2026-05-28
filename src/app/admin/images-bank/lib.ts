@@ -192,10 +192,15 @@ export interface DisplayEntry {
   /** Solo poblado si pendingClassification === true. Metadatos de la
    *  fuente original para que el admin sepa de dónde vino. */
   pendingSource?: {
-    originalSha:  string
-    sourceUrl?:   string
-    provider:     string
-    attribution?: string
+    originalSha:       string
+    /** Filename de la imagen original en classification.json (si existe).
+     *  Permite construir la URL pública para previsualizarla en un modal.
+     *  null si el SHA original ya no está en el banco (raro pero posible
+     *  si el admin la borró tras haber descargado refs). */
+    originalFilename?: string | null
+    sourceUrl?:        string
+    provider:          string
+    attribution?:      string
   }
   /** Cuántas referencias alternativas (Lens/Pixabay/Pexels) se han
    *  descargado a partir de esta imagen — para mostrar como badge y

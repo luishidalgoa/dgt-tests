@@ -37,6 +37,7 @@ import { FindReplacementsButton } from "./FindReplacementsModal"
 import { AddManualTagButton, type AvailableLabel } from "./AddManualTagModal"
 import { TagOverflowChip } from "./TagListPopover"
 import { DeleteImageButton } from "./DeleteImageButton"
+import { ViewOriginalRefButton } from "./ViewOriginalRefButton"
 
 export const dynamic = "force-dynamic"
 
@@ -85,7 +86,8 @@ interface PageProps {
     untagged?:  string
     lowconf?:   string
     tagged?:    string  // inverso de untagged: imgs CON al menos 1 tag (cualquier score)
-    withrefs?:  string  // solo imgs con refsCount > 0
+    withrefs?:  string  // solo imgs ORIGINALES con refsCount > 0
+    onlyrefs?:  string  // solo imgs que SON refs descargadas (isAlternativeReference)
     quality?:   string  // QualityTier id, ver QUALITY_TIERS
     sort?:      string  // "asc" | "desc" (default desc) — orden de las pills por count
     gridsort?:  string  // "most_recent" sobreescribe el orden del grid; ausente = auto
@@ -285,6 +287,7 @@ function buildFilterURL(opts: {
   lowconf?:  boolean
   tagged?:   boolean
   withrefs?: boolean
+  onlyrefs?: boolean
   quality?:  QualityTier | null
   sort?:     "asc" | "desc"
   gridsort?: GridSort
@@ -295,6 +298,7 @@ function buildFilterURL(opts: {
   if (opts.lowconf)                               params.set("lowconf",  "1")
   if (opts.tagged)                                params.set("tagged",   "1")
   if (opts.withrefs)                              params.set("withrefs", "1")
+  if (opts.onlyrefs)                              params.set("onlyrefs", "1")
   if (opts.quality)                               params.set("quality",  opts.quality)
   if (opts.sort && opts.sort !== "desc")          params.set("sort",     opts.sort)
   if (opts.gridsort && opts.gridsort !== "auto")  params.set("gridsort", opts.gridsort)
@@ -309,6 +313,7 @@ export default async function ImagesBankPage({ searchParams }: PageProps) {
   const lowConfFilter  = params.lowconf  === "1"
   const withTagsFilter = params.tagged === "1"
   const withRefsFilter = params.withrefs === "1"
+  const onlyRefsFilter = params.onlyrefs === "1"
   const sortDir: "asc" | "desc" = params.sort === "asc" ? "asc" : "desc"
   // gridSort: el grid SIEMPRE muestra divisores por fecha.
   //   - "auto"   (default): divisores por addedAt (mtime). Dentro de
@@ -616,6 +621,7 @@ npm run images:upload-metadata`}</pre>
       pendingClassification: true,
       pendingSource: {
         originalSha,
+        originalFilename: classification.images[originalSha]?.filename ?? null,
         sourceUrl:   ref.sourceUrl,
         provider:    ref.provider,
         attribution: ref.attribution,
@@ -647,6 +653,10 @@ npm run images:upload-metadata`}</pre>
   } else if (withRefsFilter) {
     entries     = entries.filter((e) => (e.refsCount ?? 0) > 0)
     filterLabel = "Con referencias descargadas"
+    filterIcon  = <TagIcon className="h-4 w-4" />
+  } else if (onlyRefsFilter) {
+    entries     = entries.filter((e) => e.isAlternativeReference === true)
+    filterLabel = "Solo refs descargadas"
     filterIcon  = <TagIcon className="h-4 w-4" />
   } else if (tagFilter) {
     entries     = entries.filter((e) => e.tags.some((t) => t.tag === tagFilter))
@@ -745,9 +755,11 @@ npm run images:upload-metadata`}</pre>
   let noConfCount   = 0
   let pendingCount  = 0
   let withRefsCount = 0
+  let onlyRefsTotal = 0
   for (const e of entriesAll) {
     if (e.pendingClassification) pendingCount++
     if ((e.refsCount ?? 0) > 0)  withRefsCount++
+    if (e.isAlternativeReference) onlyRefsTotal++
     if (e.tags.length === 0) {
       noTagsCount++
       noConfCount++
@@ -977,6 +989,19 @@ npm run images:upload-metadata`}</pre>
                 count={withRefsCount}
                 href={buildFilterURL({ withrefs: true, gridsort: gridSort })}
                 active={withRefsFilter}
+                color="ok"
+                icon={<TagIcon className="h-3 w-3" />}
+              />
+            )}
+            {/* Filtro inverso: muestra SOLO las imágenes que SON refs
+                descargadas (las que pintan badge PENDIENTE). Útil para
+                auditar el material descargado por Lens/stock. */}
+            {onlyRefsTotal > 0 && (
+              <FilterPill
+                label="Solo refs"
+                count={onlyRefsTotal}
+                href={buildFilterURL({ onlyrefs: true, gridsort: gridSort })}
+                active={onlyRefsFilter}
                 color="ok"
                 icon={<TagIcon className="h-3 w-3" />}
               />
@@ -1409,7 +1434,18 @@ function ImageTile({ entry, currentTag, getDisplay, buildTagURL, anchorId, refsC
             borderRadius: 4,
             lineHeight: 1.35,
           }}>
-            Ref de <code style={{ fontSize: 9.5 }}>{entry.pendingSource.originalSha.slice(0, 8)}…</code>
+            {/* SHA clickable → modal portal con la imagen original a tamaño
+                grande. Si el original ya no está en el banco (borrado tras
+                descargar refs), el botón se pinta inactivo. */}
+            Ref de{" "}
+            <ViewOriginalRefButton
+              originalSha={entry.pendingSource.originalSha}
+              originalImageUrl={
+                entry.pendingSource.originalFilename
+                  ? imageUrl(entry.pendingSource.originalFilename)
+                  : null
+              }
+            />
             {" · "}<strong>{entry.pendingSource.provider}</strong>
             {entry.pendingSource.attribution && (
               <> · <span style={{ color: "var(--slate-500)" }}>{entry.pendingSource.attribution}</span></>
