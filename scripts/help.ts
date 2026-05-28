@@ -97,12 +97,15 @@ const WORKFLOWS: Workflow[] = [
   {
     title:       "Primera vez tras clonar el repo",
     emoji:       "🆕",
-    description: "Setup inicial del clasificador SigLIP (Python + torch + transformers). Solo una vez.",
+    description: "Setup completo de un PC nuevo: deps Node + venv del clasificador + bajada de imgs + metadata + (opcional) Modal cloud. Idempotente — re-correrlo no hace daño. Después de esto saltas directo a los workflows ☁️ o 🏠 según prefieras cloud o local.",
     steps: [
-      { cmd: "npm install",                       comment: "deps de Node.js" },
-      { cmd: "npm run images:setup-classifier",   comment: "crea venv, instala torch (CPU) + transformers + resto de deps Python" },
-      { cmd: "npm run images:download-r2",        comment: "baja las imágenes a public/images/ (si no las tienes)" },
-      { cmd: "npm run images:download-metadata",  comment: "baja los JSONs del banco desde R2 a tools/image-audit/" },
+      { cmd: "npm install",                          comment: "deps de Node.js (Next, Prisma, tsx, etc.)" },
+      { cmd: "npm run images:setup-classifier",      comment: "crea venv en tools/image-classifier + instala torch CPU + transformers + modal + boto3" },
+      { cmd: "npm run images:download-r2",           comment: "baja TODAS las imágenes del bucket R2 → /public/images/ (solo si vas a clasificar en local)" },
+      { cmd: "npm run images:download-metadata",     comment: "baja los JSONs del banco desde R2 → tools/image-audit/ (classifications, swipes, manual_tags, refs, etc.)" },
+      { cmd: "# (opcional, solo para cloud)",        comment: "── si vas a usar Modal cloud:" },
+      { cmd: "# (browser) https://modal.com/signup", comment: "  crea cuenta gratis: free tier $30/mes (~1200 runs), sin tarjeta" },
+      { cmd: "npm run images:setup-modal",           comment: "  abre browser, te logueas, guarda token en ~/.modal.toml" },
     ],
   },
   {
@@ -124,16 +127,6 @@ const WORKFLOWS: Workflow[] = [
       { cmd: "npm run images:download-metadata", comment: "baja swipes admin desde prod" },
       { cmd: "npm run images:classify-hf",       comment: "clasifica via HF Inference API (≈1-3s/img). Etiquetas de labels.py, igual que el local." },
       { cmd: "npm run images:upload-metadata",   comment: "publica nuevos JSONs a R2" },
-    ],
-  },
-  {
-    title:       "Setup inicial Modal — una sola vez por máquina",
-    emoji:       "🔧",
-    description: "Prepara el venv local + autentica con Modal. Solo se hace la primera vez (o tras formatear el PC / clonar el repo en otra máquina). Después saltas directo al workflow ☁️ siguiente.",
-    steps: [
-      { cmd: "npm run images:setup-classifier",   comment: "crea venv en tools/image-classifier + instala torch/transformers/modal/etc. (idempotente, ~10s si ya estaba)" },
-      { cmd: "# (browser) https://modal.com/signup", comment: "crea cuenta gratis si no la tienes — free tier $30/mes (~1200 runs/mes), sin tarjeta" },
-      { cmd: "npm run images:setup-modal",        comment: "abre browser, te logueas con Google/GitHub, y guarda el token en ~/.modal.toml" },
     ],
   },
   {
@@ -182,13 +175,22 @@ const WORKFLOWS: Workflow[] = [
     ],
   },
   {
-    title:       "Reanalizar el banco en cloud GPU — Modal.com",
-    emoji:       "☁️",
-    description: "Una vez hecho el setup 🔧, ESTE es el único comando que necesitas. Modal lee las imgs de R2 → clasifica en GPU T4 (~3 min para 1.7k imgs) → escribe meta/classification.json de vuelta a R2 + cleanup automático de manual_tags. Prod lo lee al instante, sin redeploy. Tu PC solo dispara el run; el modelo NO se descarga en local.",
+    title:       "Smoke test antes de cambios grandes",
+    emoji:       "🔬",
+    description: "Antes de gastar una hora reclasificando 1700 imgs tras cambiar LABELS o prompts, valida con un subset de 10 imgs primero. Si los tags pintan bien, lanza el run completo. Si no, vuelves a iterar sin haber gastado quota AI ni tiempo en Modal.",
     steps: [
-      { cmd: "npm run images:classify-modal",                comment: "DEFAULT — incremental: solo procesa SHAs nuevas vs el classification.json que ya hay en R2" },
-      { cmd: "npm run images:classify-modal -- --limit 10",  comment: "(opcional) smoke test con 10 imgs antes de tirar todo — útil tras cambios en prompts o labels" },
-      { cmd: "npm run images:classify-modal -- --force",     comment: "(opcional) reprocesa TODAS las imgs aunque ya estuvieran clasificadas — usa esto cuando cambies LABELS / prompts" },
+      { cmd: "npm run images:classify-modal -- --limit 10",     comment: "10 imgs en Modal (~30s) — barato, lee tu .env.classifier y aplica las mismas fases A+B+C" },
+      { cmd: "# (UI) abre /admin/images-bank · sort: 🕐 Más recientes", comment: "compara visualmente los tags emitidos con los que tú habrías puesto" },
+      { cmd: "npm run images:classify-modal -- --force",        comment: "si OK, lanza el run completo (~3-5 min para todo el banco)" },
+    ],
+  },
+  {
+    title:       "Imágenes faltantes en local (warning de feedback)",
+    emoji:       "📥",
+    description: "Si al correr `images:compute-prototypes-local` o `images:classify` ves warnings tipo \"N SHAs en feedback pero NO en public/images/ — skip\", significa que el admin ha dado feedback (confirmaciones, manual_tags, refs) a imágenes cuyos binarios solo viven en R2 y NO están en tu local. Resolución: bajarlas. Pasa frecuentemente con refs nuevas descargadas por Lens.",
+    steps: [
+      { cmd: "npm run images:download-r2",                 comment: "baja TODO el bucket → public/images/ (idempotente — solo trae lo que falta)" },
+      { cmd: "npm run images:compute-prototypes-local",    comment: "reintenta — el warning desaparece y los prototipos se computan" },
     ],
   },
   {
@@ -247,6 +249,9 @@ const CATEGORIES: Category[] = [
       { name: "test",       description: "Suite de tests completa (vitest --run)" },
       { name: "test:watch", description: "Tests en modo watch (re-ejecuta al cambiar)" },
       { name: "test:ui",    description: "Vitest UI en el navegador (más visual)" },
+      { name: "e2e",        description: "Tests E2E con Playwright (requiere `e2e:install` la primera vez)" },
+      { name: "e2e:ui",     description: "Playwright en modo UI interactivo (debug visual paso a paso)" },
+      { name: "e2e:install", description: "Instala el browser Chromium para Playwright (solo la primera vez por máquina)" },
     ],
   },
   {
@@ -315,6 +320,19 @@ const CATEGORIES: Category[] = [
         examples: [
           "npm run turso:sync-ai-questions",
           "npm run turso:sync-ai-questions -- --dry-run",
+        ],
+      },
+      {
+        name:        "turso:sync-question",
+        description: "UPSERTea a Turso UNA o varias preguntas concretas tras editarlas en /admin/questions. Match por externalId; refresca campos editables + DELETE/INSERT de Options. Idempotente.",
+        args: [
+          { name: "--id <N | N,M,...>", type: "string", required: true,  description: "Id local de la(s) pregunta(s) a subir (separado por comas)." },
+          { name: "--dry-run",          type: "bool",   default: "off",   description: "Preview sin escribir." },
+        ],
+        examples: [
+          "npm run turso:sync-question -- --id 123",
+          "npm run turso:sync-question -- --id 123,456,789",
+          "npm run turso:sync-question -- --id 123 --dry-run",
         ],
       },
     ],
@@ -589,7 +607,7 @@ const CATEGORIES: Category[] = [
       },
       {
         name:        "images:classify-modal",
-        description: "Clasifica 100% en cloud GPU (Modal.com): lee imgs de R2 → SigLIP en T4 → escribe meta/classification.json. Consume tag_confirmations + tag_exclusions + manual_tags + refined_labels + prototypes (Fases A+B+C). Al terminar, MIGRA automáticamente manual_tags.json → tag_confirmations.json en R2 (cleanup atómico tras run exitoso, con audit log en manual_tags_history.json). Requiere setup previo: `npm run images:setup-classifier` + `npm run images:setup-modal` (ver workflow 🔧).",
+        description: "Clasifica 100% en cloud GPU (Modal.com): lee imgs de R2 → SigLIP en T4 → escribe meta/classification.json. Consume tag_confirmations + tag_exclusions + manual_tags + refined_labels + prototypes (Fases A+B+C). Al terminar, MIGRA automáticamente manual_tags.json → tag_confirmations.json en R2 (cleanup atómico tras run exitoso, con audit log en manual_tags_history.json). Requiere setup previo: `npm run images:setup-classifier` + `npm run images:setup-modal` (ver workflow 🆕).",
         args: [
           { name: "--force",             type: "bool",   default: "off", description: "Reprocesa TODAS las imágenes aunque ya estén en classification.json de R2." },
           { name: "--limit <N>",         type: "number", default: "0",   description: "Cap a las primeras N imágenes (smoke test, no usa --force)." },
