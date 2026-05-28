@@ -139,12 +139,12 @@ const WORKFLOWS: Workflow[] = [
   {
     title:       "Aplicar TODO el feedback acumulado (A + B + C) — CLOUD",
     emoji:       "🚀",
-    description: "Pipeline completo de feedback humano → mejor classifier, usando MODAL. Lo corres cuando hayas swipeado en /admin/images-bank y quieras volcar TODO el feedback al modelo. B refina prompts globalmente, C añade prototipos per-imagen, el classifier aplica AMBOS en cascada. Tiempo total ~10 min en cloud GPU.",
+    description: "Pipeline completo de feedback humano → mejor classifier, usando MODAL. Lo corres cuando hayas swipeado / tagueado / descargado refs en /admin/images-bank y quieras volcar TODO el feedback al modelo. A aplica boost a confirmaciones + manual_tags, B refina prompts globalmente, C añade prototipos per-imagen (incl. los SHAs manual-tagueados), el classifier aplica TODO en cascada y al final hace cleanup atómico de manual_tags → tag_confirmations. Tiempo total ~10 min en cloud GPU.",
     steps: [
-      { cmd: "npm run images:audit-feedback",            comment: "(opcional) ver qué hay acumulado — útil para decidir si vale la pena B/C o esperar más swipes" },
+      { cmd: "npm run images:audit-feedback",            comment: "(opcional) ver qué hay acumulado (confirmaciones, exclusiones, manual_tags, refs) — guía las thresholds de B/C" },
       { cmd: "npm run images:refine-labels",             comment: "Fase B — Gemini analiza las imgs confirmadas/excluidas por label y reescribe prompts. ~30-90s. Persiste en meta/refined_labels.json (R2 + local)" },
-      { cmd: "npm run images:compute-prototypes",        comment: "Fase C — Modal GPU computa embeddings SigLIP de las imgs confirmadas/excluidas como prototipos kNN. ~2-3 min. Persiste en meta/prototypes.json (R2 + local)" },
-      { cmd: "npm run images:classify-modal -- --force", comment: "Re-clasifica todo el banco con A + B + C aplicados en cascada (refined prompts + kNN boost/penalty + flag humanConfirmed). ~3-5 min. Sube classification.json a R2" },
+      { cmd: "npm run images:compute-prototypes",        comment: "Fase C — Modal GPU computa embeddings SigLIP de confirmadas + excluidas + manual_tags como prototipos kNN. ~2-3 min. Persiste en meta/prototypes.json" },
+      { cmd: "npm run images:classify-modal -- --force", comment: "Re-clasifica todo: refined prompts + kNN boost/penalty + flags humanConfirmed/humanAssigned. Al finalizar: manual_tags.json → tag_confirmations.json en R2 (cleanup automático). ~3-5 min" },
     ],
   },
   {
@@ -152,12 +152,12 @@ const WORKFLOWS: Workflow[] = [
     emoji:       "🏠",
     description: "Pipeline equivalente al 🚀 pero corriendo TODO en tu venv local SIN Modal. Más lento (CPU vs GPU) pero sin dependencia cloud. Útil si Modal está agotado, quieres iterar sin gastar cuota Modal, o trabajas offline. Las imgs deben estar en public/images/ (`images:download-r2` si no).",
     steps: [
-      { cmd: "npm run images:download-metadata",             comment: "sincroniza tag_confirmations + tag_exclusions + refined_labels + prototypes desde R2 → local" },
+      { cmd: "npm run images:download-metadata",             comment: "sincroniza tag_confirmations + tag_exclusions + manual_tags + refined_labels + prototypes + alternative_references desde R2 → local" },
       { cmd: "npm run images:refine-labels",                 comment: "Fase B — Gemini analiza imgs y reescribe prompts. ~30-90s (Gemini API local). Sube a R2 + guarda copia local" },
-      { cmd: "npm run images:compute-prototypes-local",      comment: "Fase C local — SigLIP en tu CPU/GPU computa embeddings (~45s para 50 protos). Sube a R2 (--no-upload para evitar)" },
-      { cmd: "npm run images:classify -- --force",           comment: "Classify local con A + B + C aplicados. ~30-45 min en CPU para 1748 imgs. Discovery in-flight Gemini/Groq si están disponibles" },
+      { cmd: "npm run images:compute-prototypes-local",      comment: "Fase C local — SigLIP en tu CPU/GPU computa embeddings (incl. manual_tags como positivos). ~45s para 50 protos. Sube a R2 (--no-upload para evitar)" },
+      { cmd: "npm run images:classify -- --force",           comment: "Classify local con A + B + C aplicados + cleanup local manual_tags → tag_confirmations. ~30-45 min en CPU para 1748 imgs" },
       { cmd: "npm run images:diff-classification",           comment: "🔍 VALIDA el JSON nuevo vs el de R2 — detecta regresiones de feedback humano antes de subir" },
-      { cmd: "npm run images:upload-metadata",               comment: "si el diff sale OK, publica el classification.json local a R2 → prod lo lee al instante" },
+      { cmd: "npm run images:upload-metadata",               comment: "si el diff sale OK, publica classification + tag_confirmations actualizado + manual_tags vacío a R2 → prod lo lee al instante" },
     ],
   },
   {
@@ -184,11 +184,32 @@ const WORKFLOWS: Workflow[] = [
   {
     title:       "Reanalizar el banco en cloud GPU — Modal.com",
     emoji:       "☁️",
-    description: "Una vez hecho el setup 🔧, ESTE es el único comando que necesitas. Modal lee las imgs de R2 → clasifica en GPU T4 (~3 min para 1.7k imgs) → escribe meta/classification.json de vuelta a R2. Prod lo lee al instante, sin redeploy. Tu PC solo dispara el run; el modelo NO se descarga en local.",
+    description: "Una vez hecho el setup 🔧, ESTE es el único comando que necesitas. Modal lee las imgs de R2 → clasifica en GPU T4 (~3 min para 1.7k imgs) → escribe meta/classification.json de vuelta a R2 + cleanup automático de manual_tags. Prod lo lee al instante, sin redeploy. Tu PC solo dispara el run; el modelo NO se descarga en local.",
     steps: [
       { cmd: "npm run images:classify-modal",                comment: "DEFAULT — incremental: solo procesa SHAs nuevas vs el classification.json que ya hay en R2" },
       { cmd: "npm run images:classify-modal -- --limit 10",  comment: "(opcional) smoke test con 10 imgs antes de tirar todo — útil tras cambios en prompts o labels" },
       { cmd: "npm run images:classify-modal -- --force",     comment: "(opcional) reprocesa TODAS las imgs aunque ya estuvieran clasificadas — usa esto cuando cambies LABELS / prompts" },
+    ],
+  },
+  {
+    title:       "Tags manuales (admin asigna labels desde la UI)",
+    emoji:       "🏷️",
+    description: "El admin abre /admin/images-bank, hace click en '+ Añadir tag' en una card, escoge un label (o crea uno nuevo) y opcionalmente justifica el por qué. Esos manual_tags se almacenan en meta/manual_tags.json y SE INYECTAN en el classifier como verdad humana: boost a 0.30 + flag humanAssigned + prototipo kNN positivo. Tras un run exitoso del classifier MIGRAN automáticamente a tag_confirmations.json (cleanup atómico con audit log en manual_tags_history.json).",
+    steps: [
+      { cmd: "# (UI) /admin/images-bank → click '+ Añadir tag' en una card", comment: "el admin asigna el label + reason opcional" },
+      { cmd: "npm run images:download-metadata",            comment: "(local) baja manual_tags.json para incluirlo en el próximo run local" },
+      { cmd: "npm run images:compute-prototypes",            comment: "(opcional) genera prototipos kNN visuales para los SHAs manual-tagueados" },
+      { cmd: "npm run images:classify-modal -- --force",     comment: "re-clasifica + aplica los manual_tags + cleanup: manual_tags.json → tag_confirmations.json en R2" },
+    ],
+  },
+  {
+    title:       "Guardar referencias visuales (Lens / Pexels+Pixabay)",
+    emoji:       "🔍",
+    description: "El admin abre /admin/images-bank, hace click en la 🔍 lupa de una card y elige tab 'Pexels + Pixabay' (free, keyword) o 'Google Lens' (SerpAPI, reverse image visual real). Cada candidato lo guarda con 'Guardar referencia' → descarga el binario, lo sube a R2 con su nuevo SHA + registra el vínculo en meta/alternative_references.json. La imagen queda PENDIENTE en el banco hasta que el classifier la procese en su siguiente run.",
+    steps: [
+      { cmd: "# (UI) /admin/images-bank → click 🔍 lupa → tab → 'Guardar referencia'", comment: "el admin descarga la imagen ↑ R2 con SHA propio" },
+      { cmd: "# (UI) filtro 'Con refs' o sort '↻ Con más refs'", comment: "ver las imágenes con referencias descargadas para auditar" },
+      { cmd: "npm run images:classify-modal",                comment: "el classifier descubre los SHAs huérfanos en R2 y los clasifica (PENDIENTE → clasificada)" },
     ],
   },
   {
@@ -462,11 +483,11 @@ const CATEGORIES: Category[] = [
       },
       {
         name:        "images:upload-metadata",
-        description: "Sube todos los JSONs de tools/image-audit/ → bucket R2 bajo prefix meta/. Incluye: classification.json, sha-audit.json, discovered_labels.json, refined_labels.json (Fase B), prototypes.json (Fase C), tag_exclusions.json, tag_confirmations.json. Idempotente (overwrite). Skip silencioso para los que no existen en local.",
+        description: "Sube todos los JSONs de tools/image-audit/ → bucket R2 bajo prefix meta/. Incluye: classification.json, sha-audit.json, discovered_labels.json, refined_labels.json (Fase B), prototypes.json (Fase C), tag_exclusions.json, tag_confirmations.json, alternative_references.json (refs Lens/stock guardadas por admin), manual_tags.json (tags asignados manualmente, pendientes de migración). Idempotente (overwrite). Skip silencioso para los que no existen en local.",
       },
       {
         name:        "images:download-metadata",
-        description: "Baja todos los meta/*.json de R2 → tools/image-audit/. Espejo de upload-metadata. Útil ANTES de classify local para sincronizar swipes admin recientes + refinements + prototipos kNN actualizados.",
+        description: "Baja todos los meta/*.json de R2 → tools/image-audit/. Espejo de upload-metadata. Útil ANTES de classify local para sincronizar swipes admin recientes + tags manuales asignados + refs descargadas + refinements + prototipos kNN actualizados.",
       },
 
       // ── Pipeline de análisis / clasificación ────────────────────
@@ -503,7 +524,7 @@ const CATEGORIES: Category[] = [
       },
       {
         name:        "images:compute-prototypes",
-        description: "Computa embeddings SigLIP de imágenes confirmadas/excluidas y los persiste como prototipos kNN en meta/prototypes.json (Fase C). El classifier los usa para ajustar scores via similitud coseno (boost para positivos, penalty para negativos). REQUIERE MODAL.",
+        description: "Computa embeddings SigLIP de imágenes con feedback humano (confirmadas + excluidas + manual_tags) y los persiste como prototipos kNN en meta/prototypes.json (Fase C). El classifier los usa para ajustar scores via similitud coseno (boost para positivos, penalty para negativos). Los manual_tags se proyectan como positivos in-memory para esta build (no escribe manual_tags.json — esa migración la hace el classifier al final de su run). REQUIERE MODAL.",
         args: [
           { name: "--force",         type: "bool",   default: "off", description: "Re-computa TODOS los prototipos desde cero (ignora R2 existing). Útil tras cambiar MODEL_ID." },
           { name: "--only-label <id>", type: "string",               description: "Solo computa prototipos para ese label." },
@@ -517,7 +538,7 @@ const CATEGORIES: Category[] = [
       },
       {
         name:        "images:compute-prototypes-local",
-        description: "Equivalente a `compute-prototypes` pero corre en tu venv local SIN Modal. Usa el mismo SigLIP local que classify_siglip.py. Necesita las imgs en public/images/ (corre `images:download-r2` antes si faltan). Sube a R2 por defecto (--no-upload para evitar).",
+        description: "Equivalente a `compute-prototypes` pero corre en tu venv local SIN Modal. Usa el mismo SigLIP local que classify_siglip.py. Necesita las imgs en public/images/ (corre `images:download-r2` antes si faltan). Incluye manual_tags como prototipos positivos in-memory. Sube a R2 por defecto (--no-upload para evitar).",
         args: [
           { name: "--force",            type: "bool",   default: "off", description: "Recomputa TODOS los prototipos desde cero." },
           { name: "--only-label <id>",  type: "string",                 description: "Solo computa prototipos para ese label." },
@@ -539,9 +560,9 @@ const CATEGORIES: Category[] = [
       },
       {
         name:        "images:audit-feedback",
-        description: "Lee tag_confirmations + tag_exclusions de R2 y muestra distribución por label. Útil para decidir entre estrategias B (refine prompts) y C (kNN sobre embeddings).",
+        description: "Lee tag_confirmations + tag_exclusions + manual_tags + alternative_references de R2 y muestra distribución por label. Útil para decidir si correr B (refine prompts), C (kNN sobre embeddings) o procesar las refs pendientes.",
         examples: [
-          "npm run images:audit-feedback   # tras swipear un rato en /admin/images-bank",
+          "npm run images:audit-feedback   # tras swipear / taguear / descargar refs en /admin/images-bank",
         ],
       },
       {
@@ -568,7 +589,7 @@ const CATEGORIES: Category[] = [
       },
       {
         name:        "images:classify-modal",
-        description: "Clasifica 100% en cloud GPU (Modal.com): lee imgs de R2 → SigLIP en T4 → escribe meta/classification.json. Requiere setup previo: `npm run images:setup-classifier` + `npm run images:setup-modal` (ver workflow 🔧).",
+        description: "Clasifica 100% en cloud GPU (Modal.com): lee imgs de R2 → SigLIP en T4 → escribe meta/classification.json. Consume tag_confirmations + tag_exclusions + manual_tags + refined_labels + prototypes (Fases A+B+C). Al terminar, MIGRA automáticamente manual_tags.json → tag_confirmations.json en R2 (cleanup atómico tras run exitoso, con audit log en manual_tags_history.json). Requiere setup previo: `npm run images:setup-classifier` + `npm run images:setup-modal` (ver workflow 🔧).",
         args: [
           { name: "--force",             type: "bool",   default: "off", description: "Reprocesa TODAS las imágenes aunque ya estén en classification.json de R2." },
           { name: "--limit <N>",         type: "number", default: "0",   description: "Cap a las primeras N imágenes (smoke test, no usa --force)." },
@@ -586,7 +607,7 @@ const CATEGORIES: Category[] = [
       },
       {
         name:        "images:classify",
-        description: "Clasifica multi-label local con SigLIP + Fase A (humanConfirmed flags) + Fase B (refined_labels.json) + Fase C (kNN sobre prototypes.json) + auto-discovery Gemini→Groq con top-relevant en prompt + cache embeddings. Lee tag_confirmations/exclusions/refined_labels/prototypes desde tools/image-audit/ (sincronizar con `download-metadata` antes).",
+        description: "Clasifica multi-label local con SigLIP. Aplica feedback humano en cascada: A (humanConfirmed/humanAssigned + boost) + B (refined_labels.json) + C (kNN sobre prototypes.json) + auto-discovery Gemini→Groq con top-relevant en prompt + cache de embeddings. Lee tag_confirmations + tag_exclusions + manual_tags + refined_labels + prototypes desde tools/image-audit/ (sincronizar con `download-metadata` antes). Al terminar OK migra manual_tags.json → tag_confirmations.json LOCAL + audit log; corre `upload-metadata` después para sincronizar R2.",
         args: [
           { name: "--input-dir <path>",  type: "string",                description: "Carpeta de imgs (default: public/images). Si no existe, descarga primero con `images:download-r2`." },
           { name: "--output <path>",     type: "string",                description: "JSON salida (default: tools/image-audit/classification.json)." },
@@ -603,19 +624,6 @@ const CATEGORIES: Category[] = [
           "npm run images:classify -- --force                       # re-clasifica todo desde cero",
           "npm run images:classify -- --force --no-gemini --no-groq # solo SigLIP+kNN+refinements, sin gastar quota AI",
           "npm run images:classify -- --retry-problematic           # solo las imgs sin tag confident del run anterior",
-        ],
-      },
-      {
-        name:        "images:find-replacements",
-        description: "Reverse image search vía Bing Visual Search API → public/images/candidates/ + candidates.json",
-        args: [
-          { name: "--candidates-per-image <N>", type: "number", default: "5",   description: "Candidatos por imagen origen." },
-          { name: "--limit <N>",                type: "number",                  description: "Procesa solo las primeras N (test)." },
-          { name: "--dry-run",                  type: "bool",   default: "off",  description: "Hace búsquedas pero NO descarga." },
-        ],
-        examples: [
-          "$env:BING_SEARCH_API_KEY = '...'; npm run images:find-replacements -- --limit 5 --dry-run",
-          "npm run images:find-replacements",
         ],
       },
     ],

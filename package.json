@@ -60,7 +60,6 @@
     "images:compute-prototypes-local": "cd tools/image-classifier && .venv\\Scripts\\python.exe compute_prototypes_local.py",
     "images:setup-classifier": "node -e \"const{execSync}=require('child_process');const p=process.platform==='win32'?'powershell -ExecutionPolicy Bypass -File tools/image-classifier/setup.ps1':'bash tools/image-classifier/setup.sh';execSync(p,{stdio:'inherit'})\"",
     "images:setup-modal": "cd tools/image-classifier && .venv\\Scripts\\modal.exe token new",
-    "images:find-replacements": "cd tools/image-classifier && .venv\\Scripts\\python.exe find_replacements.py",
     "manual:import": "tsx --env-file=.env scripts/import-manual.ts",
     "manual:extract-skeleton": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/extract-manual-skeleton.ts",
     "manual:infer-titles": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/infer-subblock-titles.ts",
