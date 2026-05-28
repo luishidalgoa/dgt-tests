@@ -232,28 +232,17 @@ export interface DisplayEntry {
  *  En TODOS los modos hay divisores temporales (Hoy / Esta semana / …). */
 export type GridSort = "auto" | "recent" | "refs" | "tagged"
 
-/** Buckets temporales para los divisores del grid en modo "más recientes".
- *  Orden = orden visual (de más reciente a más antiguo). */
-export type DateBucket =
-  | "today"
-  | "this_week"
-  | "this_month"
-  | "last_3_months"
-  | "older"
-  | "no_date"
-
-export const DATE_BUCKETS: { id: DateBucket; label: string; sub: string }[] = [
-  { id: "today",         label: "Hoy",                sub: "últimas 24h" },
-  { id: "this_week",     label: "Esta semana",        sub: "últimos 7 días" },
-  { id: "this_month",    label: "Este mes",           sub: "últimos 30 días" },
-  { id: "last_3_months", label: "Últimos 3 meses",    sub: "31-90 días" },
-  { id: "older",         label: "Más antiguas",       sub: "más de 90 días" },
-  // Bucket residual. En modo "Más recientes agregadas" raramente cae
-  // algo (todo archivo en disco tiene mtime). En modo "Más recientes
-  // tagueadas" cae si el classifier aún no se ha re-corrido tras el
-  // upgrade — el fallback (más abajo) lo evita en práctica.
-  { id: "no_date",       label: "Sin fecha conocida", sub: "sin info de fecha" },
-]
+/** Id de un bucket temporal. Antes era un enum fijo (today, this_week,
+ *  this_month, ...) pero los divisores quedaban muy gruesos: 6 días
+ *  apilados bajo "Esta semana" sin distinguir si son de ayer o de hace
+ *  6 días. Ahora son DINÁMICOS:
+ *    - Día calendario individual para los últimos 7 días:
+ *        "today", "yesterday", "day:2", ..., "day:6"
+ *    - Mes para 7+ días pero menos de 12 meses: "month:2026-05"
+ *    - Año para 12+ meses: "year:2025"
+ *    - "no_date" sigue siendo el bucket residual.
+ *  String porque los ids dinámicos no caben en una union limitada. */
+export type DateBucket = string
 
 /**
  * Fecha de fallback para imágenes que en el modo activo no tienen
@@ -287,17 +276,94 @@ export function isImageNew(addedAt: number | null, now: number = Date.now()): bo
   return ageMs >= 0 && ageMs < NEW_IMAGE_BADGE_DAYS * 86_400_000
 }
 
-/** Calcula el bucket temporal de un timestamp (ms desde epoch). `now`
- *  parametrizable para tests deterministas. */
+const MONTH_NAMES_ES = [
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+] as const
+
+/** Fecha estilo "27 mayo 2026" — para el `sub` del divisor. */
+function formatLongDateEs(date: Date): string {
+  const month = MONTH_NAMES_ES[date.getMonth()].toLowerCase()
+  return `${date.getDate()} ${month} ${date.getFullYear()}`
+}
+
+interface BucketInfo {
+  id:      DateBucket
+  label:   string
+  sub:     string
+  /** Para ordenar los buckets cronológicamente desc (mayor = más reciente). */
+  sortKey: number
+}
+
+/**
+ * Calcula el bucket temporal de un timestamp (ms desde epoch). Devuelve
+ * id + label + sub listos para mostrar, y un sortKey para que el caller
+ * ordene los buckets cronológicamente desc sin reimplementar la lógica.
+ *
+ * Estrategia (granularidad creciente según antigüedad):
+ *   - Mismo día calendario que `now`           → "Hoy"
+ *   - Día calendario anterior                  → "Ayer"
+ *   - Entre 2 y 6 días calendario antes        → "Hace N días" (uno por día)
+ *   - Menos de 12 meses calendario antes       → "<Mes> <Año>" (uno por mes)
+ *   - 12+ meses antes                          → "<Año>"
+ *   - timestampMs === null                     → "Sin fecha conocida"
+ *
+ * Diferencia con la versión anterior: antes los 6 días entre 1 y 7 se
+ * apilaban todos bajo "Esta semana"; ahora cada día tiene su propio
+ * divisor y se ven separados. Después del séptimo día agrupamos por
+ * mes (no por trimestre) para que las imgs procesadas en mayo y en
+ * abril no se mezclen.
+ *
+ * `now` parametrizable para tests deterministas.
+ */
+export function dateBucketInfoOf(timestampMs: number | null, now: number = Date.now()): BucketInfo {
+  if (timestampMs === null) {
+    return { id: "no_date", label: "Sin fecha conocida", sub: "sin info de fecha", sortKey: -Infinity }
+  }
+  const ts        = new Date(timestampMs)
+  const nowDate   = new Date(now)
+  // Diferencia en DÍAS CALENDARIO (no en ventanas de 24h reales). Una
+  // imagen subida ayer a las 23:59 cuenta como "Ayer" aunque hayan
+  // pasado solo 2 horas.
+  const startOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+  const daysAgo = Math.floor((startOf(nowDate) - startOf(ts)) / 86_400_000)
+  const longDate = formatLongDateEs(ts)
+
+  if (daysAgo <= 0) return { id: "today",     label: "Hoy",   sub: longDate, sortKey: timestampMs }
+  if (daysAgo === 1) return { id: "yesterday", label: "Ayer",  sub: longDate, sortKey: timestampMs }
+  if (daysAgo < 7)   return { id: `day:${daysAgo}`, label: `Hace ${daysAgo} días`, sub: longDate, sortKey: timestampMs }
+
+  // Diferencia en meses calendario. Una img de octubre vista en mayo
+  // del año siguiente = 7 meses (no años).
+  const monthDiff = (nowDate.getFullYear() - ts.getFullYear()) * 12
+                  + (nowDate.getMonth()     - ts.getMonth())
+
+  if (monthDiff < 12) {
+    const ym  = `${ts.getFullYear()}-${String(ts.getMonth() + 1).padStart(2, "0")}`
+    const label = `${MONTH_NAMES_ES[ts.getMonth()]} ${ts.getFullYear()}`
+    return {
+      id:      `month:${ym}`,
+      label,
+      sub:     `mes completo`,
+      // sortKey por (año*12 + mes) escalado a un rango grande para
+      // mantenerse por debajo de los días pero por encima de los años.
+      sortKey: (ts.getFullYear() * 12 + ts.getMonth()) * 1e6,
+    }
+  }
+
+  // 12+ meses → bucket por año
+  return {
+    id:      `year:${ts.getFullYear()}`,
+    label:   `${ts.getFullYear()}`,
+    sub:     "año completo",
+    sortKey: ts.getFullYear(),
+  }
+}
+
+/** Compat: la API vieja devolvía solo el id como string. Algunos tests
+ *  externos podrían usarla. Mantengo el nombre y delego al nuevo helper. */
 export function dateBucketOf(timestampMs: number | null, now: number = Date.now()): DateBucket {
-  if (timestampMs === null) return "no_date"
-  const ageMs = now - timestampMs
-  const day = 86_400_000
-  if (ageMs < day)        return "today"
-  if (ageMs < 7  * day)   return "this_week"
-  if (ageMs < 30 * day)   return "this_month"
-  if (ageMs < 90 * day)   return "last_3_months"
-  return "older"
+  return dateBucketInfoOf(timestampMs, now).id
 }
 
 export interface DateBucketGroup {
@@ -314,8 +380,9 @@ export interface DateBucketGroup {
  *   - `(e) => e.taggedAt` → modo "Más recientes tagueadas"
  *
  * Preserva el orden interno de `entries` dentro de cada bucket (el
- * caller pre-ordena por fecha desc). Solo devuelve buckets no vacíos
- * en el orden canónico (Hoy → … → Sin fecha).
+ * caller pre-ordena por fecha desc). Los buckets se devuelven en orden
+ * cronológico desc (más recientes primero), con "Sin fecha conocida"
+ * al final.
  *
  * `now` parametrizable para tests deterministas.
  */
@@ -324,20 +391,27 @@ export function groupByDateBucket(
   selector: (e: DisplayEntry) => number | null,
   now: number = Date.now(),
 ): DateBucketGroup[] {
-  const byBucket = new Map<DateBucket, DisplayEntry[]>()
+  // Acumulamos por id de bucket + recordamos la metadata (label, sub,
+  // sortKey) de la primera entry que cayó en cada uno — todas las del
+  // mismo bucket tienen la misma label/sub salvo la fecha exacta, que
+  // mostramos como rango si difieren (se hace abajo).
+  const byBucket = new Map<DateBucket, { info: BucketInfo; entries: DisplayEntry[] }>()
   for (const e of entries) {
-    const b = dateBucketOf(selector(e), now)
-    if (!byBucket.has(b)) byBucket.set(b, [])
-    byBucket.get(b)!.push(e)
+    const info = dateBucketInfoOf(selector(e), now)
+    const cur  = byBucket.get(info.id)
+    if (cur) cur.entries.push(e)
+    else     byBucket.set(info.id, { info, entries: [e] })
   }
-  // Devolver en orden canónico (DATE_BUCKETS ya está ordenado)
-  const out: DateBucketGroup[] = []
-  for (const b of DATE_BUCKETS) {
-    const list = byBucket.get(b.id)
-    if (list && list.length > 0) {
-      out.push({ bucket: b.id, label: b.label, sub: b.sub, entries: list })
-    }
-  }
+  // Orden final: buckets cronológicamente desc por sortKey ("Hoy" arriba,
+  // "Sin fecha conocida" abajo del todo con sortKey -Infinity).
+  const out: DateBucketGroup[] = [...byBucket.values()]
+    .sort((a, b) => b.info.sortKey - a.info.sortKey)
+    .map(({ info, entries: es }) => ({
+      bucket:  info.id,
+      label:   info.label,
+      sub:     info.sub,
+      entries: es,
+    }))
   return out
 }
 
