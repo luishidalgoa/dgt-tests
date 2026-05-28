@@ -4,8 +4,7 @@ import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3"
 import { requireAdmin } from "@/lib/adminGuard"
 import { db } from "@/lib/db"
 import {
-  getJsonFromR2,
-  putJsonToR2,
+  updateJsonInR2,
   R2_META_KEYS,
   type AlternativeReferencesData,
   type ManualTagsData,
@@ -123,102 +122,122 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // ── 2. Limpieza de metadata JSONs en R2 ─────────────────────────
-  // Cargamos los JSONs relevantes en paralelo y vamos limpiando cada
-  // uno. La extensión la deducimos del filename si está en
-  // classification, si no de alternative_references — la necesitamos
-  // para borrar el binario correcto de R2.
-  const [classification, confirmations, exclusions, manualTags, altRefs] = await Promise.all([
-    getJsonFromR2<{ images: Record<string, { filename: string }> }>(R2_META_KEYS.classification),
-    getJsonFromR2<{ confirmations?: Record<string, string[]> }>(R2_META_KEYS.tagConfirmations),
-    getJsonFromR2<{ exclusions?:    Record<string, string[]> }>(R2_META_KEYS.tagExclusions),
-    getJsonFromR2<ManualTagsData>(R2_META_KEYS.manualTags),
-    getJsonFromR2<AlternativeReferencesData>(R2_META_KEYS.alternativeReferences),
-  ])
-
+  // ── 2. Limpieza atómica de metadata JSONs en R2 (con CAS) ───────
+  // Cada JSON se modifica con un read-modify-write condicional al ETag
+  // leído (`updateJsonInR2` hace reintentos automáticos si otra request
+  // escribió en medio). Resuelve la race condition donde dos deletes
+  // concurrentes "revivían" entries que el otro había borrado.
+  //
+  // La extensión del binario se necesita para borrarlo de R2, así que
+  // hacemos una primera lectura libre (sin CAS) para sacarla — incluso
+  // si esta lectura es stale, el peor caso es intentar borrar con la
+  // extensión equivocada (silent skip en R2). La verdad atómica vive
+  // en los CAS de abajo.
   let extension: string | null = null
   let classificationDirty = false
   let confirmationsDirty  = false
   let exclusionsDirty     = false
   let manualTagsDirty     = false
-  let altRefsDirty        = false
   let altRefsAsOriginal   = false
   let altRefsAsRef        = false
 
-  // 2a. classification.json — quita la entry, deduce extension
-  if (classification?.images?.[sha]) {
-    const filename = classification.images[sha].filename
-    const dotIdx = filename.lastIndexOf(".")
-    if (dotIdx >= 0) extension = filename.slice(dotIdx + 1).toLowerCase()
-    delete classification.images[sha]
-    classificationDirty = true
-  }
-
-  // 2b. tag_confirmations.json
-  if (confirmations?.confirmations?.[sha]) {
-    delete confirmations.confirmations[sha]
-    confirmationsDirty = true
-  }
-
-  // 2c. tag_exclusions.json
-  if (exclusions?.exclusions?.[sha]) {
-    delete exclusions.exclusions[sha]
-    exclusionsDirty = true
-  }
-
-  // 2d. manual_tags.json
-  if (manualTags?.entries?.[sha]) {
-    delete manualTags.entries[sha]
-    manualTagsDirty = true
-  }
-
-  // 2e. alternative_references.json — el SHA puede ser:
-  //   - originalSha (clave del map) → borrar la entry entera
-  //   - newSha (item de algún array) → quitar el item
-  if (altRefs?.references) {
-    if (altRefs.references[sha]) {
-      delete altRefs.references[sha]
-      altRefsAsOriginal = true
-      altRefsDirty = true
-    }
-    for (const [originalSha, arr] of Object.entries(altRefs.references)) {
-      const beforeLen = arr.length
-      const filtered  = arr.filter((r) => r.sha !== sha)
-      if (filtered.length !== beforeLen) {
-        // Captura la ext de la sub-ref antes de filtrar (necesaria si
-        // classification.json no la tenía).
-        if (!extension) {
-          const removed = arr.find((r) => r.sha === sha)
-          if (removed) extension = removed.ext
-        }
-        if (filtered.length === 0) delete altRefs.references[originalSha]
-        else altRefs.references[originalSha] = filtered
-        altRefsAsRef = true
-        altRefsDirty = true
-      }
-    }
-  }
-
-  // Si seguimos sin saber la extensión, intentamos las habituales.
-  // En orden de probabilidad por nuestro pipeline: .png (mayoría del banco
-  // original), .jpg (refs Lens), .webp, .gif.
-  const extensionsToTry = extension ? [extension] : ["png", "jpg", "jpeg", "webp", "gif"]
-
-  // ── 3. Persistir JSONs limpios en paralelo ──────────────────────
-  const writes: Promise<unknown>[] = []
-  if (classificationDirty) writes.push(putJsonToR2(R2_META_KEYS.classification,        classification!))
-  if (confirmationsDirty)  writes.push(putJsonToR2(R2_META_KEYS.tagConfirmations,      confirmations!))
-  if (exclusionsDirty)     writes.push(putJsonToR2(R2_META_KEYS.tagExclusions,         exclusions!))
-  if (manualTagsDirty)     writes.push(putJsonToR2(R2_META_KEYS.manualTags,            manualTags!))
-  if (altRefsDirty)        writes.push(putJsonToR2(R2_META_KEYS.alternativeReferences, altRefs!))
   try {
-    await Promise.all(writes)
+    // 2a. classification.json — quita la entry + captura la extensión
+    await updateJsonInR2<{ images?: Record<string, { filename: string }> }>(
+      R2_META_KEYS.classification,
+      (data) => {
+        if (!data?.images?.[sha]) return data    // no change → no write
+        const filename = data.images[sha].filename
+        const dotIdx = filename.lastIndexOf(".")
+        if (dotIdx >= 0 && !extension) extension = filename.slice(dotIdx + 1).toLowerCase()
+        const next = { ...data, images: { ...data.images } }
+        delete next.images[sha]
+        classificationDirty = true
+        return next
+      },
+    )
+
+    // 2b. tag_confirmations.json
+    await updateJsonInR2<{ confirmations?: Record<string, string[]> }>(
+      R2_META_KEYS.tagConfirmations,
+      (data) => {
+        if (!data?.confirmations?.[sha]) return data
+        const next = { ...data, confirmations: { ...data.confirmations } }
+        delete next.confirmations[sha]
+        confirmationsDirty = true
+        return next
+      },
+    )
+
+    // 2c. tag_exclusions.json
+    await updateJsonInR2<{ exclusions?: Record<string, string[]> }>(
+      R2_META_KEYS.tagExclusions,
+      (data) => {
+        if (!data?.exclusions?.[sha]) return data
+        const next = { ...data, exclusions: { ...data.exclusions } }
+        delete next.exclusions[sha]
+        exclusionsDirty = true
+        return next
+      },
+    )
+
+    // 2d. manual_tags.json
+    await updateJsonInR2<ManualTagsData>(
+      R2_META_KEYS.manualTags,
+      (data) => {
+        if (!data?.entries?.[sha]) return data
+        const next = { ...data, entries: { ...data.entries } }
+        delete next.entries[sha]
+        manualTagsDirty = true
+        return next
+      },
+    )
+
+    // 2e. alternative_references.json — sha puede ser:
+    //   - originalSha (clave) → borrar la entry
+    //   - newSha (item de algún array) → quitar el item
+    await updateJsonInR2<AlternativeReferencesData>(
+      R2_META_KEYS.alternativeReferences,
+      (data) => {
+        if (!data?.references) return data
+        let changed = false
+        const nextRefs: Record<string, typeof data.references[string]> = {}
+        for (const [originalSha, arr] of Object.entries(data.references)) {
+          if (originalSha === sha) {
+            altRefsAsOriginal = true
+            changed = true
+            continue   // skip esta key entera
+          }
+          const before = arr.length
+          const filtered = arr.filter((r) => {
+            if (r.sha === sha) {
+              if (!extension) extension = r.ext
+              altRefsAsRef = true
+              changed = true
+              return false
+            }
+            return true
+          })
+          if (filtered.length === 0) {
+            if (before > 0) changed = true
+            continue   // skip si quedó vacío
+          }
+          nextRefs[originalSha] = filtered
+        }
+        if (!changed) return data
+        return { ...data, references: nextRefs }
+      },
+    )
   } catch (err) {
     return NextResponse.json(
-      { ok: false, error: `Falló al limpiar metadata: ${err instanceof Error ? err.message : err}` },
+      { ok: false, error: `Falló al limpiar metadata (CAS): ${err instanceof Error ? err.message : err}` },
       { status: 500 },
     )
   }
+
+  // Si seguimos sin saber la extensión (caso: SHA huérfana sin entry en
+  // ningún JSON), probamos todas las habituales del pipeline.
+  const extensionsToTry = extension ? [extension] : ["png", "jpg", "jpeg", "webp", "gif"]
 
   // ── 4. Borrar binarios de R2 (todas las extensiones candidatas) ──
   const { client, bucket } = getR2Client()
