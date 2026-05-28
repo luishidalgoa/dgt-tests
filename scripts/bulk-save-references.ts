@@ -414,7 +414,7 @@ async function main() {
   console.log(`   SHAs completas:   ${shasProcessed - shasIncomplete}`)
   console.log(`   SHAs incompletas: ${shasIncomplete}  ${shasIncomplete > 0 ? "← re-ejecuta para reintentar (los providers a veces devuelven listas distintas)" : ""}`)
   console.log(`   Refs guardadas:   ${totalSaved}`)
-  console.log(`   Duplicados:       ${totalDuplicates}`)
+  console.log(`   Ya en registry:   ${totalDuplicates}  ← candidates devueltos por el provider que YA estaban guardados; saltados sin escribir (no son duplicados en disco)`)
   console.log(`   Fallos:           ${totalFailed}`)
   console.log()
   console.log("📝 Próximos pasos:")
