@@ -38,6 +38,7 @@ import { AddManualTagButton, type AvailableLabel } from "./AddManualTagModal"
 import { TagOverflowChip } from "./TagListPopover"
 import { DeleteImageButton } from "./DeleteImageButton"
 import { ViewOriginalRefButton } from "./ViewOriginalRefButton"
+import { RefsListButton, type RefItem } from "./RefsListButton"
 
 export const dynamic = "force-dynamic"
 
@@ -228,18 +229,21 @@ interface RefEntry {
  */
 async function loadAlternativeReferences(): Promise<{
   countByOriginal: Map<string, number>
+  refsByOriginal:  Map<string, RefEntry[]>
   raw:             Map<string, { originalSha: string; ref: RefEntry }>
 }> {
   const countByOriginal = new Map<string, number>()
+  const refsByOriginal  = new Map<string, RefEntry[]>()
   const raw             = new Map<string, { originalSha: string; ref: RefEntry }>()
   try {
     const data = await getJsonFromR2<{ references?: Record<string, RefEntry[]> }>(
       R2_META_KEYS.alternativeReferences,
     )
-    if (!data?.references) return { countByOriginal, raw }
+    if (!data?.references) return { countByOriginal, refsByOriginal, raw }
     for (const [originalSha, arr] of Object.entries(data.references)) {
       if (!Array.isArray(arr) || arr.length === 0) continue
       countByOriginal.set(originalSha, arr.length)
+      refsByOriginal.set(originalSha, arr)
       for (const ref of arr) {
         // El último write gana si el mismo newSha es referencia de
         // varios originals (caso raro pero posible si el admin guarda
@@ -250,7 +254,7 @@ async function loadAlternativeReferences(): Promise<{
   } catch {
     // No existe / JSON inválido → vacío
   }
-  return { countByOriginal, raw }
+  return { countByOriginal, refsByOriginal, raw }
 }
 
 /**
@@ -449,9 +453,13 @@ npm run images:upload-metadata`}</pre>
   const tagExclusionsMap = await loadTagExclusions()
   // refs alternativas: count por SHA original (badge sobre la lupa) +
   // raw map newSha→ref para inyectar entries virtuales "pendientes"
-  // si el classifier aún no ha procesado el blob nuevo.
-  const { countByOriginal: referenceCountsMap, raw: alternativeRefsRaw } =
-    await loadAlternativeReferences()
+  // si el classifier aún no ha procesado el blob nuevo + lista completa
+  // por originalSha (para el modal del chip "↻ N refs").
+  const {
+    countByOriginal: referenceCountsMap,
+    refsByOriginal:  referenceRefsMap,
+    raw:             alternativeRefsRaw,
+  } = await loadAlternativeReferences()
   // Confirmaciones: sha → set(tag_id) que admin marcó "SÍ es". El
   // boost del score se aplica en runtime también para que el filtro
   // de calidad las muestre inmediatamente.
@@ -1204,6 +1212,20 @@ npm run images:upload-metadata`}</pre>
                       // `#img-<sha>` al URL y al cargar la nueva vista
                       // se hace scrollIntoView + highlight de ese tile.
                       const anchorId = `img-${entry.sha}`
+                      // Pre-resolver las URLs de cada ref (server-side) —
+                      // las funciones no se serializan cross-RSC, así que
+                      // pasamos URLs ya construidas al client.
+                      const rawRefs = referenceRefsMap.get(entry.sha) ?? []
+                      const refsForTile: RefItem[] = rawRefs.map((r) => ({
+                        sha:          r.sha,
+                        ext:          r.ext,
+                        sourceUrl:    r.sourceUrl,
+                        provider:     r.provider,
+                        attribution:  r.attribution,
+                        downloadedAt: r.downloadedAt,
+                        addedBy:      r.addedBy,
+                        imageUrl:     imageUrl(`${r.sha}.${r.ext}`),
+                      }))
                       const tile = (
                         <ImageTile
                           entry={entry}
@@ -1211,6 +1233,7 @@ npm run images:upload-metadata`}</pre>
                           getDisplay={labelEs}
                           anchorId={tagFilter ? undefined : anchorId}
                           refsCount={referenceCountsMap.get(entry.sha) ?? 0}
+                          refs={refsForTile}
                           availableLabels={availableLabels}
                           buildTagURL={(tag) => {
                             const url = buildFilterURL({
@@ -1285,7 +1308,7 @@ function StatBox({ label, value, sub, color }: {
   )
 }
 
-function ImageTile({ entry, currentTag, getDisplay, buildTagURL, anchorId, refsCount, availableLabels }: {
+function ImageTile({ entry, currentTag, getDisplay, buildTagURL, anchorId, refsCount, refs, availableLabels }: {
   entry:      DisplayEntry
   currentTag: string | undefined
   getDisplay: (id: string) => string
@@ -1301,6 +1324,9 @@ function ImageTile({ entry, currentTag, getDisplay, buildTagURL, anchorId, refsC
   /** Cuántas referencias alternativas se han descargado para esta SHA.
    *  El botón lupa pinta un badge con este número si > 0. */
   refsCount:   number
+  /** Lista pre-resuelta de refs (con URL pública lista) para el modal
+   *  apilado del chip "↻ N refs". Si está vacía, el chip no se pinta. */
+  refs:        readonly RefItem[]
   /** Catálogo serializado al cliente para autocomplete del modal de
    *  "Añadir tag manual". */
   availableLabels: AvailableLabel[]
@@ -1384,24 +1410,11 @@ function ImageTile({ entry, currentTag, getDisplay, buildTagURL, anchorId, refsC
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0 }}>
               {entry.sha.slice(0, 16)}…
             </span>
-            {refsCount > 0 && (
-              <span
-                aria-label={`${refsCount} referencia${refsCount === 1 ? "" : "s"} descargada${refsCount === 1 ? "" : "s"} desde Lens/stock`}
-                style={{
-                  fontSize:     9,
-                  fontWeight:   800,
-                  padding:      "1px 5px",
-                  borderRadius: 999,
-                  background:   "rgba(99, 102, 241, 0.15)",
-                  color:        "var(--indigo-700, #4338ca)",
-                  flexShrink:   0,
-                  letterSpacing: "0.02em",
-                  textTransform: "lowercase",
-                }}
-              >
-                ↻ {refsCount} ref{refsCount === 1 ? "" : "s"}
-              </span>
-            )}
+            {/* Chip clickable: abre modal con thumbnails apilados de cada
+                ref descargada + opción delete. Si refs.length === 0 el
+                componente devuelve null (mismo gating que antes con
+                refsCount > 0). */}
+            <RefsListButton originalSha={entry.sha} refs={refs} />
           </div>
           {/* Botón "buscar referencias visuales" — admin only (todo /admin/*
               gateado en layout.tsx). Modal lazy-load. El badge sobre la
