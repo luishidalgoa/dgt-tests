@@ -1732,10 +1732,29 @@ def compute_prototypes_fn(force: bool = False, only_label: Optional[str] = None)
     # ── 1. Load feedback + existing prototypes ──────────────────────────
     confs    = _get("meta/tag_confirmations.json")
     excls    = _get("meta/tag_exclusions.json")
+    manual   = _get("meta/manual_tags.json")
     existing = _get("meta/prototypes.json")
 
-    conf_map: dict[str, list[str]] = (confs or {}).get("confirmations", {})
+    conf_map: dict[str, list[str]] = dict((confs or {}).get("confirmations", {}))
     excl_map: dict[str, list[str]] = (excls or {}).get("exclusions", {})
+
+    # Inyectar manual_tags como confirmaciones positivas IN-MEMORY para
+    # esta build de prototipos. NO escribimos a R2 desde aquí (eso lo
+    # hace el classifier en su cleanup post-run). Aquí solo queremos
+    # que las imgs manual-tagueadas se conviertan en prototipos kNN
+    # positivos del label correspondiente.
+    if isinstance(manual, dict):
+        from classifier_core import parse_manual_tags  # noqa: E402
+        parsed_man = parse_manual_tags(manual)
+        for sha, items in parsed_man.items():
+            tags = [it["tag"] for it in items if it.get("tag")]
+            if not tags:
+                continue
+            existing_tags = set(conf_map.get(sha, []))
+            conf_map[sha] = sorted(existing_tags | set(tags))
+        if parsed_man:
+            total = sum(len(t) for t in parsed_man.values())
+            print(f"[protos] 👤 manual_tags inyectados como positivos: {len(parsed_man)} shas / {total} tags", flush=True)
 
     existing_protos: dict[str, dict] = {}
     if not force and existing and isinstance(existing.get("prototypes"), dict):

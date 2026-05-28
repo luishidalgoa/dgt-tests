@@ -188,10 +188,29 @@ def main() -> None:
     # ── 1. Read feedback + existing prototypes from R2 ──────────────────
     confs    = _r2_get_meta(s3, bucket, "meta/tag_confirmations.json")
     excls    = _r2_get_meta(s3, bucket, "meta/tag_exclusions.json")
+    manual   = _r2_get_meta(s3, bucket, "meta/manual_tags.json")
     existing = _r2_get_meta(s3, bucket, "meta/prototypes.json")
 
-    conf_map: dict[str, list[str]] = (confs or {}).get("confirmations", {})
+    conf_map: dict[str, list[str]] = dict((confs or {}).get("confirmations", {}))
     excl_map: dict[str, list[str]] = (excls or {}).get("exclusions", {})
+
+    # Mezclar manual_tags dentro de las confirmations IN-MEMORY (no
+    # escribimos a R2 desde aquí). El clasificador hará el cleanup
+    # oficial en su próximo run; nosotros solo necesitamos que los
+    # embeddings de las imágenes manual-tagueadas se conviertan en
+    # prototipos positivos para que el modelo aprenda visualmente.
+    if isinstance(manual, dict):
+        from classifier_core import parse_manual_tags  # noqa: E402
+        parsed_man = parse_manual_tags(manual)
+        for sha, items in parsed_man.items():
+            tags = [it["tag"] for it in items if it.get("tag")]
+            if not tags:
+                continue
+            existing_tags = set(conf_map.get(sha, []))
+            conf_map[sha] = sorted(existing_tags | set(tags))
+        if parsed_man:
+            total = sum(len(t) for t in parsed_man.values())
+            print(f"[protos] 👤 manual_tags inyectados como positivos: {len(parsed_man)} shas / {total} tags")
 
     existing_protos: dict[str, dict] = {}
     if not args.force and existing and isinstance(existing.get("prototypes"), dict):
