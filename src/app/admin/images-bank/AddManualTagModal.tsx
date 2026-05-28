@@ -206,11 +206,14 @@ function AddManualTagModal({
         ? data.updated ? "Justificación actualizada" : "Ya estaba asignado"
         : "Tag añadido"
       setSuccess(`${noun}: ${effectiveTag}`)
-      // Refresca el server data INMEDIATAMENTE — antes solo se hacía al
-      // cerrar el modal, así el admin no veía el tag aparecer en la card
-      // hasta que cerrase. Con router.refresh() la página de fondo se
-      // re-renderiza con los nuevos datos manteniendo el modal abierto.
-      router.refresh()
+      // NO refrescamos el server data aquí — si lo hiciéramos, el grid
+      // del fondo se repinta y la card que estamos editando puede
+      // desaparecer (caso: filtro "Sin tag" + acabas de añadir uno →
+      // la card sale del filtro → React desmonta el tile → el modal se
+      // cierra con él). En vez de eso, el admin ve los tags añadidos
+      // EN ESTE modal vía el chip "X añadidos ahora" del header. El
+      // refresh se hace al cerrar (handleClose), cuando ya no importa
+      // si la card cambia de bucket de filtro.
       // Reset solo el input + reason; mantenemos abierto y enfocado para
       // que el admin pueda seguir añadiendo más tags rápidamente.
       setQuery("")

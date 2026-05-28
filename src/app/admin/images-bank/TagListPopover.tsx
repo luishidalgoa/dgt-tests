@@ -165,10 +165,13 @@ export function TagListPopover({ anchorRect, tags, sha, tagDisplayMap, onClose }
         return
       }
       setRemovedTags((prev) => new Set([...prev, tag]))
-      // Refresca el server data inmediatamente para que el tag
-      // desaparezca también en la card debajo del popover (sin esperar
-      // a que el admin cierre el popover).
-      router.refresh()
+      // NO refrescamos aquí — un router.refresh() repintaría el grid
+      // de fondo y, si el filtro actual depende de los tags de esta
+      // card (caso: filtro "Con refs" o un tag concreto), la card
+      // puede desaparecer del viewport y desmontarse, cerrando el
+      // popover con ella. En su lugar, ocultamos el tag VISUALMENTE
+      // en el popover vía `removedTags` y diferimos el refresh hasta
+      // que el admin cierre.
       setDeletingTag(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
