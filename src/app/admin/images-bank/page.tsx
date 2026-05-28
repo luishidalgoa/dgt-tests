@@ -36,6 +36,7 @@ import { FilterPill, QualityPill, SortToggle, SidebarHeader, DateDivider, Questi
 import { FindReplacementsButton } from "./FindReplacementsModal"
 import { AddManualTagButton, type AvailableLabel } from "./AddManualTagModal"
 import { TagOverflowChip } from "./TagListPopover"
+import { DeleteImageButton } from "./DeleteImageButton"
 
 export const dynamic = "force-dynamic"
 
@@ -1392,6 +1393,11 @@ function ImageTile({ entry, currentTag, getDisplay, buildTagURL, anchorId, refsC
             disabledBecauseIsRef={entry.isAlternativeReference === true}
             originalImageUrl={imgSrc}
           />
+          {/* Borrar imagen del banco — admin only. Bloqueado si tiene
+              preguntas asociadas (a menos que el admin pase force=true
+              en el modal). Borra binario R2 + entries en TODOS los
+              JSONs de metadata. */}
+          <DeleteImageButton sha={entry.sha} filename={entry.filename} />
         </div>
 
         {isPending && entry.pendingSource ? (
