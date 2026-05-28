@@ -276,19 +276,23 @@ async function main() {
 
   // ── 3. Procesar cola con persistencia tras cada SHA ─────────────
   const providerNames: string[] = args.providerSet === "stock" ? ["pixabay", "pexels"] : ["serpapi"]
-  let totalSaved      = 0
-  let totalDuplicates = 0
-  let totalFailed     = 0
-  let shasProcessed   = 0
+  let totalSaved          = 0
+  let totalDuplicates     = 0
+  let totalFailed         = 0
+  let shasProcessed       = 0
+  let shasIncomplete      = 0   // SHAs donde saved < needed por agotamiento de candidates
 
   for (const q of queue.slice(0, totalToProcess)) {
     shasProcessed++
     const shaShort = q.sha.slice(0, 10)
     console.log(`[${shasProcessed}/${totalToProcess}] 🔍 ${shaShort}… · current=${q.currentCount}/${args.target} (need ${q.needed}) · keyword="${q.keyword ?? "(none)"}"`)
 
-    // Pedimos algo más que `needed` para tener margen tras filtrar dups
-    // y candidatos rechazados (mime, tamaño, network).
-    const searchMax = Math.min(20, q.needed * 3 + 4)
+    // Pedimos MUCHOS más candidatos que `needed` para tener margen tras
+    // filtrar duplicados (sourceUrl ya en registry), Content-Type inválido
+    // (text/html, paginas que no son imgs), tamaños fuera de rango, etc.
+    // SerpAPI Lens devuelve hasta ~50 visual_matches; el endpoint los
+    // cropea al min(50, max).
+    const searchMax = Math.min(50, q.needed * 6 + 8)
     let candidates: Candidate[]
     try {
       candidates = await findFromProviders(providerNames, {
@@ -305,7 +309,7 @@ async function main() {
     }
 
     if (candidates.length === 0) {
-      console.warn(`   ⚠  Sin candidatos — skip`)
+      console.warn(`   ⚠  Sin candidatos del provider — skip SHA`)
       continue
     }
 
@@ -390,13 +394,25 @@ async function main() {
       process.exit(1)
     }
 
-    console.log(`   ✓ ${savedHere}/${q.needed} guardadas para esta SHA · total acumulado: ${totalSaved}`)
+    // Marcar como incompleta si no se llegó al target tras agotar todos
+    // los candidates. Útil para identificar SHAs donde el provider devolvió
+    // pocos matches únicos. Re-ejecutar más adelante intentará otra vez
+    // (los providers a veces devuelven listas distintas por imagen
+    // popular vs nicho).
+    if (savedHere < q.needed) {
+      shasIncomplete++
+      console.warn(`   ⚠  Solo ${savedHere}/${q.needed} guardadas — los ${candidates.length} candidates del provider no alcanzaron tras dedup/filtros. Re-ejecuta más tarde para reintentar.`)
+    } else {
+      console.log(`   ✓ ${savedHere}/${q.needed} guardadas para esta SHA · total acumulado: ${totalSaved}`)
+    }
   }
 
   // ── 4. Resumen ─────────────────────────────────────────────────
   console.log()
   console.log("📊 Resumen final:")
   console.log(`   SHAs procesados:  ${shasProcessed}`)
+  console.log(`   SHAs completas:   ${shasProcessed - shasIncomplete}`)
+  console.log(`   SHAs incompletas: ${shasIncomplete}  ${shasIncomplete > 0 ? "← re-ejecuta para reintentar (los providers a veces devuelven listas distintas)" : ""}`)
   console.log(`   Refs guardadas:   ${totalSaved}`)
   console.log(`   Duplicados:       ${totalDuplicates}`)
   console.log(`   Fallos:           ${totalFailed}`)

@@ -52,7 +52,6 @@
     "images:audit-sha": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/audit-images-sha.ts",
     "images:audit-feedback": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/audit-image-feedback.ts",
     "images:bulk-save-refs": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/bulk-save-references.ts",
-    "images:purge-refs": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/purge-references.ts",
     "images:diff-classification": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/diff-classification.ts",
     "images:classify": "cd tools/image-classifier && .venv\\Scripts\\python.exe classify_siglip.py",
     "images:classify-hf": "cd tools/image-classifier && .venv\\Scripts\\python.exe classify_hf.py",
