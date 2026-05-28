@@ -465,3 +465,110 @@ describe("Endpoint flow: examen real first-of-day → awarded = base + bonus", (
     expect(awarded).toBe(14) // solo base, sin bonus duplicado
   })
 })
+
+// ────────────────────────────────────────────────────────────────────────
+// Escenario: racha rota sin restaurar → reset de XP + nivel
+// ────────────────────────────────────────────────────────────────────────
+describe("Endpoint flow: racha rota sin restaurar → XP reseteada a 0", () => {
+  it("examen tras 2+ días sin jugar con XP acumulada → reset y arranca de 0", async () => {
+    // Replica el slice relevante de /api/attempts: el user tenía 200 XP
+    // (nivel 2) y juega hoy tras una rotura no restaurada. newStreak
+    // vuelve a 1 → shouldResetXpOnBrokenStreak=true → vaciamos XP/nivel
+    // /créditos antes de pagar la XP de este examen.
+    const { computeStreakDaysOnly, shouldResetXpOnBrokenStreak } = await import("./streak")
+    const { getLevel } = await import("./xp")
+
+    let currentXp = 200
+    let currentLastBonusAt: Date | null = null
+    let currentCredits = 3
+
+    // findMany: solo el examen de hoy (ayer y anteayer vacíos) →
+    // cadena de longitud 1.
+    const now = new Date()
+    now.setHours(12, 0, 0, 0)
+    dbMocks.examAttempt.findMany.mockResolvedValue([
+      { id: 99, startedAt: new Date(now.getTime() - 60_000) },
+    ])
+
+    dbMocks.user.findUnique.mockImplementation(async (args: {
+      select: { xp?: boolean; lastStreakBonusAt?: boolean; streakRestoredUntil?: boolean }
+    }) => {
+      if (args.select.lastStreakBonusAt) {
+        return { lastStreakBonusAt: currentLastBonusAt, streakRestoredUntil: null }
+      }
+      if (args.select.xp) return { xp: currentXp }
+      return null
+    })
+    dbMocks.user.update.mockImplementation(async (args: {
+      data: {
+        xp?: number | { increment: number }
+        streakRestoreCredits?: number
+        streakRestoredUntil?: Date | null
+        lastStreakBonusAt?: Date | null
+      }
+    }) => {
+      if (typeof args.data.xp === "number") {
+        // reset directo a 0
+        currentXp = args.data.xp
+        if (args.data.streakRestoreCredits !== undefined) currentCredits = args.data.streakRestoreCredits
+        if (args.data.lastStreakBonusAt === null) currentLastBonusAt = null
+        return { xp: currentXp }
+      }
+      if (args.data.xp && typeof args.data.xp === "object") {
+        currentXp += args.data.xp.increment
+        return { xp: currentXp }
+      }
+      if (args.data.lastStreakBonusAt instanceof Date) {
+        currentLastBonusAt = args.data.lastStreakBonusAt
+        return { lastStreakBonusAt: currentLastBonusAt }
+      }
+      return {}
+    })
+
+    // ── Slice del endpoint ──
+    const allDates = [new Date(now.getTime() - 60_000)]
+    const newStreak = computeStreakDaysOnly(allDates, null, now)
+    expect(newStreak).toBe(1)
+
+    const mustReset = shouldResetXpOnBrokenStreak({ newStreakDays: newStreak, currentXp })
+    expect(mustReset).toBe(true)
+
+    const prevInfo = getLevel(currentXp)
+    expect(prevInfo.level).toBeGreaterThanOrEqual(2) // 200 XP ≥ nivel 2
+
+    // Aplica el reset como hace el endpoint.
+    await dbMocks.user.update({
+      where: { id: 1 },
+      data: { xp: 0, streakRestoreCredits: 1, streakRestoredUntil: null, lastStreakBonusAt: null },
+    })
+    expect(currentXp).toBe(0)
+    expect(currentCredits).toBe(1)
+
+    // Tras el reset, paga base (examen perfecto = 15) + bonus D1 (10).
+    const xpResult = await awardXp(1, 15, "exam-finish")
+    expect(xpResult.oldXp).toBe(0)
+    expect(xpResult.newXp).toBe(15)
+
+    const streakResult = await awardDailyStreakBonusIfDue(1)
+    expect(streakResult).not.toBeNull()
+    expect(streakResult!.newXp).toBe(25) // 15 + 10 (D1)
+
+    // El snapshot que devolvería el endpoint refleja la pérdida.
+    const xpResetToZero = { previousXp: 200, previousLevel: prevInfo.level }
+    expect(xpResetToZero.previousXp).toBe(200)
+  })
+
+  it("examen que continúa la cadena (newStreak>=2) NO resetea aunque haya XP", async () => {
+    const { computeStreakDaysOnly, shouldResetXpOnBrokenStreak } = await import("./streak")
+    const now = new Date()
+    now.setHours(12, 0, 0, 0)
+    // Hoy + ayer con actividad → cadena de 2.
+    const allDates = [
+      new Date(now.getTime() - 60_000),
+      new Date(now.getTime() - 26 * 3_600_000),
+    ]
+    const newStreak = computeStreakDaysOnly(allDates, null, now)
+    expect(newStreak).toBeGreaterThanOrEqual(2)
+    expect(shouldResetXpOnBrokenStreak({ newStreakDays: newStreak, currentXp: 500 })).toBe(false)
+  })
+})

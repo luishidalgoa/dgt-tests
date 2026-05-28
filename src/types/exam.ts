@@ -100,6 +100,18 @@ export interface AttemptXpReward {
   nextLevelXp: number | null
   /** Progreso al siguiente nivel en porcentaje (0..100). */
   progressPct: number
+  /** Si está presente, este intento ROMPIÓ la racha del usuario sin
+   *  haberla restaurado primero (gastando crédito). La consecuencia es
+   *  que la XP/nivel se vaciaron a 0 antes de pagar la XP de este
+   *  examen. El cliente puede mostrar un toast/animación específico
+   *  ("Has perdido tu racha — XP reseteada"). Ausente cuando no hubo
+   *  reset (caso 99% del tiempo: continuación normal de la cadena). */
+  xpResetToZero?: {
+    /** XP del usuario antes del reset (lo que ha perdido). */
+    previousXp:    number
+    /** Nivel del usuario antes del reset. */
+    previousLevel: number
+  }
 }
 
 export interface SubmitAttemptResponse {

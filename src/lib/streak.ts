@@ -200,4 +200,36 @@ export function computeStreakDaysOnly(
   return computeStreakState(attemptDates, restoredUntil, now).streakDays
 }
 
+/**
+ * Penalización por racha rota: cuando un usuario hace un examen DESPUÉS
+ * de una rotura (sin haber restaurado), su XP/nivel se resetea a 0.
+ *
+ * Detectamos la rotura por la longitud del streak resultante:
+ *   - newStreakDays === 1 → el examen NO continúa una cadena previa.
+ *     Bien porque la rotura no se restauró (puede o no haber tenido
+ *     opción de hacerlo), bien porque el usuario nunca jugó antes.
+ *   - newStreakDays >= 2 → el examen extiende una cadena viva (de hoy
+ *     hacia atrás hay al menos un día con actividad real o restaurada),
+ *     así que la racha está intacta.
+ *
+ * Si el usuario tenía XP > 0 al entrar (currentXp > 0) y el streak
+ * acabó en 1, devolvemos true: hay que vaciar XP, nivel y créditos
+ * antes de pagar la XP de este examen. Para usuarios nuevos que aún
+ * no tenían nada acumulado (currentXp === 0) es un no-op natural —
+ * devolvemos false para no spamear UI de "se ha reseteado" cuando no
+ * había nada que perder.
+ *
+ * El reset semánticamente solo aplica a modos que cuentan para la
+ * racha (= los mismos modos que awardStreakCreditIfMilestone). El
+ * gating de modo lo hace el callsite, no esta función.
+ */
+export function shouldResetXpOnBrokenStreak(args: {
+  /** Streak resultante DESPUÉS de incluir el examen recién creado. */
+  newStreakDays: number
+  /** XP del usuario ANTES de pagar la XP de este examen. */
+  currentXp:     number
+}): boolean {
+  return args.newStreakDays === 1 && args.currentXp > 0
+}
+
 export { sameDay as _sameDay, midnight as _midnight }

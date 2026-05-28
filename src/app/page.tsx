@@ -143,6 +143,21 @@ export default async function HomePage() {
   )
   const { last7, weekTotal, dailyAvg, maxDay, canRestore } = streak
 
+  // ── Aviso de XP en peligro por racha rota ─────────────────────────
+  // Si el user tiene XP acumulada y HOY aún no ha hecho examen Y AYER
+  // tampoco hubo (ni real ni restaurado), el próximo examen partirá
+  // una cadena nueva (newStreak=1) y la lógica de /api/attempts
+  // vaciará XP + nivel + créditos. Lo avisamos en el dashboard para
+  // que el user pueda restaurar antes (si tiene crédito) o decida
+  // jugar a sabiendas.
+  const todaySlot     = last7[6]
+  const yesterdaySlot = last7[5]
+  const willResetXpOnNextExam =
+    user.xp > 0 &&
+    todaySlot.count === 0 &&
+    yesterdaySlot.count === 0 &&
+    !yesterdaySlot.restored
+
   // ── XP & nivel ────────────────────────────────────────────────────
   // El icono "🔥" del bloque "Actividad esta semana" se sustituye por el
   // asset del nivel actual derivado de user.xp (ver src/lib/xp.ts).
@@ -364,6 +379,40 @@ export default async function HomePage() {
           days={streakInfo.days}
           claimedToday={streakInfo.claimedToday}
         />
+
+        {willResetXpOnNextExam && (
+          <div
+            role="alert"
+            aria-live="polite"
+            style={{
+              marginTop:    14,
+              marginBottom: canRestore ? 4 : 18,
+              padding:      "10px 14px",
+              borderRadius: 10,
+              border:       "1px solid var(--orange-400, #fb923c)",
+              background:   "linear-gradient(180deg, #fff7ed, #ffedd5)",
+              color:        "var(--orange-700, #c2410c)",
+              fontSize:     13,
+              lineHeight:   1.45,
+              display:      "flex",
+              alignItems:   "flex-start",
+              gap:          10,
+            }}
+          >
+            <span style={{ fontSize: 18, lineHeight: 1, flexShrink: 0 }}>⚠</span>
+            <span>
+              <b>
+                {canRestore
+                  ? "Tu racha se rompió ayer."
+                  : "Tu racha está rota."}
+              </b>{" "}
+              {canRestore
+                ? <>Si haces un examen sin <b>restaurar</b> antes, perderás tus <b>{user.xp.toLocaleString("es")} XP</b> y volverás al <b>nivel 0</b>.</>
+                : <>Tu próximo examen reiniciará tus <b>{user.xp.toLocaleString("es")} XP</b> y nivel a <b>0</b>.</>
+              }
+            </span>
+          </div>
+        )}
 
         {canRestore && (
           <RestoreStreakButton

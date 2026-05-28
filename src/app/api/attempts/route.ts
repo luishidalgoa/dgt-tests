@@ -15,6 +15,7 @@ import {
 import {
   computeStreakDaysOnly,
   awardStreakCreditIfMilestone,
+  shouldResetXpOnBrokenStreak,
   MAX_RESTORE_CREDITS,
 } from "@/lib/streak"
 
@@ -128,6 +129,13 @@ export async function POST(req: Request) {
     return created
   })
 
+  // Si el examen recién creado parte una cadena nueva (newStreak===1)
+  // y el usuario tenía XP acumulada, vaciamos XP + nivel + créditos
+  // como penalización por haber roto la racha sin restaurarla. Lo
+  // capturamos aquí para devolverlo en la respuesta (UI muestra
+  // animación específica de "racha perdida").
+  let xpResetSnapshot: { previousXp: number; previousLevel: number } | undefined
+
   // ── Racha: si este examen ha cruzado un múltiplo de 7 días consecutivos
   //    de racha (7, 14, 21...), +1 crédito de restauración (cap MAX).
   //    Solo cuenta si `mode` es de los que entran en estadísticas, igual
@@ -163,12 +171,55 @@ export async function POST(req: Request) {
         user.streakRestoredUntil,
         now,
       )
+
+      // ── Penalización por racha rota sin restaurar ─────────────────
+      //  Si newStreak===1 (el examen NO continúa una cadena previa) y
+      //  el user tenía XP acumulada, la rotura es real. Resetamos:
+      //    - xp                  → 0
+      //    - streakRestoreCredits → 1 (mismo default que cuenta nueva)
+      //    - streakRestoredUntil  → null (cualquier restore previo es irrelevante)
+      //    - lastStreakBonusAt    → null (que vuelva a cobrar el day-1 bonus)
+      //  Después de esto, awardDailyStreakBonusIfDue pagará el bonus
+      //  fresco (10 XP) y awardXp incrementará desde 0.
+      //  La rama de milestone (newCredits) no dispara cuando reseteamos
+      //  porque newStreak=1 no es múltiplo de 7 — son mutuamente
+      //  exclusivas. La dejamos detrás del reset para claridad.
+      if (shouldResetXpOnBrokenStreak({
+        newStreakDays: newStreak,
+        currentXp:     user.xp,
+      })) {
+        const prevInfo = getLevel(user.xp)
+        await db.user.update({
+          where: { id: user.id },
+          data:  {
+            xp:                   0,
+            streakRestoreCredits: 1,
+            streakRestoredUntil:  null,
+            lastStreakBonusAt:    null,
+          },
+        })
+        xpResetSnapshot = {
+          previousXp:    user.xp,
+          previousLevel: prevInfo.level,
+        }
+        // Audit log barato: deja huella de cuándo se vacía XP por
+        // rotura. Si alguien se queja en soporte podemos buscar este
+        // marcador en los logs.
+        console.info(
+          `[streak] user=${user.id} broken — xp reset (${user.xp} → 0, lvl ${prevInfo.level} → 0)`
+        )
+      }
+
       const newCredits = awardStreakCreditIfMilestone(
         oldStreak,
         newStreak,
-        user.streakRestoreCredits,
+        // Si acabamos de resetear, la base es 1 (no el snapshot viejo
+        // de user). En la práctica el milestone no dispara con
+        // newStreak=1, pero por defensa pasamos el valor correcto.
+        xpResetSnapshot ? 1 : user.streakRestoreCredits,
       )
-      if (newCredits !== user.streakRestoreCredits) {
+      const baseCredits = xpResetSnapshot ? 1 : user.streakRestoreCredits
+      if (newCredits !== baseCredits) {
         await db.user.update({
           where: { id: user.id },
           data:  {
@@ -239,6 +290,10 @@ export async function POST(req: Request) {
       newXp:       finalState.newXp,
       nextLevelXp: finalState.levelInfo.nextLevelXp,
       progressPct: finalState.levelInfo.progressPct,
+      // Si la racha rota disparó el reset (ver bloque arriba), incluimos
+      // el snapshot del estado previo para que el cliente muestre el
+      // mensaje específico de "racha perdida — XP a 0".
+      xpResetToZero: xpResetSnapshot,
     }
   } catch (err) {
     // No tumbar la respuesta — el cliente vería el examen como "no

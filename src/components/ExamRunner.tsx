@@ -296,6 +296,19 @@ export function ExamRunner({
             scorePct: Math.round((correct / questions.length) * 100),
           })
         }
+        // Racha rota sin restaurar: el endpoint vació XP + nivel antes
+        // de pagar la de este examen. Avisamos con un toast prominente
+        // de tono "pérdida" — va PRIMERO, porque reencuadra el resto del
+        // feedback (la XP "ganada" de este examen parte de 0).
+        if (data.xp?.xpResetToZero) {
+          const { previousXp, previousLevel } = data.xp.xpResetToZero
+          toast.warning("Has perdido tu racha", {
+            description:
+              `Tu XP se ha reiniciado a 0 (tenías ${previousXp.toLocaleString("es")} XP` +
+              `, nivel ${previousLevel}). Empiezas de cero.`,
+            duration: 7000,
+          })
+        }
         // Dispara la animación de XP gain (bubble + pelotitas) UNA sola
         // vez con el total combinado base+bonus. La función helper
         // garantiza idempotencia — el endpoint ya devuelve la suma en
@@ -310,8 +323,10 @@ export function ExamRunner({
           })
         }
         // El level-up sigue mostrándose como toast prominente además
-        // de la animación de la barra — es un evento celebratorio.
-        if (data.xp?.leveledUp) {
+        // de la animación de la barra — es un evento celebratorio. Pero
+        // no si venimos de un reset (subir "de 0 a 1" tras perder la
+        // racha no es para celebrar — el toast de pérdida ya informa).
+        if (data.xp?.leveledUp && !data.xp?.xpResetToZero) {
           toast.success(
             `¡Subes a nivel ${data.xp.newLevel}! · ${data.xp.levelLabel}`,
             {

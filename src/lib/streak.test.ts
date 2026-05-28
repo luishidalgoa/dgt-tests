@@ -3,6 +3,7 @@ import {
   computeStreakState,
   computeStreakDaysOnly,
   awardStreakCreditIfMilestone,
+  shouldResetXpOnBrokenStreak,
   yesterdayMidnight,
   MAX_RESTORE_CREDITS,
 } from "./streak"
@@ -282,5 +283,46 @@ describe("yesterdayMidnight", () => {
     expect(y.getMinutes()).toBe(0)
     expect(y.getSeconds()).toBe(0)
     expect(y.getDate()).toBe(NOW.getDate() - 1)
+  })
+})
+
+describe("shouldResetXpOnBrokenStreak", () => {
+  it("resetea si newStreak===1 y currentXp>0 (rotura no restaurada)", () => {
+    // Usuario tenía nivel acumulado, hoy juega tras varios días sin
+    // jugar y sin restaurar → newStreak vuelve a 1 → debe perder XP.
+    expect(
+      shouldResetXpOnBrokenStreak({ newStreakDays: 1, currentXp: 200 }),
+    ).toBe(true)
+  })
+
+  it("NO resetea si newStreak===1 pero currentXp===0 (cuenta nueva)", () => {
+    // Usuario recién registrado, primer examen. newStreak=1 pero no
+    // hay nada que perder — devolvemos false para no spamear "perdiste
+    // 0 XP" en UI.
+    expect(
+      shouldResetXpOnBrokenStreak({ newStreakDays: 1, currentXp: 0 }),
+    ).toBe(false)
+  })
+
+  it("NO resetea si newStreak>=2 (cadena viva continúa)", () => {
+    // El examen extiende una cadena que ya tenía actividad ayer (real
+    // o restaurada) → no es rotura → XP intacto.
+    expect(
+      shouldResetXpOnBrokenStreak({ newStreakDays: 2, currentXp: 500 }),
+    ).toBe(false)
+    expect(
+      shouldResetXpOnBrokenStreak({ newStreakDays: 7, currentXp: 500 }),
+    ).toBe(false)
+    expect(
+      shouldResetXpOnBrokenStreak({ newStreakDays: 30, currentXp: 500 }),
+    ).toBe(false)
+  })
+
+  it("NO resetea si newStreak===0 (no debería ocurrir tras crear examen, pero defensivo)", () => {
+    // newStreak debería ser >=1 después de crear un examen. Si por
+    // algún bug es 0, no queremos resetear sin pruebas.
+    expect(
+      shouldResetXpOnBrokenStreak({ newStreakDays: 0, currentXp: 500 }),
+    ).toBe(false)
   })
 })
