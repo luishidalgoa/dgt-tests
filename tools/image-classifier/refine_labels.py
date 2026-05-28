@@ -46,8 +46,19 @@ except ImportError:
     print("❌ google-genai no instalado. Corre: npm run images:setup-classifier")
     sys.exit(1)
 
+# Groq es OPCIONAL — se usa como fallback si Gemini se queda sin quota.
+# Si no está instalado o no hay GROQ_API_KEY, el script funciona igual
+# pero abortará si Gemini agota cuota (en vez de continuar con Groq).
+try:
+    from groq import Groq as GroqClient
+    _GROQ_AVAILABLE = True
+except ImportError:
+    GroqClient = None  # type: ignore
+    _GROQ_AVAILABLE = False
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from labels import LABELS, LABEL_NEGATIVES
+from classifier_core import GROQ_MODEL_ID
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIRMATION_THRESHOLD = 5
@@ -275,6 +286,108 @@ def call_gemini_refine(
         return None
 
 
+# ── Groq fallback (mismo prompt, OpenAI-compatible chat) ─────────────────
+
+def call_groq_refine(
+    client,                       # groq.Groq
+    lid:               str,
+    current_positives: list[str],
+    current_negatives: list[str],
+    pos_imgs:          list[tuple[str, bytes, str]],
+    neg_imgs:          list[tuple[str, bytes, str]],
+    refine_positives:  bool,
+    refine_negatives:  bool,
+) -> Optional[dict]:
+    """Versión Groq de call_gemini_refine — usa Llama 4 Scout multimodal
+    como fallback cuando Gemini agota quota. Mismo prompt, mismo schema
+    de respuesta. Las imágenes van como `image_url` en data URIs base64
+    (formato OpenAI-compatible que Groq Llama Scout entiende)."""
+    import base64 as _b64
+
+    tasks: list[str] = []
+    if refine_positives:
+        tasks.append(f"Generate 3 NEW positive prompts capturing visual features common to the {len(pos_imgs)} positive images that distinguish them from the negatives.")
+    else:
+        tasks.append("Keep positive prompts very similar to current (not enough positive examples to refine confidently).")
+    if refine_negatives:
+        tasks.append(f"Generate 3 NEW negative prompts capturing visual features common to the {len(neg_imgs)} negative images that incorrectly trigger this label today.")
+    else:
+        tasks.append("Keep negative prompts very similar to current (not enough negative examples to refine confidently).")
+
+    prompt_text = REFINE_PROMPT_TEMPLATE.format(
+        lid=lid,
+        n_pos=len(pos_imgs),
+        n_neg=len(neg_imgs),
+        current_positives="\n".join(f"- {p}" for p in current_positives) or "(none)",
+        current_negatives="\n".join(f"- {p}" for p in current_negatives) or "(none)",
+        tasks="\n".join(f"{i+1}. {t}" for i, t in enumerate(tasks)),
+    )
+
+    # Construir el message content multimodal. Groq Llama 4 Scout acepta
+    # múltiples image_url + texto en el mismo user message; para cada
+    # imagen incluimos una línea de texto inmediatamente después que la
+    # etiqueta como POSITIVE o NEGATIVE — mismo patrón que con Gemini.
+    content_parts: list[dict] = []
+    for sha, img_bytes, mime in pos_imgs:
+        b64 = _b64.b64encode(img_bytes).decode("ascii")
+        content_parts.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:{mime};base64,{b64}"},
+        })
+        content_parts.append({"type": "text", "text": f"^^ POSITIVE (sha:{sha[:8]}…) — this IS {lid}"})
+    for sha, img_bytes, mime in neg_imgs:
+        b64 = _b64.b64encode(img_bytes).decode("ascii")
+        content_parts.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:{mime};base64,{b64}"},
+        })
+        content_parts.append({"type": "text", "text": f"^^ NEGATIVE (sha:{sha[:8]}…) — this is NOT {lid}"})
+    content_parts.append({"type": "text", "text": prompt_text})
+
+    try:
+        response = client.chat.completions.create(
+            model=GROQ_MODEL_ID,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a JSON-only API. Your entire response must be a single "
+                        "valid JSON object with these fields: refinedPositives (array of "
+                        "exactly 3 English strings), refinedNegatives (array of exactly "
+                        "3 English strings), and reasoning (one explanation paragraph in "
+                        "Spanish). No markdown fences, no prefatory text."
+                    ),
+                },
+                {"role": "user", "content": content_parts},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.4,
+            max_tokens=3000,
+        )
+        text = (response.choices[0].message.content or "").strip()
+        if text.startswith("```"):
+            text = text.split("```", 2)[1] if "```" in text[3:] else text[3:]
+            if text.startswith("json"):
+                text = text[4:]
+            text = text.rsplit("```", 1)[0].strip()
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError as e:
+            print(f"  ⚠  Groq JSON inválido: {e}; raw: {text[:200]}…")
+            return None
+        return _validate_refinement(parsed)
+    except Exception as e:  # noqa: BLE001
+        msg = str(e).lower()
+        if any(k in msg for k in ("quota", "rate limit", "429", "resource_exhausted")):
+            print(f"  ❌  Groq quota agotada — abortando")
+            raise
+        if any(k in msg for k in ("api key", "unauthorized", "401", "403")):
+            print(f"  ❌  Groq API key inválida — abortando")
+            raise
+        print(f"  ⚠  Groq error: {str(e)[:200]}")
+        return None
+
+
 # ── Main ────────────────────────────────────────────────────────────────
 def main() -> None:
     parser = argparse.ArgumentParser(description="Refina prompts de LABELS con feedback humano vía Gemini")
@@ -359,13 +472,33 @@ def main() -> None:
         print("✅ --dry-run: nada más que hacer.")
         return
 
-    # Setup Gemini
+    # Setup Gemini (primario)
     gem_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not gem_key:
         print("❌ GEMINI_API_KEY no encontrada en .env / .env.local")
         sys.exit(1)
-    print(f"🤖 Gemini ({GEMINI_MODEL_ID}) — key prefix '{gem_key[:4]}' len={len(gem_key)}\n")
+    print(f"🤖 Gemini ({GEMINI_MODEL_ID}) — key prefix '{gem_key[:4]}' len={len(gem_key)}")
     gem_client = google_genai.Client(api_key=gem_key)
+
+    # Setup Groq (fallback opcional). Si no hay key o `groq` no está
+    # instalado, seguimos con Gemini solo. Si Gemini agota cuota mid-run
+    # automáticamente pasamos a Groq para procesar el resto de candidatos
+    # — sin abortar.
+    gem_disabled = False                              # se activa si Gemini cae
+    groq_key     = os.environ.get("GROQ_API_KEY", "").strip()
+    groq_client  = None
+    if _GROQ_AVAILABLE and groq_key:
+        try:
+            groq_client = GroqClient(api_key=groq_key)
+            print(f"🦙 Groq    ({GROQ_MODEL_ID}) — key prefix '{groq_key[:4]}' len={len(groq_key)} (fallback)")
+        except Exception as e:  # noqa: BLE001
+            print(f"⚠  Groq init failed — disabled: {e}")
+            groq_client = None
+    elif not _GROQ_AVAILABLE:
+        print(f"   (groq package no instalado — sin fallback. `pip install groq` para activarlo)")
+    elif not groq_key:
+        print(f"   (GROQ_API_KEY no configurada — sin fallback. Añade a .env si quieres uno)")
+    print()
 
     # Listar keys de R2 para todas las SHAs en una pasada
     all_shas: set[str] = set()
@@ -411,21 +544,49 @@ def main() -> None:
         current_positives = labels_dict.get(lid, [])
         current_negatives = LABEL_NEGATIVES.get(lid, [])
 
-        try:
-            result = call_gemini_refine(
-                gem_client, lid,
-                current_positives, current_negatives,
-                pos_imgs, neg_imgs,
-                refine_positives=refine_pos,
-                refine_negatives=refine_neg,
-            )
-        except Exception:
-            # Quota/auth fatal → no seguimos al resto
-            print(f"\n❌ Gemini error fatal — abortando run. Refinements parciales se persisten abajo.")
-            break
+        # Provider selection: si Gemini no está agotado, va primero. Si
+        # cayó por quota antes, saltamos directo a Groq para este label.
+        result            = None
+        used_provider:    Optional[str] = None
+        if not gem_disabled:
+            try:
+                result = call_gemini_refine(
+                    gem_client, lid,
+                    current_positives, current_negatives,
+                    pos_imgs, neg_imgs,
+                    refine_positives=refine_pos,
+                    refine_negatives=refine_neg,
+                )
+                if result is not None:
+                    used_provider = GEMINI_MODEL_ID
+            except Exception as e:  # noqa: BLE001
+                # Quota / auth fatal de Gemini. Si tenemos Groq, lo
+                # usamos para este label y los siguientes (gem_disabled).
+                msg = str(e).lower()
+                gem_disabled = True
+                if groq_client is None:
+                    print(f"\n❌ Gemini error fatal y SIN fallback Groq — abortando run. Refinements parciales se persisten abajo.")
+                    break
+                print(f"   ↪  Gemini caído ({msg[:80]}) — reintentando con Groq...")
+
+        if result is None and groq_client is not None and gem_disabled:
+            try:
+                result = call_groq_refine(
+                    groq_client, lid,
+                    current_positives, current_negatives,
+                    pos_imgs, neg_imgs,
+                    refine_positives=refine_pos,
+                    refine_negatives=refine_neg,
+                )
+                if result is not None:
+                    used_provider = GROQ_MODEL_ID
+            except Exception:
+                # Groq también cayó → abortar
+                print(f"\n❌ Gemini Y Groq agotados — abortando run. Refinements parciales se persisten abajo.")
+                break
 
         if result is None:
-            print(f"   ⚠  Gemini no devolvió un refinement válido — skip")
+            print(f"   ⚠  no se obtuvo un refinement válido — skip")
             continue
 
         print(f"   ✅ refinement OK")
@@ -442,7 +603,10 @@ def main() -> None:
             "refinedNegatives":  result["refinedNegatives"]  if refine_neg else list(current_negatives),
             "reasoning":         result["reasoning"],
             "refinedAt":         datetime.now(timezone.utc).isoformat(),
-            "refinedBy":         GEMINI_MODEL_ID,
+            # Provider real (Gemini si fue OK, Groq si cayó la quota y se
+            # usó fallback). Útil para auditar: si veo "refinedBy: llama-..."
+            # sé que Gemini estaba agotado en ese momento.
+            "refinedBy":         used_provider or GEMINI_MODEL_ID,
             "nPositiveSamples":  len(pos_imgs),
             "nNegativeSamples":  len(neg_imgs),
             "scope":             "both" if (refine_pos and refine_neg) else ("positives" if refine_pos else "negatives"),
