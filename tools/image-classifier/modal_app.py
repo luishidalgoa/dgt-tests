@@ -987,6 +987,7 @@ def orchestrate(
     # ── 2. Load admin overrides + prev + discovered ─────────────────────
     excl_raw       = _get_meta_json("meta/tag_exclusions.json")
     conf_raw       = _get_meta_json("meta/tag_confirmations.json")
+    manual_raw     = _get_meta_json("meta/manual_tags.json")
     prev           = _get_meta_json("meta/classification.json")
     discovered_raw = _get_meta_json("meta/discovered_labels.json")
     refined_raw    = _get_meta_json("meta/refined_labels.json")
@@ -1003,12 +1004,22 @@ def orchestrate(
             if isinstance(sha, str) and isinstance(tags, list):
                 tag_confirmations[sha] = {t for t in tags if isinstance(t, str)}
 
+    # Manual tags asignados por admin desde /admin/images-bank — misma
+    # semántica que confirmations + inyección forzada + flag humanAssigned
+    # + cleanup tras este run (migran a tag_confirmations).
+    from classifier_core import parse_manual_tags, manual_tags_to_id_sets  # noqa: E402
+    parsed_manual_tags = parse_manual_tags(manual_raw)
+    manual_tags_by_sha = manual_tags_to_id_sets(parsed_manual_tags)
+
     if tag_exclusions:
         total_excl = sum(len(v) for v in tag_exclusions.values())
         print(f"🚫 Exclusiones manuales: {len(tag_exclusions)} shas, {total_excl} tags excluidos", flush=True)
     if tag_confirmations:
         total_conf = sum(len(v) for v in tag_confirmations.values())
         print(f"✅ Confirmaciones manuales: {len(tag_confirmations)} shas, {total_conf} tags confirmados (boost a {CONFIRMED_BOOST})", flush=True)
+    if manual_tags_by_sha:
+        total_man = sum(len(v) for v in manual_tags_by_sha.values())
+        print(f"👤 Manual tags: {len(manual_tags_by_sha)} shas, {total_man} tags asignados (boost a {CONFIRMED_BOOST} + inyectados al output, migrarán a confirmations tras este run)", flush=True)
 
     discovered: list[dict] = []
     if discovered_raw and isinstance(discovered_raw.get("labels"), list):
@@ -1321,23 +1332,42 @@ def orchestrate(
                 if ct in all_scores and all_scores[ct] < CONFIRMED_BOOST:
                     all_scores[ct] = CONFIRMED_BOOST
 
-            # Exclusiones admin (filtra antes del top-K)
+            # Manual tags (admin asigna directamente desde /admin/images-bank).
+            # Misma semántica que confirmations + ADEMÁS:
+            #   - Inyecta el label en all_scores aunque no estuviera
+            #   - Se preserva SIEMPRE en el output (sin filtros por threshold)
+            #   - Marca flag `humanAssigned` en el output
+            #   - Gana sobre exclusiones (admin las re-asignó a propósito)
+            sha_manual = manual_tags_by_sha.get(sha, set())
+            if sha_manual:
+                for mt in sha_manual:
+                    all_scores[mt] = max(all_scores.get(mt, 0.0), CONFIRMED_BOOST)
+
+            # Exclusiones admin (filtra antes del top-K, salvo manual_tags)
             excluded     = tag_exclusions.get(sha, set())
             confirmed    = tag_confirmations.get(sha, set())
-            filtered     = [(lid, sc) for lid, sc in all_scores.items() if lid not in excluded]
+            filtered     = [
+                (lid, sc) for lid, sc in all_scores.items()
+                if lid not in excluded or lid in sha_manual
+            ]
             candidates   = sorted(filtered, key=lambda x: -x[1])[:TOP_K]
 
             tags: list[dict] = []
+            seen_in_tags: set[str] = set()
             for rank, (lid, score) in enumerate(candidates):
-                if score < MIN_SCORE:
+                if score < MIN_SCORE and lid not in sha_manual:
                     break
-                if rank >= ALWAYS_KEEP_TOP and score < THRESHOLD:
+                if rank >= ALWAYS_KEEP_TOP and score < THRESHOLD and lid not in sha_manual:
                     continue
                 tag_entry: dict = {
                     "tag":       lid,
                     "score":     score,
-                    "confident": score >= THRESHOLD,
+                    "confident": score >= THRESHOLD or lid in sha_manual,
                 }
+                # humanAssigned (manual) > humanConfirmed (confirmación).
+                # Ambas flags pueden coexistir si el admin además confirmó.
+                if lid in sha_manual:
+                    tag_entry["humanAssigned"] = True
                 # Persiste el flag de "revisado por admin" en el JSON. Misma
                 # semántica que classify_siglip.py: independientemente del
                 # score real (incluso si ya estaba alto), si el admin marcó
@@ -1346,6 +1376,19 @@ def orchestrate(
                 if lid in confirmed:
                     tag_entry["humanConfirmed"] = True
                 tags.append(tag_entry)
+                seen_in_tags.add(lid)
+
+            # Garantizar invariante: TODOS los manual_tags están en el output
+            # aunque no entraran al top-K (caso raro, defensivo).
+            for mt in sha_manual:
+                if mt in seen_in_tags:
+                    continue
+                tags.append({
+                    "tag":           mt,
+                    "score":         round(float(all_scores.get(mt, CONFIRMED_BOOST)), 4),
+                    "confident":     True,
+                    "humanAssigned": True,
+                })
 
             results[sha] = {
                 "filename":  filename,
@@ -1584,6 +1627,56 @@ def orchestrate(
         print(f"   Motivos más comunes:", flush=True)
         for reason, cnt in reasons.most_common(5):
             print(f"     {cnt:>4}× {reason}", flush=True)
+
+    # ── 12. Cleanup: promover manual_tags → tag_confirmations en R2 ─────
+    # write_object de classification.json fue exitoso → consideramos el
+    # run completo. Migramos las entradas de meta/manual_tags.json al
+    # meta/tag_confirmations.json (preservando confirmaciones previas),
+    # vaciamos manual_tags.json y appendeamos un audit entry. Todo en R2.
+    if parsed_manual_tags:
+        from classifier_core import (  # noqa: E402
+            merge_manual_into_confirmations,
+            build_empty_manual_tags_payload,
+            build_manual_tags_audit_entry,
+        )
+        try:
+            existing_conf = _get_meta_json("meta/tag_confirmations.json") or {}
+            merged_conf   = merge_manual_into_confirmations(parsed_manual_tags, existing_conf)
+            s3.put_object(
+                Bucket       = bucket,
+                Key          = "meta/tag_confirmations.json",
+                Body         = json.dumps(merged_conf, indent=2, ensure_ascii=False).encode("utf-8"),
+                ContentType  = "application/json; charset=utf-8",
+                CacheControl = "no-cache",
+            )
+            s3.put_object(
+                Bucket       = bucket,
+                Key          = "meta/manual_tags.json",
+                Body         = json.dumps(build_empty_manual_tags_payload(), indent=2, ensure_ascii=False).encode("utf-8"),
+                ContentType  = "application/json; charset=utf-8",
+                CacheControl = "no-cache",
+            )
+            # Append audit
+            history_raw = _get_meta_json("meta/manual_tags_history.json") or {}
+            history_list = history_raw.get("entries", []) if isinstance(history_raw, dict) else []
+            if not isinstance(history_list, list):
+                history_list = []
+            history_list.append(build_manual_tags_audit_entry(
+                parsed_manual_tags,
+                run_started_at=iso_now,    # mejor aprox temporal disponible en este scope
+                run_succeeded=True,
+            ))
+            s3.put_object(
+                Bucket       = bucket,
+                Key          = "meta/manual_tags_history.json",
+                Body         = json.dumps({"entries": history_list}, indent=2, ensure_ascii=False).encode("utf-8"),
+                ContentType  = "application/json; charset=utf-8",
+                CacheControl = "no-cache",
+            )
+            total_man = sum(len(v) for v in parsed_manual_tags.values())
+            print(f"🧹 Cleanup: {len(parsed_manual_tags)} shas / {total_man} manual_tags migrados a tag_confirmations.json en R2", flush=True)
+        except Exception as err:  # noqa: BLE001
+            print(f"⚠️  Cleanup manual_tags FAILED (classification.json OK): {err}", flush=True)
 
     print(
         f"[orch] done — {new_count} newly classified, "
