@@ -625,7 +625,7 @@ const CATEGORIES: Category[] = [
       },
       {
         name:        "images:classify",
-        description: "Clasifica multi-label local con SigLIP. Aplica feedback humano en cascada: A (humanConfirmed/humanAssigned + boost) + B (refined_labels.json) + C (kNN sobre prototypes.json) + auto-discovery Gemini→Groq con top-relevant en prompt + cache de embeddings. Lee tag_confirmations + tag_exclusions + manual_tags + refined_labels + prototypes desde tools/image-audit/ (sincronizar con `download-metadata` antes). Al terminar OK migra manual_tags.json → tag_confirmations.json LOCAL + audit log; corre `upload-metadata` después para sincronizar R2.",
+        description: "Clasifica multi-label local con SigLIP. Sync automático de R2 al inicio (solo baja imgs que falten en local — pasa `--no-r2-sync` para saltar). Aplica feedback humano en cascada: A (humanConfirmed/humanAssigned + boost) + B (refined_labels.json) + C (kNN sobre prototypes.json) + auto-discovery Gemini→Groq con top-relevant en prompt + cache de embeddings. Lee tag_confirmations + tag_exclusions + manual_tags + refined_labels + prototypes desde tools/image-audit/ (sincronizar con `download-metadata` antes). Al terminar OK migra manual_tags.json → tag_confirmations.json LOCAL + audit log; corre `upload-metadata` después para sincronizar R2.",
         args: [
           { name: "--input-dir <path>",  type: "string",                description: "Carpeta de imgs (default: public/images). Si no existe, descarga primero con `images:download-r2`." },
           { name: "--output <path>",     type: "string",                description: "JSON salida (default: tools/image-audit/classification.json)." },
@@ -635,6 +635,7 @@ const CATEGORIES: Category[] = [
           { name: "--no-groq",           type: "bool",   default: "off", description: "Desactiva Groq fallback." },
           { name: "--no-cache",          type: "bool",   default: "off", description: "Desactiva cache de embeddings de imagen (re-codifica todo)." },
           { name: "--no-vocab-check",    type: "bool",   default: "off", description: "Desactiva auto-detección de cambios en LABELS (que dispara re-clasificación automática)." },
+          { name: "--no-r2-sync",        type: "bool",   default: "off", description: "Salta el sync R2 → local del inicio (offline / conexión lenta / sabes que está completo)." },
           { name: "--force, -f",         type: "bool",   default: "off", description: "Ignora classification.json existente y re-procesa TODAS las imgs desde cero." },
         ],
         examples: [

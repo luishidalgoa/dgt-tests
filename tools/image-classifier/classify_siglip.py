@@ -971,11 +971,15 @@ def write_output(path: Path, payload: dict) -> None:
 
 
 def _auto_download_images_from_r2(target_dir: Path) -> int:
-    """Si target_dir no existe o está vacío, auto-descarga TODAS las imgs
-    de R2 al directorio. Pensado para que el classifier funcione sin tener
-    que correr manualmente `npm run images:download-r2` antes.
+    """Sincroniza R2 → target_dir descargando SOLO las imgs que no están
+    en local. Idempotente: re-correrlo cuando todo está sincronizado es
+    un no-op silencioso. Pensado para que el classifier funcione sin que
+    el admin tenga que correr `npm run images:download-r2` manualmente,
+    sobre todo cuando se descargan refs nuevas por Lens y el local tiene
+    1700 imgs viejas pero le faltan 2 nuevas.
 
-    Returns: número de imgs descargadas. 0 si no se pudo (sin creds, etc).
+    Returns: número de imgs descargadas en esta llamada (sin contar
+    skipped). 0 si no se pudo (sin creds), o si todo ya estaba.
     """
     try:
         import boto3
@@ -1008,8 +1012,9 @@ def _auto_download_images_from_r2(target_dir: Path) -> int:
     )
     bucket = os.environ["R2_BUCKET_NAME"]
 
+    target_dir.mkdir(parents=True, exist_ok=True)
+
     # 1. Listar imgs en R2 (excluir prefix meta/)
-    print(f"📥 listando keys de R2 en bucket '{bucket}'...")
     keys: list[str] = []
     paginator = s3.get_paginator("list_objects_v2")
     for page in paginator.paginate(Bucket=bucket):
@@ -1025,19 +1030,23 @@ def _auto_download_images_from_r2(target_dir: Path) -> int:
         print(f"⚠  No hay imágenes en R2.")
         return 0
 
-    print(f"   {len(keys)} imgs encontradas en R2.")
-    print(f"   Descargando a {target_dir} (paralelo, ~30-60s para 1.7k imgs)...")
-    target_dir.mkdir(parents=True, exist_ok=True)
+    # 2. Comparar con local — solo nos interesan las que FALTAN. Evita
+    #    el listado de "ya estaban" para cuando no hay nada que hacer
+    #    (caso típico tras una primera descarga: 0 gap → mensaje breve).
+    missing_keys = [
+        k for k in keys
+        if not (target_dir / k.replace("/", "_")).exists()
+    ]
+    if not missing_keys:
+        # Silencioso: el caller llama al inicio de cada run, no queremos
+        # ruido cuando el local ya está al día.
+        return 0
+
+    print(f"📥 R2 sync: {len(missing_keys)} imgs faltantes en local — descargando a {target_dir}...")
 
     from concurrent.futures import ThreadPoolExecutor
-    downloaded = 0
-    skipped    = 0
-    failed     = 0
-
     def _download(key: str) -> str:
         local_path = target_dir / key.replace("/", "_")  # flatten any subdirs
-        if local_path.exists() and local_path.stat().st_size > 0:
-            return "skipped"
         try:
             s3.download_file(bucket, key, str(local_path))
             return "ok"
@@ -1046,13 +1055,12 @@ def _auto_download_images_from_r2(target_dir: Path) -> int:
             return "failed"
 
     pool = ThreadPoolExecutor(max_workers=24)
-    results = list(pool.map(_download, keys))
+    results = list(pool.map(_download, missing_keys))
     pool.shutdown()
     downloaded = results.count("ok")
-    skipped    = results.count("skipped")
     failed     = results.count("failed")
-    print(f"✅ descargadas: {downloaded}, ya estaban: {skipped}, fallos: {failed}")
-    return downloaded + skipped
+    print(f"✅ descargadas: {downloaded} · fallos: {failed}")
+    return downloaded
 
 
 def _parse_args() -> argparse.Namespace:
@@ -1083,6 +1091,14 @@ def _parse_args() -> argparse.Namespace:
         help="Desactiva la detección automática de cambios en el vocabulario. "
              "Por defecto, si LABELS o discovered_labels cambian respecto al "
              "classification.json existente, se re-clasifica todo automáticamente.",
+    )
+    p.add_argument(
+        "--no-r2-sync", action="store_true",
+        help="No comparar local con R2 al inicio. Por defecto, antes de "
+             "clasificar el script lista las keys del bucket y baja las imgs "
+             "que falten en local (típicamente 0-2 → <1s, idempotente). Pasa "
+             "este flag si trabajas offline, conexión lenta, o sabes que el "
+             "local ya está completo.",
     )
     p.add_argument(
         "--retry-problematic", action="store_true",
@@ -1124,15 +1140,17 @@ def main() -> None:
     print(f"   Threshold: {THRESHOLD} (prob sigmoid mínima para incluir tag)")
     print()
 
-    # Si INPUT_DIR no existe o está vacío, intentar auto-descargar de R2.
-    # Esto evita tener que correr manualmente `npm run images:download-r2`
-    # antes — el classifier se las arregla solo si las creds R2 están en
-    # .env / .env.local.
-    if not INPUT_DIR.exists() or not any(INPUT_DIR.iterdir()):
-        print(f"📂 {INPUT_DIR} no existe o está vacío — intentando auto-descargar de R2...\n")
+    # Sync de R2 → local en CADA run (idempotente, solo baja lo que falta).
+    # Antes solo se ejecutaba si INPUT_DIR no existía → si tenías las 1700
+    # imgs viejas y descargabas 2 nuevas por Lens, el classifier no las
+    # veía porque iteraba el filesystem y esas 2 nuevas solo estaban en R2.
+    # Ahora siempre se lista R2, se compara con local, y se baja el gap
+    # (típicamente 0-10 imgs → <1s). Usa `--no-r2-sync` para saltar
+    # (offline, conexión lenta, o sabes que el local está completo).
+    if not args.no_r2_sync:
         downloaded = _auto_download_images_from_r2(INPUT_DIR)
-        if downloaded == 0:
-            print(f"\n❌ No se pudieron descargar imágenes de R2.")
+        if downloaded == 0 and (not INPUT_DIR.exists() or not any(INPUT_DIR.iterdir())):
+            print(f"\n❌ No se pudieron descargar imágenes de R2 y el directorio está vacío.")
             print(f"   Pasa --input-dir <ruta> con un directorio que SÍ tenga imágenes.")
             sys.exit(1)
         print()
