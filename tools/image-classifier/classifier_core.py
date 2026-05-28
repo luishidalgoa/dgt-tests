@@ -522,19 +522,20 @@ def build_tags_from_scores(
     ]
     candidates = sorted(filtered, key=lambda x: -x[1])[:top_k]
 
-    # 3. Construir tags con la regla de dos niveles. Los manual_tags se
-    #    fuerzan siempre — el admin los asignó, deben aparecer.
+    # 3. Construir tags con la regla de dos niveles. Tanto manual_tags
+    #    como confirmations son verdad humana y se fuerzan siempre.
+    forced = manual | sha_confirmations
     seen: set[str] = set()
     tags: list[dict] = []
     for rank, (lid, score) in enumerate(candidates):
-        if score < min_score and lid not in manual:
-            break  # ordenados desc → resto también será < min_score (excepto manuales)
-        if rank >= always_keep_top and score < threshold and lid not in manual:
-            continue  # extras solo si pasan threshold, salvo manual
+        if score < min_score and lid not in forced:
+            break  # ordenados desc → resto también será < min_score (salvo forzados)
+        if rank >= always_keep_top and score < threshold and lid not in forced:
+            continue  # extras solo si pasan threshold, salvo forzados
         tag_entry: dict = {
             "tag":       lid,
             "score":     round(float(score), 4),
-            "confident": score >= threshold or lid in manual,
+            "confident": score >= threshold or lid in forced,
         }
         # Flags: humanAssigned tiene prioridad visual sobre humanConfirmed
         # (los manuales son "más fuertes" en términos de aprendizaje del modelo).
@@ -545,20 +546,25 @@ def build_tags_from_scores(
         tags.append(tag_entry)
         seen.add(lid)
 
-    # 4. Si algún manual_tag NO entró en el top-K (raro porque ya pusimos
-    #    score al menos confirmed_boost), lo añadimos al final para garantizar
-    #    su presencia. Mantiene el invariante "lo que asignó el admin SIEMPRE
-    #    aparece en classification.json".
-    for man_tag in manual:
-        if man_tag in seen:
+    # 4. Garantizar invariante "lo que el admin afirmó SIEMPRE aparece
+    #    en classification.json" — tanto manuales como confirmations.
+    #    Caso raro pero real: una imagen con 5+ tags por encima del
+    #    confirmed_boost hace que un confirmed con score moderado caiga
+    #    fuera del top-K. Lo añadimos al final con su flag.
+    for forced_tag in forced:
+        if forced_tag in seen:
             continue
-        forced_score = scores.get(man_tag, confirmed_boost)
-        tags.append({
-            "tag":           man_tag,
-            "score":         round(float(forced_score), 4),
-            "confident":     True,
-            "humanAssigned": True,
-        })
+        forced_score = scores.get(forced_tag, confirmed_boost)
+        entry: dict = {
+            "tag":       forced_tag,
+            "score":     round(float(forced_score), 4),
+            "confident": True,
+        }
+        if forced_tag in manual:
+            entry["humanAssigned"] = True
+        if forced_tag in sha_confirmations:
+            entry["humanConfirmed"] = True
+        tags.append(entry)
 
     return tags, scores
 
@@ -788,6 +794,20 @@ if __name__ == "__main__":
         "manual_tag 'newlabel' debe estar presente con humanAssigned=True"
     assert any(t["tag"] == "b" and t.get("humanAssigned") and t["score"] >= CONFIRMED_BOOST for t in tags_m), \
         "manual_tag 'b' debe haber sido boost-eado a >= CONFIRMED_BOOST"
+
+    # Test: confirmations fuera de top-K se inyectan igual que manual_tags
+    # Caso: imagen con 5+ tags muy fuertes + 1 confirmation con score
+    # moderado. Antes la confirmation caía del top-K → ahora se fuerza.
+    tags_c, _ = build_tags_from_scores(
+        {"t1": 0.9, "t2": 0.85, "t3": 0.8, "t4": 0.75, "t5": 0.7, "weak_conf": 0.05},
+        sha_exclusions=set(),
+        sha_confirmations={"weak_conf"},   # boost a 0.30, pero fuera de top-K=5
+    )
+    print(f"\nbuild_tags_from_scores(confirmation OOB top-K): {len(tags_c)} tags:")
+    for t in tags_c:
+        print(f"  {t}")
+    assert any(t["tag"] == "weak_conf" and t.get("humanConfirmed") for t in tags_c), \
+        "confirmation 'weak_conf' debe estar presente con humanConfirmed=True aunque cayera del top-K"
 
     # Test promote_manual_tags_to_confirmations (sin tocar R2 — solo la lógica de merge)
     manual = {"sha1": ["tag_a", "tag_b"], "sha2": ["tag_c"]}

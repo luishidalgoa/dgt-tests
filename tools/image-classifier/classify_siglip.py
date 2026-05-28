@@ -1892,62 +1892,58 @@ def main() -> None:
             # Aplicar exclusiones manuales: filtrar candidates antes
             # del top-K para que no "ocupen" hueco. Si el admin marcó
             # esta sha-tag como "no corresponde" desde el banco, se
-            # excluye aunque tenga score 0.99. EXCEPCIÓN: los manual_tags
-            # ganan sobre exclusions (el admin las asignó a propósito).
+            # excluye aunque tenga score 0.99. EXCEPCIÓN: tanto manuales
+            # como confirmations ganan sobre exclusions (el admin las
+            # re-afirmó a propósito).
             sha_exclusions = tag_exclusions.get(sha, set())
+            # "Verdad humana" — manual + confirmed. Ambos: ignoran
+            # threshold/MIN_SCORE y se inyectan SIEMPRE en el output.
+            human_forced = sha_manual_tags | sha_confirmations
             scored_filtered = [
                 (lid, sc) for lid, sc in all_scores.items()
-                if lid not in sha_exclusions or lid in sha_manual_tags
+                if lid not in sha_exclusions or lid in human_forced
             ]
             candidates = sorted(scored_filtered, key=lambda x: -x[1])[:TOP_K]
             tags: list[dict] = []
             seen_in_tags: set[str] = set()
             for rank, (lid, score) in enumerate(candidates):
-                # Los manuales no se filtran por threshold (verdad humana).
-                if score < MIN_SCORE and lid not in sha_manual_tags:
-                    # Como están ordenados desc, los siguientes también
-                    # serán < MIN_SCORE → cortamos aquí.
+                if score < MIN_SCORE and lid not in human_forced:
                     break
-                if rank >= ALWAYS_KEEP_TOP and score < THRESHOLD and lid not in sha_manual_tags:
-                    # Tag "extra" (4º, 5º) que no pasa threshold de calidad
+                if rank >= ALWAYS_KEEP_TOP and score < THRESHOLD and lid not in human_forced:
                     continue
                 tag_entry: dict = {
                     "tag":       lid,
                     "score":     score,
-                    "confident": score >= THRESHOLD or lid in sha_manual_tags,
+                    "confident": score >= THRESHOLD or lid in human_forced,
                 }
-                # `humanAssigned` tiene prioridad visual sobre `humanConfirmed`
-                # (asignación directa del admin → señal más fuerte que
-                # confirmar un guess del modelo).
                 if lid in sha_manual_tags:
                     tag_entry["humanAssigned"] = True
-                # `humanConfirmed`: si el admin marcó "SÍ es" para esta
-                # (sha, lid) desde el banco, persistimos el flag. Esto hace
-                # el classification.json self-contained: la UI puede pintar
-                # el check verde sin cruzar con tag_confirmations.json en
-                # runtime, y el JSON queda auditable (export, debug, etc.).
-                # Lo aplicamos SIEMPRE — independientemente del score real,
-                # incluso si ya estaba alto (sirve como "reward signal" del
-                # humano que distingue "alta confianza del modelo" de "alta
-                # confianza humanamente verificada").
+                # `humanConfirmed`: idem flag — si el admin marcó "SÍ es",
+                # persistimos en el JSON para self-contained y badge UI.
                 if lid in sha_confirmations:
                     tag_entry["humanConfirmed"] = True
                 tags.append(tag_entry)
                 seen_in_tags.add(lid)
 
-            # Garantizar invariante: TODOS los manual_tags están en el
-            # output, aunque no entraran al top-K (caso raro porque ya
-            # los boost-eamos a CONFIRMED_TAG_MIN_SCORE, pero defensivo).
-            for man_tag in sha_manual_tags:
-                if man_tag in seen_in_tags:
+            # Garantizar invariante "lo que el admin afirmó SIEMPRE
+            # aparece en classification.json" — manuales + confirmations.
+            # Caso real visto en diff-classification: imágenes con 5+ tags
+            # por encima de CONFIRMED_TAG_MIN_SCORE hacen que un confirmed
+            # con score moderado caiga del top-K. Lo añadimos al final.
+            for forced_tag in human_forced:
+                if forced_tag in seen_in_tags:
                     continue
-                forced_score = all_scores.get(man_tag, CONFIRMED_TAG_MIN_SCORE)
-                tags.append({
-                    "tag":           man_tag,
-                    "score":         round(float(forced_score), 4),
-                    "confident":     True,
-                    "humanAssigned": True,
-                })
+                forced_score = all_scores.get(forced_tag, CONFIRMED_TAG_MIN_SCORE)
+                entry: dict = {
+                    "tag":       forced_tag,
+                    "score":     round(float(forced_score), 4),
+                    "confident": True,
+                }
+                if forced_tag in sha_manual_tags:
+                    entry["humanAssigned"] = True
+                if forced_tag in sha_confirmations:
+                    entry["humanConfirmed"] = True
+                tags.append(entry)
             results[sha] = {
                 "filename":  path.name,
                 "tags":      tags,

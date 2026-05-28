@@ -1343,26 +1343,28 @@ def orchestrate(
                 for mt in sha_manual:
                     all_scores[mt] = max(all_scores.get(mt, 0.0), CONFIRMED_BOOST)
 
-            # Exclusiones admin (filtra antes del top-K, salvo manual_tags)
+            # Exclusiones admin (filtra antes del top-K, salvo verdad humana)
             excluded     = tag_exclusions.get(sha, set())
             confirmed    = tag_confirmations.get(sha, set())
+            # "Verdad humana" — manual + confirmed se inyectan SIEMPRE.
+            human_forced = sha_manual | confirmed
             filtered     = [
                 (lid, sc) for lid, sc in all_scores.items()
-                if lid not in excluded or lid in sha_manual
+                if lid not in excluded or lid in human_forced
             ]
             candidates   = sorted(filtered, key=lambda x: -x[1])[:TOP_K]
 
             tags: list[dict] = []
             seen_in_tags: set[str] = set()
             for rank, (lid, score) in enumerate(candidates):
-                if score < MIN_SCORE and lid not in sha_manual:
+                if score < MIN_SCORE and lid not in human_forced:
                     break
-                if rank >= ALWAYS_KEEP_TOP and score < THRESHOLD and lid not in sha_manual:
+                if rank >= ALWAYS_KEEP_TOP and score < THRESHOLD and lid not in human_forced:
                     continue
                 tag_entry: dict = {
                     "tag":       lid,
                     "score":     score,
-                    "confident": score >= THRESHOLD or lid in sha_manual,
+                    "confident": score >= THRESHOLD or lid in human_forced,
                 }
                 # humanAssigned (manual) > humanConfirmed (confirmación).
                 # Ambas flags pueden coexistir si el admin además confirmó.
@@ -1378,17 +1380,25 @@ def orchestrate(
                 tags.append(tag_entry)
                 seen_in_tags.add(lid)
 
-            # Garantizar invariante: TODOS los manual_tags están en el output
-            # aunque no entraran al top-K (caso raro, defensivo).
-            for mt in sha_manual:
-                if mt in seen_in_tags:
+            # Garantizar invariante: TODOS los manuales + confirmations
+            # están en el output, aunque no entraran al top-K. Caso real
+            # (visto en diff-classification): imágenes con 5+ tags por
+            # encima de CONFIRMED_BOOST hacen que un confirmed con score
+            # moderado caiga del top-K.
+            for forced_tag in human_forced:
+                if forced_tag in seen_in_tags:
                     continue
-                tags.append({
-                    "tag":           mt,
-                    "score":         round(float(all_scores.get(mt, CONFIRMED_BOOST)), 4),
-                    "confident":     True,
-                    "humanAssigned": True,
-                })
+                forced_score = all_scores.get(forced_tag, CONFIRMED_BOOST)
+                entry: dict = {
+                    "tag":       forced_tag,
+                    "score":     round(float(forced_score), 4),
+                    "confident": True,
+                }
+                if forced_tag in sha_manual:
+                    entry["humanAssigned"] = True
+                if forced_tag in confirmed:
+                    entry["humanConfirmed"] = True
+                tags.append(entry)
 
             results[sha] = {
                 "filename":  filename,
