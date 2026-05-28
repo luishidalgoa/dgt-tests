@@ -3,9 +3,9 @@
  *
  * Para cada SHA del banco (los originales — no los que YA son refs):
  *   - Si tiene ≥5 refs → SKIP.
- *   - Si tiene <5 → busca candidatos vía stock APIs (Pexels + Pixabay)
- *     o Google Lens (SerpAPI), descarga los necesarios para llegar a 5
- *     y los registra en meta/alternative_references.json.
+ *   - Si tiene <5 → busca candidatos vía Google Lens (SerpAPI, default)
+ *     o stock APIs (Pexels + Pixabay), descarga los necesarios para
+ *     llegar a 5 y los registra en meta/alternative_references.json.
  *
  * Persistencia incremental: el registry se sube a R2 TRAS CADA SHA
  * procesado. Si el script crashea (red, quota, KeyboardInterrupt) la
@@ -17,14 +17,21 @@
  * classifier (npm run images:classify-modal) las recogerá como SHAs
  * huérfanos y les asignará tags.
  *
+ * ⚠ CUOTA SERPAPI:
+ *   Default usa Google Lens vía SerpAPI = 1 búsqueda por SHA. Free
+ *   tier 100/mes, plan pago $50/mes 5000. El script muestra una
+ *   estimación al inicio + aborta para confirmación si superas un
+ *   umbral configurable (--yes-burn-serpapi para skipear).
+ *
  * Uso:
- *   npm run images:bulk-save-refs                          # default: stock APIs, target 5, todo el banco
- *   npm run images:bulk-save-refs -- --max-shas 10         # smoke test
- *   npm run images:bulk-save-refs -- --provider google     # usa SerpAPI Lens (gasta cuota)
- *   npm run images:bulk-save-refs -- --target 3            # target distinto a 5
- *   npm run images:bulk-save-refs -- --dry-run             # calcula qué descargaría sin hacerlo
- *   npm run images:bulk-save-refs -- --tagged-only         # solo SHAs con al menos 1 tag (omite "Sin tag")
- *   npm run images:bulk-save-refs -- --delay-ms 300        # pausa entre descargas
+ *   npm run images:bulk-save-refs                            # default: Google Lens, target 5, banco entero
+ *   npm run images:bulk-save-refs -- --max-shas 10           # smoke test
+ *   npm run images:bulk-save-refs -- --provider stock        # usa Pexels+Pixabay (free pero calidad menor)
+ *   npm run images:bulk-save-refs -- --target 3              # target distinto a 5
+ *   npm run images:bulk-save-refs -- --dry-run               # calcula qué descargaría sin hacerlo
+ *   npm run images:bulk-save-refs -- --tagged-only           # solo SHAs con al menos 1 tag
+ *   npm run images:bulk-save-refs -- --delay-ms 300          # pausa entre descargas
+ *   npm run images:bulk-save-refs -- --yes-burn-serpapi      # NO pide confirmación aunque > 50 SHAs
  */
 
 import { createHash } from "node:crypto"
@@ -60,14 +67,21 @@ interface ClassificationData {
 
 // ── Args ──────────────────────────────────────────────────────────────
 interface ParsedArgs {
-  target:       number
-  providerSet:  "stock" | "google"
-  maxShas:      number
-  dryRun:       boolean
-  taggedOnly:   boolean
-  delayMs:      number
-  imageType:    ImageType
+  target:           number
+  providerSet:      "stock" | "google"
+  maxShas:          number
+  dryRun:           boolean
+  taggedOnly:       boolean
+  delayMs:          number
+  imageType:        ImageType
+  yesBurnSerpapi:   boolean
 }
+
+/** Umbral por encima del cual el script pide confirmación antes de
+ *  gastar la cuota SerpAPI. Calibrado al free tier (100 búsquedas/mes):
+ *  si vas a hacer > 50, mejor que el admin confirme que de verdad
+ *  quiere quemar la mitad de la cuota en un solo run. */
+const SERPAPI_CONFIRM_THRESHOLD = 50
 
 function parseArgs(): ParsedArgs {
   const a = process.argv.slice(2)
@@ -77,20 +91,21 @@ function parseArgs(): ParsedArgs {
   }
   const has = (name: string): boolean => a.includes(name)
 
-  const providerSetRaw = get("--provider", "stock") ?? "stock"
+  const providerSetRaw = get("--provider", "google") ?? "google"
   if (providerSetRaw !== "stock" && providerSetRaw !== "google") {
     console.error(`❌ --provider inválido: ${providerSetRaw}. Usa "stock" o "google".`)
     process.exit(1)
   }
 
   return {
-    target:      parseInt(get("--target", "5") ?? "5", 10),
-    providerSet: providerSetRaw as "stock" | "google",
-    maxShas:     parseInt(get("--max-shas", "0") ?? "0", 10),  // 0 = todos
-    dryRun:      has("--dry-run"),
-    taggedOnly:  has("--tagged-only"),
-    delayMs:     parseInt(get("--delay-ms", "500") ?? "500", 10),
-    imageType:   "any",
+    target:         parseInt(get("--target", "5") ?? "5", 10),
+    providerSet:    providerSetRaw as "stock" | "google",
+    maxShas:        parseInt(get("--max-shas", "0") ?? "0", 10),  // 0 = todos
+    dryRun:         has("--dry-run"),
+    taggedOnly:     has("--tagged-only"),
+    delayMs:        parseInt(get("--delay-ms", "500") ?? "500", 10),
+    imageType:      "any",
+    yesBurnSerpapi: has("--yes-burn-serpapi"),
   }
 }
 
@@ -227,6 +242,27 @@ async function main() {
   console.log(`   downloads esperados:  ~${totalDownloadsExpected} (suponiendo todos los providers devuelven candidatos suficientes)`)
   console.log(`   skips:                ${skippedFull} ya completos, ${skippedIsRef} son refs ellas mismas, ${skippedNoTags} sin tag (no buscables)`)
   console.log()
+
+  // ── Aviso de cuota SerpAPI ──────────────────────────────────────
+  // Google Lens consume 1 búsqueda SerpAPI por SHA. Si vamos a quemar
+  // más de SERPAPI_CONFIRM_THRESHOLD del free tier (100/mes), pedimos
+  // confirmación explícita. --yes-burn-serpapi salta el prompt.
+  if (args.providerSet === "google" && totalToProcess > 0) {
+    console.log(`💸 Coste SerpAPI estimado: ~${totalToProcess} búsquedas Lens`)
+    console.log(`   Free tier:  100/mes  ·  Plan pago: 5000/mes ($50)`)
+    if (totalToProcess > SERPAPI_CONFIRM_THRESHOLD && !args.yesBurnSerpapi && !args.dryRun) {
+      console.log()
+      console.log(`⚠  Vas a consumir ${totalToProcess} búsquedas de SerpAPI Lens (umbral ${SERPAPI_CONFIRM_THRESHOLD}).`)
+      console.log(`   Opciones:`)
+      console.log(`     a) Confirma con --yes-burn-serpapi`)
+      console.log(`     b) Limita con --max-shas ${SERPAPI_CONFIRM_THRESHOLD} para gastar menos en esta tanda`)
+      console.log(`     c) Usa --provider stock (Pexels+Pixabay, gratis pero calidad menor)`)
+      console.log()
+      console.log(`   Aborting — re-ejecuta con uno de los flags arriba para continuar.`)
+      process.exit(2)
+    }
+    console.log()
+  }
 
   if (args.dryRun) {
     console.log("✅ --dry-run: nada más que hacer. Quitas el flag para ejecutar de verdad.")
