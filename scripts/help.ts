@@ -215,6 +215,17 @@ const WORKFLOWS: Workflow[] = [
     ],
   },
   {
+    title:       "Bulk-download masivo de referencias (CLI, todo el banco)",
+    emoji:       "📦",
+    description: "Alternativa CLI al flujo manual 🔍 para cuando quieres llenar el banco con N refs por imagen sin ir card a card. Itera el banco, salta los SHAs que YA tienen target (default 5) o que SON refs ellos mismos, y descarga lo que falte. Persiste tras cada SHA → resistente a crashes (re-ejecutar reanuda). Stock APIs por defecto (free); --provider google para gastar cuota SerpAPI Lens si quieres mejor calidad.",
+    steps: [
+      { cmd: "npm run images:bulk-save-refs -- --dry-run",         comment: "ver cuántas SHAs procesaría y cuántas descargas haría" },
+      { cmd: "npm run images:bulk-save-refs -- --max-shas 5",      comment: "smoke test con 5 SHAs antes de tirarlo del todo" },
+      { cmd: "npm run images:bulk-save-refs",                       comment: "bulk completo: stock APIs, 5 refs/img, 500ms entre descargas" },
+      { cmd: "npm run images:classify-modal",                       comment: "tras el bulk, clasifica las refs huérfanas (PENDIENTE → clasificada)" },
+    ],
+  },
+  {
     title:       "Migración masiva de imágenes a R2",
     emoji:       "🚚",
     description: "Limpieza completa del bucket + re-upload (raro — solo si cambias el esquema de nombres).",
@@ -581,6 +592,25 @@ const CATEGORIES: Category[] = [
         description: "Lee tag_confirmations + tag_exclusions + manual_tags + alternative_references de R2 y muestra distribución por label. Útil para decidir si correr B (refine prompts), C (kNN sobre embeddings) o procesar las refs pendientes.",
         examples: [
           "npm run images:audit-feedback   # tras swipear / taguear / descargar refs en /admin/images-bank",
+        ],
+      },
+      {
+        name:        "images:bulk-save-refs",
+        description: "Bulk-download de referencias visuales para todo el banco. Por cada SHA original (excluye los que SON refs) busca candidatos y descarga hasta llegar a N refs por imagen. Persiste el registry tras cada SHA → resistente a crashes (re-ejecutar reanuda desde donde quedó). Sin login: lee creds R2 de .env. Las refs quedan sin tags hasta que corras el classifier.",
+        args: [
+          { name: "--target <N>",     type: "number",       default: "5",     description: "Refs por imagen. SHAs con >=N se saltan." },
+          { name: "--provider <id>",  type: "stock | google", default: "stock", description: "stock=Pexels+Pixabay (free) · google=SerpAPI Lens (gasta cuota)." },
+          { name: "--max-shas <N>",   type: "number",       default: "0",     description: "Limita a las primeras N SHAs (0=todas, útil para smoke test)." },
+          { name: "--dry-run",        type: "bool",         default: "off",   description: "Calcula el plan sin descargar." },
+          { name: "--tagged-only",    type: "bool",         default: "off",   description: "Skip SHAs sin tag (típico para refs huérfanas pendientes que aún no se han clasificado)." },
+          { name: "--delay-ms <N>",   type: "number",       default: "500",   description: "Pausa entre descargas (respetar rate limits de los providers)." },
+        ],
+        examples: [
+          "npm run images:bulk-save-refs -- --dry-run                # ver plan",
+          "npm run images:bulk-save-refs -- --max-shas 5             # smoke test con 5 SHAs",
+          "npm run images:bulk-save-refs                              # arranca el bulk completo con stock APIs",
+          "npm run images:bulk-save-refs -- --provider google        # versión Lens (más calidad, gasta SerpAPI)",
+          "npm run images:bulk-save-refs -- --target 3 --tagged-only # 3 refs solo de SHAs con tag",
         ],
       },
       {
