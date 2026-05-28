@@ -596,6 +596,26 @@ const CATEGORIES: Category[] = [
         ],
       },
       {
+        name:        "images:purge-refs",
+        description: "Borra referencias visuales del registry meta/alternative_references.json + los binarios huérfanos de R2. Soporta filtros granulares (provider, addedBy, sha original, fecha). Por seguridad arranca SIEMPRE en dry-run — para borrar de verdad pasa --apply. NO borra el binario si el mismo newSha está usado como ref de otro originalSha (caso edge de mismas imgs).",
+        args: [
+          { name: "--provider <ids>",  type: "string",                description: "Filtra por provider — pixabay,pexels,serpapi,unsplash (lista separada por comas)." },
+          { name: "--added-by <user>", type: "string",                description: "Filtra por username del admin que la guardó. \"bulk-save-references\" para purgar lo del bulk script." },
+          { name: "--sha <hex>",       type: "string",                description: "Solo refs descargadas a partir de este SHA original." },
+          { name: "--since <ISO>",     type: "string",                description: "Borra refs descargadas DESPUÉS de esa fecha ISO 8601. Útil para deshacer el último bulk fallido." },
+          { name: "--all",             type: "bool",   default: "off", description: "Sin filtros — borra TODAS las refs. Sin --all + sin filtros el script aborta para evitar accidentes." },
+          { name: "--apply",           type: "bool",   default: "off", description: "Sin esto es dry-run. Pasa --apply para borrar de verdad." },
+        ],
+        examples: [
+          "npm run images:purge-refs -- --added-by bulk-save-references             # dry-run de lo del bulk",
+          "npm run images:purge-refs -- --added-by bulk-save-references --apply     # borra de verdad",
+          "npm run images:purge-refs -- --provider pixabay,pexels --apply           # nuke todas las stock",
+          "npm run images:purge-refs -- --since 2026-05-28T13:00:00Z --apply        # las descargadas tras esa hora",
+          "npm run images:purge-refs -- --sha 1f2bdeffbb… --apply                   # solo refs de ESTE original",
+          "npm run images:purge-refs -- --all --apply                               # NUKE TODAS las refs",
+        ],
+      },
+      {
         name:        "images:bulk-save-refs",
         description: "Bulk-download de referencias visuales para todo el banco vía Google Lens (default) o stock APIs. Por cada SHA original (excluye los que SON refs) descarga hasta llegar a N refs por imagen. Persiste el registry tras cada SHA → resistente a crashes (re-ejecutar reanuda desde donde quedó). Sin login: lee creds R2 de .env. Las refs quedan sin tags hasta que corras el classifier. ⚠ Google Lens consume 1 búsqueda SerpAPI por SHA — el script pide confirmación si superas 50 búsquedas en un solo run para no quemar tu cuota free (100/mes).",
         args: [
