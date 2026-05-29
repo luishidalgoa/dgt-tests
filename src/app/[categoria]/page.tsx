@@ -12,6 +12,7 @@ import {
 import { PRO_PRICE_PER_MONTH } from "@/lib/pricing"
 import { ChevronLeft, CheckCircle2, Lock } from "lucide-react"
 import { StructuredDataBreadcrumb } from "@/components/StructuredData"
+import { RandomExamButton } from "@/components/RandomExamButton"
 
 export const dynamic = "force-dynamic"
 
@@ -77,6 +78,13 @@ export default async function CategoryPage({ params }: PageProps) {
   const passThreshold = 0.9
   const fullAccess = hasFullAccess(user)
   const isGuest = !user
+
+  // ¿Hay al menos un test (con preguntas) que este usuario pueda abrir?
+  // Solo entonces tiene sentido el botón "Examen aleatorio" del header —
+  // en una categoría completamente bloqueada para free no lo mostramos.
+  const hasAccessibleTest = category.tests.some(
+    (t) => t._count.testQuestions > 0 && canAccessTest(user, category.slug, t.testNumber),
+  )
 
   // Banner explicativo: cuántos tests están desbloqueados
   let banner: React.ReactNode = null
@@ -167,7 +175,12 @@ export default async function CategoryPage({ params }: PageProps) {
           <h1>{category.name}</h1>
           {category.description && <p className="lead">{category.description}</p>}
         </div>
-        <span className="badge">[{category.code}]</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          {hasAccessibleTest && (
+            <RandomExamButton categoria={category.slug} label="Aleatorio" />
+          )}
+          <span className="badge">[{category.code}]</span>
+        </div>
       </header>
 
       {banner}

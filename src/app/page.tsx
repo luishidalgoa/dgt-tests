@@ -11,6 +11,7 @@ import { StructuredDataHome } from "@/components/StructuredData"
 import { StreakIcon } from "@/components/StreakIcon"
 import { StreakCycle } from "@/components/StreakCycle"
 import { RestoreStreakButton } from "@/components/RestoreStreakButton"
+import { RandomExamButton } from "@/components/RandomExamButton"
 import { computeRestoreTargetDays, getLevel, getStreakState } from "@/lib/xp"
 import { computeStreakState } from "@/lib/streak"
 
@@ -553,7 +554,12 @@ export default async function HomePage() {
       {/* CATEGORIES */}
       <div className="dash-section-title">
         <h3>Categorías</h3>
-        <Link className="more" href="/temas">Ver por temas →</Link>
+        <div className="actions">
+          {/* Examen aleatorio de CUALQUIER categoría — "sea lo que tenga
+              que ser", sin elegir categoría. */}
+          <RandomExamButton variant="solid" label="Examen aleatorio" />
+          <Link className="more" href="/temas">Ver por temas →</Link>
+        </div>
       </div>
 
       <div className="dash-cats">
@@ -703,18 +709,32 @@ function GuestDashboard({ category }: { category: GuestCategoryData }) {
       {/* Tests permiso B — bloque funcional, manteniendo el diseño que ya
           existía. Lo subo a <h2> (en vez del eyebrow visual) porque para
           el outline SEO importa que sea heading real. */}
-      <h2
+      <div
         style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          flexWrap: "wrap",
           margin: "0 4px 12px",
-          fontSize: 13,
-          fontWeight: 800,
-          color: "var(--slate-500)",
-          textTransform: "uppercase",
-          letterSpacing: "0.08em",
         }}
       >
-        Tests disponibles · Permiso B
-      </h2>
+        <h2
+          style={{
+            margin: 0,
+            fontSize: 13,
+            fontWeight: 800,
+            color: "var(--slate-500)",
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+          }}
+        >
+          Tests disponibles · Permiso B
+        </h2>
+        {/* Para invitados el aleatorio sale siempre entre los 7 tests
+            gratuitos (el server filtra por permisos). */}
+        <RandomExamButton label="Aleatorio" />
+      </div>
       <div className="tile-grid">
         {tests.map((t) => (
           <Link

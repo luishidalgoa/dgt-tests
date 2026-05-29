@@ -1859,6 +1859,46 @@ body {
 }
 .dash-section-title .more:hover { color: var(--orange-600); }
 
+/* Botón "Examen aleatorio" — reutilizado en la home (variante .is-solid)
+   y en el header de cada categoría (variante ghost, por defecto). */
+.dash-section-title .actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+}
+.random-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(249, 115, 22, 0.35);
+  background: rgba(249, 115, 22, 0.08);
+  color: var(--orange-600);
+  font-weight: 700;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.15s, filter 0.15s, background 0.15s, border-color 0.15s;
+}
+.random-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: rgba(249, 115, 22, 0.14);
+  border-color: rgba(249, 115, 22, 0.55);
+}
+.random-btn:disabled { opacity: 0.7; cursor: wait; }
+.random-btn.is-solid {
+  background: linear-gradient(180deg, var(--orange-500), var(--red-600));
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 10px 22px -12px rgba(220, 38, 38, 0.55);
+}
+.random-btn.is-solid:hover:not(:disabled) {
+  filter: brightness(1.05);
+  background: linear-gradient(180deg, var(--orange-500), var(--red-600));
+}
+
 /* Category cards */
 .dash-cats {
   grid-column: 1 / -1;
