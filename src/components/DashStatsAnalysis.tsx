@@ -15,6 +15,7 @@ import {
   ChevronDown,
   ChevronRight,
   Eye,
+  LineChart,
 } from "lucide-react"
 import {
   Dialog,
@@ -40,6 +41,8 @@ export interface StatsAnalysisResult {
   fortalezas:   string[]
   debilidades:  AnalysisWeakness[]
   consejos:     string[]
+  /** Comparación con el análisis anterior (solo a partir del 2º). */
+  progreso?:    string
 }
 
 /** Una entrada del historial cargada server-side. */
@@ -347,6 +350,16 @@ function AnalysisBody({ item }: { item: AnalysisHistoryItem }) {
   return (
     <div className="dash-stats-analysis__body">
       <p className="dash-stats-analysis__valoracion">{result.valoracion}</p>
+
+      {result.progreso && result.progreso.trim().length > 0 && (
+        <div className="dash-stats-analysis__progreso">
+          <div className="dash-stats-analysis__progreso-title">
+            <LineChart className="h-3.5 w-3.5" />
+            Progreso desde el último análisis
+          </div>
+          <p>{result.progreso}</p>
+        </div>
+      )}
 
       {result.fortalezas.length > 0 && (
         <div className="dash-stats-analysis__section">

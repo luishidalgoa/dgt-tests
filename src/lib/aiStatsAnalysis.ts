@@ -51,6 +51,11 @@ export interface StatsAnalysisResult {
   fortalezas:   string[]
   debilidades:  AnalysisWeakness[]
   consejos:     string[]
+  /** Comparación con el análisis anterior del alumno. Solo viene cuando
+   *  existe un análisis previo: el modelo resume cómo ha evolucionado
+   *  (acierto global, debilidades reducidas/agravadas, constancia…).
+   *  Ausente en el primer análisis. */
+  progreso?:    string
 }
 
 const weaknessSchema = z.object({
@@ -64,6 +69,14 @@ const resultSchema = z.object({
   fortalezas:  z.array(z.string().min(1)).max(5),
   debilidades: z.array(weaknessSchema).max(8),
   consejos:    z.array(z.string().min(1)).min(1).max(6),
+  // `progreso` es opcional: solo aplica si había análisis anterior. El
+  // preprocess convierte "" / sólo-espacios en undefined para que un
+  // campo vacío que devuelva el modelo no tumbe TODO el análisis vía la
+  // validación min(1).
+  progreso:    z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().min(1).max(800).optional(),
+  ),
 })
 
 // ── Contexto enviado al modelo ────────────────────────────────────────────
@@ -78,9 +91,28 @@ interface WeakBlock {
   ejemplos:      string[]
 }
 
+/**
+ * Resumen del análisis ANTERIOR del alumno, para que el modelo pueda
+ * comparar y comentar el progreso. Se construye en el endpoint a partir
+ * del último `UserAiStatsAnalysis` (su payload + el snapshot de stats).
+ */
+export interface PreviousAnalysis {
+  /** Cuándo se generó (ISO o Date). Solo informativo en el prompt. */
+  generatedAt: string | Date
+  /** Stats globales en el momento de aquel análisis. */
+  globals:     StatsGlobal
+  /** Valoración global que dio el modelo entonces. */
+  valoracion:  string
+  /** Debilidades de entonces (tema legible + fallos absolutos) para que
+   *  el modelo compare bloque a bloque con la situación actual. */
+  debilidades: { tema: string; fallos: number }[]
+}
+
 export interface StatsContext {
   globals:     StatsGlobal
   topWeakBlocks: WeakBlock[]
+  /** Análisis previo para comparar, o null si es el primero. */
+  previous?:   PreviousAnalysis | null
 }
 
 const MAX_BLOCKS = 10
@@ -114,6 +146,7 @@ export const MAX_HISTORY_ITEMS = 5
 export async function buildStatsContext(
   userId: number,
   globals: StatsGlobal,
+  previous: PreviousAnalysis | null = null,
 ): Promise<StatsContext> {
   // 1) Top codigoTema con más fallos absolutos. Excluimos los modos no-stats
   //    para no contar /test-errores ni el modo refuerzo. Una respuesta por
@@ -142,7 +175,7 @@ export async function buildStatsContext(
   `
 
   if (rawWeak.length === 0) {
-    return { globals, topWeakBlocks: [] }
+    return { globals, topWeakBlocks: [], previous }
   }
 
   // 2) Para los top codigoTema, cargar 1-2 enunciados de preguntas que el
@@ -181,7 +214,7 @@ export async function buildStatsContext(
     ejemplos:    examplesByCode.get(r.codigoTema) ?? [],
   }))
 
-  return { globals, topWeakBlocks }
+  return { globals, topWeakBlocks, previous }
 }
 
 /**
@@ -225,13 +258,15 @@ export async function analyzeStats(
   const opts: AICompleteOptions = {
     jsonMode:    true,
     temperature: 0.4,   // un poco de creatividad para los consejos
-    // 8000 tokens. El JSON visible son ~800-1500 tokens, pero los modelos
-    // "thinking" de Gemini (2.5-flash, flash-latest…) gastan VARIOS miles
-    // en pensamiento interno antes de generar la salida. Con 4000 hemos
-    // visto que el output llegaba truncado a mitad de un comentario.
-    // 8000 da margen sobrado; si tu provider/modelo no es thinking, no
-    // pasa nada porque solo cobramos por los tokens realmente generados.
-    maxTokens:   8000,
+    // 12000 tokens. El JSON visible son ~1000-1800 tokens (ahora con el
+    // bloque `progreso` comparando con el análisis anterior es algo más
+    // largo), pero los modelos "thinking" de Gemini (2.5-flash,
+    // flash-latest…) gastan VARIOS miles en pensamiento interno antes de
+    // generar la salida — y comparar dos análisis añade razonamiento. Con
+    // 8000 vimos truncados ocasionales; 12000 da margen sobrado. Si tu
+    // provider/modelo no es thinking no pasa nada: solo se cobra por los
+    // tokens realmente generados.
+    maxTokens:   12000,
   }
   const text = await provider.complete(systemPrompt, userPrompt, opts)
 
@@ -300,7 +335,7 @@ export async function analyzeStats(
 
 // ── Prompts ──────────────────────────────────────────────────────────────
 
-function buildSystemPrompt(): string {
+export function buildSystemPrompt(): string {
   return [
     "Eres un tutor experto del temario del permiso de conducir B en España (DGT / AEOL).",
     "Analizas el rendimiento de un alumno concreto para detectar sus debilidades y darle consejos accionables.",
@@ -308,6 +343,7 @@ function buildSystemPrompt(): string {
     "Devuelves EXCLUSIVAMENTE un JSON con esta forma:",
     "{",
     '  "valoracion":   "<2-3 frases breves valorando cómo va globalmente>",',
+    '  "progreso":     "<2-4 frases comparando con su análisis ANTERIOR: si ha subido o bajado el acierto global, qué debilidades ha reducido o agravado, si mantiene constancia. OMITE este campo por completo si no se te proporciona un análisis anterior>",',
     '  "fortalezas":   ["<1-3 puntos donde destaca>"],',
     '  "debilidades":  [{ "tema": "Tema · Bloque · Sub-bloque", "fallos": N, "comentario": "<1-2 frases: qué tipo de pregunta suele caer aquí y por qué le falla>" }],',
     '  "consejos":     ["<3-4 consejos accionables y concretos>"]',
@@ -318,6 +354,10 @@ function buildSystemPrompt(): string {
     "  Si el alumno tiene 15 fallos en un sub-bloque vs 3 fallos al 80% en otro, pesa MUCHO más el primero — ahí está perdiendo más puntos potenciales.",
     "- Ordena 'debilidades' de mayor a menor `fallos`. Como mucho 5 entradas.",
     "- Para cada debilidad, usa el nombre jerárquico legible (Tema + Bloque + Sub-bloque) que se te proporciona en el contexto, no el código crudo.",
+    "- COMPARACIÓN ('progreso'): si en el contexto aparece una sección 'ANÁLISIS ANTERIOR', compárala con los datos ACTUALES y rellena 'progreso'.",
+    "  Sé concreto y usa números: por ejemplo 'has pasado del 72% al 78% de acierto' o 'redujiste los fallos en Señales de 14 a 6'.",
+    "  Si una debilidad de antes ha mejorado, reconócelo; si ha empeorado o aparece una nueva, señálalo. Ten en cuenta esa evolución también al redactar 'valoracion' y 'consejos' (no repitas literalmente lo de la vez anterior; céntrate en lo que ha cambiado).",
+    "  Si NO hay análisis anterior en el contexto, NO incluyas el campo 'progreso' (ni vacío ni con texto genérico).",
     "- En 'consejos', si tiene sentido, anímale a usar el 'Modo refuerzo IA' del Test de errores (URL /test-errores) — es un modo que mantiene los fallos en su historial aunque los acierte, para que tú puedas seguir analizando.",
     "- Tono: cercano pero respetuoso, tutea en español de España ('llevas', 'sigues'). NUNCA condescendiente, NUNCA exagerado.",
     "- Sin emojis, sin signos de exclamación múltiples, sin markdown, sin negritas con asteriscos. Texto plano.",
@@ -326,7 +366,7 @@ function buildSystemPrompt(): string {
   ].join("\n")
 }
 
-function buildUserPrompt(ctx: StatsContext): string {
+export function buildUserPrompt(ctx: StatsContext): string {
   const { globals, topWeakBlocks } = ctx
   const wrong = globals.totalAnswers - globals.correctAnswers
   const accuracy = globals.totalAnswers > 0
@@ -337,13 +377,42 @@ function buildUserPrompt(ctx: StatsContext): string {
     : "0.0"
 
   const lines: string[] = []
-  lines.push("DATOS DEL ALUMNO:")
+  lines.push("DATOS ACTUALES DEL ALUMNO:")
   lines.push("")
   lines.push(`- Tests realizados:     ${globals.totalAttempts}`)
   lines.push(`- Respuestas totales:   ${globals.totalAnswers}`)
   lines.push(`- Aciertos:             ${globals.correctAnswers} (${accuracy} %)`)
   lines.push(`- Fallos:               ${wrong} (${errorRate} %)`)
   lines.push("")
+
+  // Bloque de comparación: solo si hay análisis anterior. Le damos al
+  // modelo las stats de entonces (para que calcule el delta) + las
+  // debilidades que detectó, de modo que pueda decir "antes 14 fallos en
+  // X, ahora 6" sin que tengamos que precomputar el diff aquí.
+  if (ctx.previous) {
+    const p = ctx.previous
+    const prevWrong = p.globals.totalAnswers - p.globals.correctAnswers
+    const prevAcc = p.globals.totalAnswers > 0
+      ? ((p.globals.correctAnswers / p.globals.totalAnswers) * 100).toFixed(1)
+      : "0.0"
+    const newAnswers = globals.totalAnswers - p.globals.totalAnswers
+    lines.push("ANÁLISIS ANTERIOR (para comparar y rellenar el campo 'progreso'):")
+    lines.push(`- Fecha del análisis previo: ${formatPrevDate(p.generatedAt)}`)
+    lines.push(`- Entonces: ${p.globals.totalAttempts} tests, ${p.globals.totalAnswers} respuestas, ${p.globals.correctAnswers} aciertos (${prevAcc} %), ${prevWrong} fallos.`)
+    lines.push(`- Desde entonces ha respondido ${newAnswers} pregunta${newAnswers === 1 ? "" : "s"} nueva${newAnswers === 1 ? "" : "s"}.`)
+    if (p.valoracion.trim()) {
+      lines.push(`- Valoración que diste entonces: "${truncate(p.valoracion.trim(), 280)}"`)
+    }
+    if (p.debilidades.length > 0) {
+      lines.push("- Debilidades que detectaste entonces (tema → fallos):")
+      p.debilidades.slice(0, 6).forEach((d) => {
+        lines.push(`    · ${d.tema} → ${d.fallos} fallos`)
+      })
+    }
+    lines.push("")
+    lines.push("Compara lo de arriba con los DATOS ACTUALES y los SUB-BLOQUES de abajo para construir 'progreso'.")
+    lines.push("")
+  }
 
   if (topWeakBlocks.length === 0) {
     lines.push("SUB-BLOQUES CON FALLOS: ninguno. El alumno no ha fallado en ningún sub-bloque concreto todavía.")
@@ -371,4 +440,12 @@ function buildUserPrompt(ctx: StatsContext): string {
 
 function truncate(s: string, n: number): string {
   return s.length <= n ? s : s.slice(0, n - 1) + "…"
+}
+
+/** Formatea la fecha del análisis previo en es-ES (día corto), tolerando
+ *  tanto Date como string ISO. Si no parsea, devuelve el valor crudo. */
+function formatPrevDate(d: string | Date): string {
+  const date = d instanceof Date ? d : new Date(d)
+  if (Number.isNaN(date.getTime())) return String(d)
+  return date.toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" })
 }

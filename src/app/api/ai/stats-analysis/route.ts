@@ -15,6 +15,7 @@ import {
   MIN_NEW_ANSWERS_FOR_REFRESH,
   MAX_HISTORY_ITEMS,
   type StatsAnalysisResult,
+  type PreviousAnalysis,
 } from "@/lib/aiStatsAnalysis"
 
 /** Coste del análisis IA del dashboard. */
@@ -144,8 +145,38 @@ export async function POST() {
     }
   }
 
-  // 5. Construir contexto + llamar al provider
-  const ctx = await buildStatsContext(user.id, { totalAttempts, totalAnswers, correctAnswers })
+  // 5. Construir el resumen del análisis ANTERIOR (si existe) para que el
+  //    modelo pueda comparar y comentar el progreso. Si el payload está
+  //    corrupto, seguimos sin comparación — no es crítico.
+  let previous: PreviousAnalysis | null = null
+  if (latest) {
+    try {
+      const prevPayload = JSON.parse(latest.payloadJson) as StatsAnalysisResult
+      previous = {
+        generatedAt: latest.updatedAt,
+        globals: {
+          totalAttempts:  latest.totalAttempts,
+          totalAnswers:   latest.totalAnswers,
+          correctAnswers: latest.correctAnswers,
+        },
+        valoracion:  typeof prevPayload.valoracion === "string" ? prevPayload.valoracion : "",
+        debilidades: Array.isArray(prevPayload.debilidades)
+          ? prevPayload.debilidades
+              .filter((d) => d && typeof d.tema === "string" && typeof d.fallos === "number")
+              .map((d) => ({ tema: d.tema, fallos: d.fallos }))
+          : [],
+      }
+    } catch {
+      previous = null
+    }
+  }
+
+  // 6. Construir contexto + llamar al provider
+  const ctx = await buildStatsContext(
+    user.id,
+    { totalAttempts, totalAnswers, correctAnswers },
+    previous,
+  )
   let result: StatsAnalysisResult
   try {
     const provider = await getActiveProvider()
@@ -211,7 +242,7 @@ export async function POST() {
     )
   }
 
-  // 6. Insertar el análisis nuevo + podar excedentes (>MAX_HISTORY_ITEMS)
+  // 7. Insertar el análisis nuevo + podar excedentes (>MAX_HISTORY_ITEMS)
   const provider = await getActiveProvider()
   let inserted: { id: number; updatedAt: Date } | null = null
   try {
