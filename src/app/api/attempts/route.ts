@@ -18,6 +18,7 @@ import {
   shouldResetXpOnBrokenStreak,
   MAX_RESTORE_CREDITS,
 } from "@/lib/streak"
+import { buildValidatedAnswerRows } from "@/lib/attemptAnswers"
 
 const submitSchema = z.object({
   testId: z.number().int().nullable(),
@@ -81,30 +82,77 @@ export async function POST(req: Request) {
     validTestId = null
   }
 
-  // Obtener todas las opciones correctas de las preguntas implicadas
-  // para calcular isCorrect en una sola query
+  // Validar las claves foráneas ANTES de insertar. Un examen reanudado
+  // desde localStorage puede referenciar preguntas u opciones que se han
+  // borrado o regenerado (p. ej. preguntas IA) entre que se cargó y se
+  // envió. Insertarlas reventaría con "FOREIGN KEY constraint failed"
+  // (issue DGT-TESTS-B). Cargamos qué IDs existen de verdad y delegamos el
+  // filtrado/puntuación en buildValidatedAnswerRows.
   const questionIds = answers.map((a) => a.questionId)
-  const correctOptions = await db.option.findMany({
-    where: { questionId: { in: questionIds }, isCorrect: true },
-    select: { id: true, questionId: true },
-  })
+  const selectedOptionIds = answers
+    .map((a) => a.selectedOptionId)
+    .filter((id): id is number => id !== null)
+
+  const [existingQuestions, correctOptions, existingSelectedOptions] = await Promise.all([
+    db.question.findMany({
+      where:  { id: { in: questionIds } },
+      select: { id: true },
+    }),
+    db.option.findMany({
+      where:  { questionId: { in: questionIds }, isCorrect: true },
+      select: { id: true, questionId: true },
+    }),
+    selectedOptionIds.length > 0
+      ? db.option.findMany({
+          where:  { id: { in: selectedOptionIds } },
+          select: { id: true },
+        })
+      : Promise.resolve([] as { id: number }[]),
+  ])
+
+  const validQuestionIds = new Set(existingQuestions.map((q) => q.id))
+  const validOptionIds   = new Set(existingSelectedOptions.map((o) => o.id))
   const correctByQuestion = new Map<number, number>()
   for (const co of correctOptions) {
     correctByQuestion.set(co.questionId, co.id)
   }
 
-  let score = 0
-  const answerRows = answers.map((a) => {
-    const correctOptId = correctByQuestion.get(a.questionId)
-    const isCorrect =
-      a.selectedOptionId !== null && correctOptId === a.selectedOptionId
-    if (isCorrect) score++
-    return {
-      questionId:       a.questionId,
-      selectedOptionId: a.selectedOptionId,
-      isCorrect,
-    }
+  const {
+    rows: answerRows,
+    score,
+    droppedQuestions,
+    droppedOptions,
+  } = buildValidatedAnswerRows({
+    answers,
+    validQuestionIds,
+    validOptionIds,
+    correctByQuestion,
   })
+
+  // Si TODAS las preguntas han desaparecido no hay intento que guardar: el
+  // test que tenía el usuario ya no existe tal cual. Pedimos recargar en
+  // vez de reventar con un 500 (FK constraint).
+  if (answerRows.length === 0) {
+    return NextResponse.json(
+      {
+        error: "Este test ha cambiado y ya no está disponible tal cual. Recárgalo para volver a intentarlo.",
+        code:  "stale_test",
+      },
+      { status: 409 },
+    )
+  }
+
+  if (droppedQuestions > 0 || droppedOptions > 0) {
+    console.warn(
+      `[attempts] user=${user.id} test=${validTestId ?? "errores"} — ` +
+      `descartadas ${droppedQuestions} pregunta(s) y ${droppedOptions} ` +
+      `opción(es) inexistente(s) al guardar el intento (test reanudado/obsoleto)`,
+    )
+  }
+
+  // El total real es el nº de respuestas que SÍ se guardan. En el caso
+  // normal (sin preguntas borradas) coincide con answers.length.
+  const totalAnswered = answerRows.length
 
   // Crear el intento y todas las respuestas en una transacción
   const attempt = await db.$transaction(async (tx) => {
@@ -113,7 +161,7 @@ export async function POST(req: Request) {
         userId: user.id,
         testId: validTestId,
         mode,
-        total:       answers.length,
+        total:       totalAnswered,
         score,
         finishedAt:  new Date(),
       },
@@ -257,7 +305,7 @@ export async function POST(req: Request) {
   let xpReward: AttemptXpReward
   try {
     const breakdown = isRealExam
-      ? computeExamXp({ score, total: answers.length })
+      ? computeExamXp({ score, total: totalAnswered })
       : []
     const xpAmount  = sumXp(breakdown)
     // Si no hay base que dar (práctica), awardXp con amount=0 es un
@@ -318,7 +366,7 @@ export async function POST(req: Request) {
   const response: SubmitAttemptResponse = {
     attemptId: attempt.id,
     score,
-    total:     answers.length,
+    total:     totalAnswered,
     redirectUrl,
     xp:        xpReward,
   }

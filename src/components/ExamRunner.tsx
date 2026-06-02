@@ -274,9 +274,25 @@ export function ExamRunner({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
+          // 409 stale_test es flujo normal (el test se modificó o se
+          // borró mientras el examen estaba abierto), no un bug que
+          // reportar a Sentry.
+          ignoreStatus: [409],
         })
         if (!res.ok) {
           const body = await res.json().catch(() => ({}))
+          // Test obsoleto: el examen reanudado apunta a preguntas que ya
+          // no existen. Limpiamos el estado guardado para que el usuario
+          // no quede atascado reenviando lo mismo y le pedimos recargar.
+          if (res.status === 409 && body.code === "stale_test") {
+            clearExamState()
+            submittedRef.current = false
+            toast.error("Este test ha cambiado", {
+              description: body.error ?? "Recárgalo para volver a intentarlo.",
+              duration: 7000,
+            })
+            return
+          }
           throw new Error(body.error ?? "Error al guardar el intento")
         }
         const data = (await res.json()) as SubmitAttemptResponse
