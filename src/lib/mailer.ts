@@ -1,18 +1,21 @@
 /**
  * Mailer único centralizado. Por debajo: nodemailer + SMTP de Resend.
  *
- * Env vars necesarias:
- *   RESEND_API_KEY  → API key de Resend con "Sending access" para el
- *                     dominio del sender (hdglabs.com). Se usa como
- *                     contraseña SMTP; el usuario SMTP es literalmente
- *                     "resend". Generar en https://resend.com/api-keys.
- *   MAIL_FROM       → opcional, sender por defecto tipo
- *                     "DGT-TESTS <noreply@hdglabs.com>". Si vacío, usa
- *                     el fallback hardcoded. El dominio del from DEBE
- *                     estar verificado en Resend (DKIM/SPF).
+ * Configuración:
+ *   RESEND_API_KEY  → (SECRETO, /admin/secrets o env) API key de Resend
+ *                     con "Sending access". Hace de contraseña SMTP.
+ *                     Sin ella, sendMail() loguea y devuelve false sin
+ *                     crashear (modo dev sin emails configurados).
+ *   SMTP_HOST / SMTP_PORT / SMTP_USER / MAIL_FROM → editables en caliente
+ *                     desde /admin (categoría Integraciones) o por env var
+ *                     del mismo nombre. Defaults = Resend
+ *                     (smtp.resend.com : 465, user "resend",
+ *                      from "DGT-TESTS <noreply@hdglabs.com>").
+ *                     El dominio del from DEBE estar verificado en el
+ *                     proveedor SMTP (DKIM/SPF).
  *
- * Si RESEND_API_KEY no está definida, sendMail() loguea y devuelve
- * false sin crashear (modo dev sin emails configurados).
+ * Los getters de config se leen con try/catch: si la BBDD está caída
+ * caemos a los defaults sin lanzar (el mailer es fire-and-forget).
  *
  * Decisión: Resend en lugar de Gmail SMTP para poder enviar con
  * remitente del dominio propio verificado (noreply@hdglabs.com) en vez
@@ -25,11 +28,19 @@
 import nodemailer from "nodemailer"
 import type { Transporter } from "nodemailer"
 import { getEffectiveSecret } from "@/lib/secretCatalog"
+import { getMailFrom, getSmtpHost, getSmtpPort, getSmtpUser } from "@/lib/configCatalog"
 import { captureAppException } from "@/lib/sentryUser"
 import { shouldNotifyOnce } from "@/lib/sentryThrottle"
 
-/** Sender por defecto si no se define MAIL_FROM ni un from per-email. */
+/**
+ * Defaults de último recurso si la BBDD está caída al leer la config
+ * (los getters de configCatalog ya aplican BBDD → env → estos valores,
+ * pero si la query de BBDD lanza los usamos directamente).
+ */
 const DEFAULT_FROM = "DGT-TESTS <noreply@hdglabs.com>"
+const DEFAULT_HOST = "smtp.resend.com"
+const DEFAULT_PORT = 465
+const DEFAULT_USER = "resend"
 
 /**
  * Códigos de error SISTÉMICOS de nodemailer/SMTP — el mismo error se
@@ -56,11 +67,27 @@ async function getTransporter(): Promise<Transporter | null> {
   // RESEND_API_KEY pasa por el helper: BBDD (cifrado) gana, fallback env.
   const apiKey = await getEffectiveSecret("RESEND_API_KEY")
   if (!apiKey) return null
+
+  // Host/puerto/usuario son editables desde /admin (categoría Integraciones).
+  // Nunca dejamos que un fallo de BBDD tumbe el mailer → fallback a defaults.
+  let host = DEFAULT_HOST
+  let port = DEFAULT_PORT
+  let user = DEFAULT_USER
+  try {
+    const [h, p, u] = await Promise.all([getSmtpHost(), getSmtpPort(), getSmtpUser()])
+    host = h
+    port = p
+    user = u
+  } catch {
+    // BBDD inaccesible → seguimos con los defaults de Resend.
+  }
+
   _transporter = nodemailer.createTransport({
-    host:   "smtp.resend.com",
-    port:   465,
-    secure: true,
-    auth:   { user: "resend", pass: apiKey },
+    host,
+    port,
+    // 465 = TLS implícito; 587/2587 = STARTTLS (secure=false + upgrade).
+    secure: port === 465,
+    auth:   { user, pass: apiKey },
   })
   return _transporter
 }
@@ -97,9 +124,15 @@ export async function sendMail(opts: SendMailOpts): Promise<boolean> {
     return false
   }
 
-  const from = opts.from
-    ?? process.env.MAIL_FROM
-    ?? DEFAULT_FROM
+  // Remitente: override per-email > MAIL_FROM (/admin o env) > default.
+  let from = opts.from
+  if (!from) {
+    try {
+      from = await getMailFrom()
+    } catch {
+      from = DEFAULT_FROM
+    }
+  }
 
   try {
     await transporter.sendMail({

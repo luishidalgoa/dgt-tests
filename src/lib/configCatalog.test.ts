@@ -12,6 +12,10 @@ import {
   isMaintenanceMode,
   isFeatureEnabled,
   getWelcomeMessage,
+  getMailFrom,
+  getSmtpHost,
+  getSmtpPort,
+  getSmtpUser,
 } from "./configCatalog"
 import { db } from "@/lib/db"
 
@@ -114,5 +118,37 @@ describe("getters tipados — leen el valor de BBDD si existe", () => {
       key: "FEATURE_COMPETIR", value: "false", encrypted: false, updatedAt: new Date(), updatedBy: null,
     } as never)
     expect(await isFeatureEnabled("competir")).toBe(false)
+  })
+})
+
+describe("getters SMTP — defaults Resend si no hay valor en DB ni env", () => {
+  beforeEach(() => {
+    vi.mocked(db.appConfig.findUnique).mockReset()
+    vi.mocked(db.appConfig.findUnique).mockResolvedValue(null)
+    delete process.env.MAIL_FROM
+    delete process.env.SMTP_HOST
+    delete process.env.SMTP_PORT
+    delete process.env.SMTP_USER
+  })
+
+  it("getMailFrom default = 'DGT-TESTS <noreply@hdglabs.com>'", async () => {
+    expect(await getMailFrom()).toBe("DGT-TESTS <noreply@hdglabs.com>")
+  })
+  it("getSmtpHost default = 'smtp.resend.com'", async () => {
+    expect(await getSmtpHost()).toBe("smtp.resend.com")
+  })
+  it("getSmtpPort default = 465", async () => {
+    expect(await getSmtpPort()).toBe(465)
+  })
+  it("getSmtpUser default = 'resend'", async () => {
+    expect(await getSmtpUser()).toBe("resend")
+  })
+
+  it("getMailFrom lee el valor de BBDD si existe", async () => {
+    vi.mocked(db.appConfig.findUnique).mockResolvedValue({
+      key: "MAIL_FROM", value: JSON.stringify("Soporte <soporte@hdglabs.com>"),
+      encrypted: false, updatedAt: new Date(), updatedBy: null,
+    } as never)
+    expect(await getMailFrom()).toBe("Soporte <soporte@hdglabs.com>")
   })
 })

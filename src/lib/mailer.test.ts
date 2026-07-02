@@ -19,6 +19,15 @@ vi.mock("@/lib/secretCatalog", () => ({
   getEffectiveSecret: vi.fn(async (key: string) => process.env[key] ?? null),
 }))
 
+// Config SMTP editable desde /admin. En tests devolvemos los defaults de
+// Resend; getMailFrom respeta process.env.MAIL_FROM para el test del override.
+vi.mock("@/lib/configCatalog", () => ({
+  getMailFrom: vi.fn(async () => process.env.MAIL_FROM ?? "DGT-TESTS <noreply@hdglabs.com>"),
+  getSmtpHost: vi.fn(async () => "smtp.resend.com"),
+  getSmtpPort: vi.fn(async () => 465),
+  getSmtpUser: vi.fn(async () => "resend"),
+}))
+
 import { sendMail, _resetMailerForTests } from "./mailer"
 import nodemailer from "nodemailer"
 

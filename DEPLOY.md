@@ -79,6 +79,13 @@ MAIL_FROM="DGT-TESTS <noreply@hdglabs.com>"  # opcional; el dominio debe estar v
 > con remitente del dominio propio verificado (hdglabs.com). Las variables
 > GMAIL_USER / GMAIL_APP_PASSWORD / GMAIL_FROM ya NO se usan: puedes
 > borrarlas de Vercel.
+>
+> ℹ **Editable en caliente desde `/admin`** (sin redeploy): `MAIL_FROM`,
+> `SMTP_HOST`, `SMTP_PORT` y `SMTP_USER` viven en el catálogo de config
+> (categoría Integraciones) y la API key en `/admin/secrets` como
+> `RESEND_API_KEY`. Las env vars de arriba solo hacen de fallback si no hay
+> valor en BBDD — útiles para el primer arranque. Prioridad: BBDD → env →
+> default (Resend).
 
 ### `.env.local` — overrides para DESARROLLO
 

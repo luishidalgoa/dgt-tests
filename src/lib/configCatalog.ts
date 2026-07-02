@@ -222,6 +222,44 @@ export const CONFIG_CATALOG: ConfigEntry[] = [
       },
     ],
   },
+
+  // ── Email / SMTP (saliente) ───────────────────────────────────────
+  // El envío usa SMTP (por defecto Resend). Estos 4 valores son editables
+  // en caliente desde /admin; la contraseña / API key va en /admin/secrets
+  // como RESEND_API_KEY. El mailer (src/lib/mailer.ts) los lee con estos
+  // defaults si no hay valor en BBDD ni en env var del mismo nombre.
+  {
+    key:         "MAIL_FROM",
+    type:        "string",
+    default:     "DGT-TESTS <noreply@hdglabs.com>",
+    label:       "Remitente (From) de los emails",
+    description: "Dirección + nombre visible del remitente, formato 'Nombre <email@dominio>'. El dominio DEBE estar verificado en el proveedor SMTP (Resend). Se aplica a emails de usuario y alertas admin.",
+    category:    "integrations",
+  },
+  {
+    key:         "SMTP_HOST",
+    type:        "string",
+    default:     "smtp.resend.com",
+    label:       "SMTP · Host",
+    description: "Servidor SMTP de salida. Por defecto Resend. Cámbialo para usar otro proveedor sin redeploy (p.ej. Gmail: smtp.gmail.com).",
+    category:    "integrations",
+  },
+  {
+    key:         "SMTP_PORT",
+    type:        "number",
+    default:     465,
+    label:       "SMTP · Puerto",
+    description: "465 = TLS implícito (recomendado). 587 / 2587 = STARTTLS. El mailer activa 'secure' automáticamente cuando el puerto es 465.",
+    category:    "integrations",
+  },
+  {
+    key:         "SMTP_USER",
+    type:        "string",
+    default:     "resend",
+    label:       "SMTP · Usuario",
+    description: "Usuario de autenticación SMTP. En Resend es literalmente 'resend' (la API key hace de contraseña). En Gmail sería tu dirección completa.",
+    category:    "integrations",
+  },
 ]
 
 // ── Getters tipados (cada uno lee BBDD con fallback al default) ──
@@ -307,4 +345,27 @@ export type AIProviderName = "gemini" | "groq"
 export async function getAIProvider(): Promise<AIProviderName> {
   const value = await getConfig("AI_PROVIDER", "gemini")
   return value === "groq" ? "groq" : "gemini"
+}
+
+// ── Email / SMTP ────────────────────────────────────────────────────
+// Prioridad de cada valor: BBDD (/admin) → env var del mismo nombre →
+// hardcoded (Resend). El mailer (src/lib/mailer.ts) envuelve estas
+// llamadas en try/catch: si la BBDD está caída, cae al default sin
+// lanzar (el mailer se usa fire-and-forget en webhooks).
+
+export async function getMailFrom(): Promise<string> {
+  return getConfig("MAIL_FROM", process.env.MAIL_FROM ?? "DGT-TESTS <noreply@hdglabs.com>")
+}
+
+export async function getSmtpHost(): Promise<string> {
+  return getConfig("SMTP_HOST", process.env.SMTP_HOST ?? "smtp.resend.com")
+}
+
+export async function getSmtpPort(): Promise<number> {
+  const envPort = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : undefined
+  return getConfig("SMTP_PORT", envPort && Number.isFinite(envPort) ? envPort : 465)
+}
+
+export async function getSmtpUser(): Promise<string> {
+  return getConfig("SMTP_USER", process.env.SMTP_USER ?? "resend")
 }
