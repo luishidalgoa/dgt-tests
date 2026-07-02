@@ -83,11 +83,11 @@ export const SECRET_CATALOG: SecretEntry[] = [
     group:        "IA",
   },
   {
-    key:          "GMAIL_APP_PASSWORD",
-    label:        "Gmail · App password",
-    description:  "Contraseña de aplicación (16 chars) para enviar emails vía SMTP de Gmail.",
-    formatHint:   "xxxx xxxx xxxx xxxx (con o sin espacios)",
-    providerUrl:  "https://myaccount.google.com/apppasswords",
+    key:          "RESEND_API_KEY",
+    label:        "Resend · API key",
+    description:  "API key con 'Sending access' para enviar emails (usuario + alertas admin) vía SMTP de Resend. Se usa como contraseña SMTP (usuario 'resend'). El dominio del remitente (MAIL_FROM) debe estar verificado en Resend.",
+    formatHint:   "re_...",
+    providerUrl:  "https://resend.com/api-keys",
   },
 
   // ── Sentry · Monitoreo de errores ────────────────────────────────────

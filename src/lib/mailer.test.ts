@@ -13,7 +13,7 @@ vi.mock("nodemailer", () => ({
 
 // Mock de getEffectiveSecret para que LEA SOLO de process.env durante
 // los tests, ignorando la BBDD. Sin esto, si el dev tiene
-// GMAIL_APP_PASSWORD configurado en /admin/secrets, el test ve ese
+// RESEND_API_KEY configurada en /admin/secrets, el test ve ese
 // valor en lugar del que controla con `delete process.env.*`.
 vi.mock("@/lib/secretCatalog", () => ({
   getEffectiveSecret: vi.fn(async (key: string) => process.env[key] ?? null),
@@ -22,23 +22,23 @@ vi.mock("@/lib/secretCatalog", () => ({
 import { sendMail, _resetMailerForTests } from "./mailer"
 import nodemailer from "nodemailer"
 
-describe("sendMail (nodemailer + Gmail)", () => {
+const DEFAULT_FROM = "DGT-TESTS <noreply@hdglabs.com>"
+
+describe("sendMail (nodemailer + Resend SMTP)", () => {
   beforeEach(() => {
     sendMailMock.mockReset()
     vi.mocked(nodemailer.createTransport).mockClear()
     _resetMailerForTests()
     // Limpiamos primero por si .env local se hubiera filtrado al proceso
-    delete process.env.GMAIL_FROM
-    process.env.GMAIL_USER = "test@gmail.com"
-    process.env.GMAIL_APP_PASSWORD = "abcd efgh ijkl mnop"
+    delete process.env.MAIL_FROM
+    process.env.RESEND_API_KEY = "re_test_key"
   })
   afterEach(() => {
-    delete process.env.GMAIL_USER
-    delete process.env.GMAIL_APP_PASSWORD
-    delete process.env.GMAIL_FROM
+    delete process.env.RESEND_API_KEY
+    delete process.env.MAIL_FROM
   })
 
-  it("crea el transporter con auth de Gmail y envía", async () => {
+  it("crea el transporter con SMTP de Resend y envía con el from por defecto", async () => {
     sendMailMock.mockResolvedValue({ messageId: "abc" })
     const ok = await sendMail({
       to: "user@example.com",
@@ -47,23 +47,25 @@ describe("sendMail (nodemailer + Gmail)", () => {
     })
     expect(ok).toBe(true)
     expect(nodemailer.createTransport).toHaveBeenCalledWith({
-      service: "gmail",
-      auth: { user: "test@gmail.com", pass: "abcd efgh ijkl mnop" },
+      host:   "smtp.resend.com",
+      port:   465,
+      secure: true,
+      auth:   { user: "resend", pass: "re_test_key" },
     })
     expect(sendMailMock).toHaveBeenCalledWith({
-      from:    "test@gmail.com",
+      from:    DEFAULT_FROM,
       to:      "user@example.com",
       subject: "test",
       html:    "<p>hi</p>",
     })
   })
 
-  it("usa GMAIL_FROM si está definido (formato 'Nombre <email>')", async () => {
-    process.env.GMAIL_FROM = "DGT Tests <luis@dgt-tests.local>"
+  it("usa MAIL_FROM si está definido (formato 'Nombre <email>')", async () => {
+    process.env.MAIL_FROM = "DGT-TESTS Alertas <alertas@hdglabs.com>"
     sendMailMock.mockResolvedValue({ messageId: "abc" })
     await sendMail({ to: "x@x.com", subject: "s", html: "h" })
     expect(sendMailMock).toHaveBeenCalledWith(
-      expect.objectContaining({ from: "DGT Tests <luis@dgt-tests.local>" })
+      expect.objectContaining({ from: "DGT-TESTS Alertas <alertas@hdglabs.com>" })
     )
   })
 
@@ -88,17 +90,11 @@ describe("sendMail (nodemailer + Gmail)", () => {
     expect(sendMailMock).toHaveBeenCalledTimes(2)
   })
 
-  it("devuelve false sin GMAIL_USER y NO crea transporter", async () => {
-    delete process.env.GMAIL_USER
+  it("devuelve false sin RESEND_API_KEY y NO crea transporter", async () => {
+    delete process.env.RESEND_API_KEY
     const ok = await sendMail({ to: "x@x.com", subject: "s", html: "h" })
     expect(ok).toBe(false)
     expect(nodemailer.createTransport).not.toHaveBeenCalled()
-  })
-
-  it("devuelve false sin GMAIL_APP_PASSWORD", async () => {
-    delete process.env.GMAIL_APP_PASSWORD
-    const ok = await sendMail({ to: "x@x.com", subject: "s", html: "h" })
-    expect(ok).toBe(false)
   })
 
   it("devuelve false si transporter.sendMail tira", async () => {

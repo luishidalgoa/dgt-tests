@@ -8,7 +8,7 @@
 async function main() {
   const apiKey = process.env.RESEND_API_KEY
   const to     = process.env.ALERT_EMAIL
-  const from   = process.env.ALERT_FROM ?? "DGT Tests Alerts <onboarding@resend.dev>"
+  const from   = process.env.ALERT_FROM ?? "DGT-TESTS <noreply@hdglabs.com>"
 
   console.log("Configuración:")
   console.log("  RESEND_API_KEY:", apiKey ? `${apiKey.slice(0, 8)}…` : "(no definida)")

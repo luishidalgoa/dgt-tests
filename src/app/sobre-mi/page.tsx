@@ -32,7 +32,7 @@ export const metadata: Metadata = {
   description: "Sobre Luis Hidalgo, desarrollador de DGT Tests.",
 }
 
-const PORTFOLIO_URL = "https://luishidalgoa.vercel.app/"
+const PORTFOLIO_URL = "https://portfolio.hdglabs.com/"
 const GITHUB_URL    = "https://github.com/luishidalgoa"
 const REPO_URL      = "https://github.com/luishidalgoa/dgt-tests"
 const AVATAR_SRC    = "/luis.jpg"   // Guardar en /public/luis.jpg
@@ -42,7 +42,7 @@ const TECH = [
   { group: "Backend",   items: ["Next.js Route Handlers", "iron-session (auth)", "Zod (validación)", "bcryptjs"] },
   { group: "Base de datos", items: ["Prisma ORM 6", "SQLite local + Turso (libSQL) en producción"] },
   { group: "IA",        items: ["Google Gemini Flash (multimodal: texto + imagen)", "Cache propio en Prisma"] },
-  { group: "Infra",     items: ["Vercel (deploy + edge)", "nodemailer + Gmail SMTP"] },
+  { group: "Infra",     items: ["Vercel (deploy + edge)", "nodemailer + Resend SMTP"] },
   { group: "Extra",     items: ["react-pageflip (manual)", "PDF.js (pre-rasterizado)", "Playwright + Firecrawl (scraping de fuentes)"] },
 ] as const
 
@@ -200,7 +200,7 @@ export default function SobreMiPage() {
               boxShadow: "0 8px 18px -10px rgba(220, 38, 38, 0.45)",
             }}
           >
-            Abrir luishidalgoa.vercel.app
+            Abrir portfolio.hdglabs.com
             <ArrowRight className="h-4 w-4" />
           </a>
         </section>

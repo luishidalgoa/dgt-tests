@@ -21,7 +21,7 @@ import { QUESTION_VISIBLE_WHERE } from "@/lib/questions"
  * cuando edites una pregunta se re-crawlee.
  */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app"
+  const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.hdglabs.com"
   const today   = new Date()
 
   // ── Estáticas ──────────────────────────────────────────────────────

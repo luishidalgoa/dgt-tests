@@ -12,7 +12,7 @@ import { StructuredDataBreadcrumb } from "@/components/StructuredData"
 import { InteractiveQuestion } from "@/components/InteractiveQuestion"
 import { QuestionReportButton } from "@/components/QuestionReportButton"
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app"
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.hdglabs.com"
 
 // Cache 24h en CDN/edge. Las preguntas DGT no cambian a menos que sea
 // una corrección puntual del enunciado → revalidar diario es suficiente.

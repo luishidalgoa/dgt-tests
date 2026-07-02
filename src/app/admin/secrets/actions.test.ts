@@ -54,13 +54,13 @@ describe("updateSecretAction", () => {
     expect(mocks.setSecretConfig).not.toHaveBeenCalled()
   })
 
-  it("acepta secrets con espacios (Gmail app password) y los preserva tal cual", async () => {
+  it("acepta secrets con espacios internos y los preserva tal cual (sin trim)", async () => {
     const res = await updateSecretAction(fd({
-      key: "GMAIL_APP_PASSWORD",
+      key: "RESEND_API_KEY",
       value: "abcd efgh ijkl mnop",
     }))
     expect(res.ok).toBe(true)
-    expect(mocks.setSecretConfig).toHaveBeenCalledWith("GMAIL_APP_PASSWORD", "abcd efgh ijkl mnop", { byUserId: 1 })
+    expect(mocks.setSecretConfig).toHaveBeenCalledWith("RESEND_API_KEY", "abcd efgh ijkl mnop", { byUserId: 1 })
   })
 })
 

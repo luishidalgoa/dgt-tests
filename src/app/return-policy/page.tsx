@@ -119,7 +119,7 @@ export default function ReturnPolicyPage() {
           Responderemos lo antes posible.
         </p>
         <a
-          href="mailto:luishidalgoa.ddns.net@gmail.com?subject=Solicitud%20de%20reembolso%20DGT%20Tests"
+          href="mailto:contact@hdglabs.com?subject=Solicitud%20de%20reembolso%20DGT%20Tests"
           className="btn-primary"
           style={{ display: "inline-flex" }}
         >

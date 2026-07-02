@@ -25,7 +25,7 @@ import { shouldNotifyOnce } from "@/lib/sentryThrottle"
  * sobre dinámicas, solo cae aquí lo que NINGÚN handler real captura.
  */
 
-const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app").replace(/\/$/, "")
+const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.hdglabs.com").replace(/\/$/, "")
 
 const BOT_UA_PATTERN = /(bot|crawler|spider|scraper|wget|curl|httrack|masscan|nikto|nmap|sqlmap|nuclei|gobuster)/i
 const BROWSER_UA_PATTERN = /(mozilla|chrome|safari|firefox|edge|opera)/i

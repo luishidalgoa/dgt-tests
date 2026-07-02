@@ -732,7 +732,7 @@ const CATEGORIES: Category[] = [
       },
       {
         name:        "dev:send-test-email",
-        description: "Envía un email de prueba via Gmail SMTP",
+        description: "Envía un email de prueba via Resend SMTP",
         args: [
           { name: "<username>", type: "string",            required: true, description: "Username destinatario (debe tener email)." },
           { name: "<kind>",     type: "upcoming | failed", required: true, description: "Tipo de email a probar." },

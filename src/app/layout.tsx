@@ -34,7 +34,7 @@ const jetbrainsMono = JetBrains_Mono({
 // metadataBase resuelve URLs relativas (OG image, canonical) a absolutas.
 // En prod = dominio público; en dev = localhost. Fallback hardcoded por si
 // arrancan el server sin .env (raro pero defensivo).
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app"
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.hdglabs.com"
 
 export const metadata: Metadata = {
   metadataBase: new URL(APP_URL),
@@ -46,7 +46,7 @@ export const metadata: Metadata = {
   description:
     "Practica los tests del examen teórico del carné de conducir (DGT). Permiso B, repaso final, test ADAS, test de errores y manual del temario — gratis para empezar.",
   applicationName: "DGT Tests",
-  authors:         [{ name: "Luis Hidalgo", url: "https://luishidalgoa.vercel.app/" }],
+  authors:         [{ name: "Luis Hidalgo", url: "https://portfolio.hdglabs.com/" }],
   creator:         "Luis Hidalgo",
   publisher:       "DGT Tests",
   keywords: [
@@ -230,7 +230,7 @@ export default async function RootLayout({
           </Link>
           {" · "}
           <a
-            href="https://luishidalgoa.vercel.app/"
+            href="https://portfolio.hdglabs.com/"
             target="_blank"
             rel="noopener noreferrer"
             style={{ color: "var(--slate-500)", textDecoration: "underline", textDecorationColor: "var(--slate-300)", textUnderlineOffset: 3 }}

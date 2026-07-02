@@ -29,6 +29,6 @@ export function imageUrl(filename: string): string {
  */
 export function absoluteImageUrl(filename: string): string {
   if (CDN_URL) return `${CDN_URL}/${filename}`
-  const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app").replace(/\/$/, "")
+  const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.hdglabs.com").replace(/\/$/, "")
   return `${APP_URL}/images/${filename}`
 }

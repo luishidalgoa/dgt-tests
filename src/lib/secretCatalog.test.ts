@@ -20,7 +20,7 @@ describe("SECRET_CATALOG", () => {
     expect(keys).toContain("STRIPE_SECRET_KEY")
     expect(keys).toContain("STRIPE_WEBHOOK_SECRET")
     expect(keys).toContain("GEMINI_API_KEY")
-    expect(keys).toContain("GMAIL_APP_PASSWORD")
+    expect(keys).toContain("RESEND_API_KEY")
   })
 
   it("cada entrada tiene label + description + hint format opcional", () => {

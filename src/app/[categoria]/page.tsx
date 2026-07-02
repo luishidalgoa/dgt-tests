@@ -16,7 +16,7 @@ import { RandomExamButton } from "@/components/RandomExamButton"
 
 export const dynamic = "force-dynamic"
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app"
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.hdglabs.com"
 
 interface PageProps {
   params: Promise<{ categoria: string }>
@@ -156,7 +156,7 @@ export default async function CategoryPage({ params }: PageProps) {
   return (
     <div>
       {/* Breadcrumb JSON-LD: rich result en SERPs muestra
-          "dgt-tests.vercel.app › Permiso B" en vez de la URL cruda. */}
+          "dgt-tests.hdglabs.com › Permiso B" en vez de la URL cruda. */}
       <StructuredDataBreadcrumb
         appUrl={APP_URL}
         items={[

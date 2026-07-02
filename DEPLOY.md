@@ -68,16 +68,17 @@ STRIPE_SECRET_KEY="rk_live_..."         # LIVE (¡cobra dinero real!)
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_live_..."
 STRIPE_WEBHOOK_SECRET="whsec_..."       # del endpoint LIVE del dashboard
 STRIPE_PRICE_ID="price_live_..."        # del producto en modo LIVE
-NEXT_PUBLIC_APP_URL="https://dgt-tests.vercel.app"
+NEXT_PUBLIC_APP_URL="https://dgt-tests.hdglabs.com"
 ALERT_EMAIL="..."                       # destinatario de alertas admin
-# Email (nodemailer + Gmail SMTP) — Fase 90
-GMAIL_USER="..."                        # tu cuenta gmail
-GMAIL_APP_PASSWORD="..."                # https://myaccount.google.com/apppasswords
-GMAIL_FROM="DGT Tests <...@gmail.com>"  # opcional, sender bonito
+# Email (nodemailer + Resend SMTP)
+RESEND_API_KEY="re_..."                 # API key con Sending access → https://resend.com/api-keys
+MAIL_FROM="DGT-TESTS <noreply@hdglabs.com>"  # opcional; el dominio debe estar verificado en Resend
 ```
 
-> ⚠ La columna RESEND_API_KEY de versiones anteriores ya NO se usa
-> desde Fase 90. Puedes borrarla de Vercel sin afectar a nada.
+> ℹ El correo (emails de usuario + alertas admin) sale por **Resend SMTP**
+> con remitente del dominio propio verificado (hdglabs.com). Las variables
+> GMAIL_USER / GMAIL_APP_PASSWORD / GMAIL_FROM ya NO se usan: puedes
+> borrarlas de Vercel.
 
 ### `.env.local` — overrides para DESARROLLO
 

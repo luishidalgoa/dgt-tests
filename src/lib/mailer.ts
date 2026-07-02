@@ -1,22 +1,23 @@
 /**
- * Mailer único centralizado. Por debajo: nodemailer + SMTP de Gmail.
+ * Mailer único centralizado. Por debajo: nodemailer + SMTP de Resend.
  *
  * Env vars necesarias:
- *   GMAIL_USER          → tu cuenta gmail (p.ej. luis.x@gmail.com)
- *   GMAIL_APP_PASSWORD  → contraseña de aplicación de 16 chars
- *                         (Google → Cuenta → Seguridad → 2FA →
- *                          Contraseñas de aplicaciones)
- *   GMAIL_FROM          → opcional, sender bonito tipo
- *                         "DGT Tests <luis.x@gmail.com>". Si vacío,
- *                         usa GMAIL_USER directo.
+ *   RESEND_API_KEY  → API key de Resend con "Sending access" para el
+ *                     dominio del sender (hdglabs.com). Se usa como
+ *                     contraseña SMTP; el usuario SMTP es literalmente
+ *                     "resend". Generar en https://resend.com/api-keys.
+ *   MAIL_FROM       → opcional, sender por defecto tipo
+ *                     "DGT-TESTS <noreply@hdglabs.com>". Si vacío, usa
+ *                     el fallback hardcoded. El dominio del from DEBE
+ *                     estar verificado en Resend (DKIM/SPF).
  *
- * Si las dos primeras no están definidas, sendMail() loguea y devuelve
+ * Si RESEND_API_KEY no está definida, sendMail() loguea y devuelve
  * false sin crashear (modo dev sin emails configurados).
  *
- * Decisión: Gmail SMTP en lugar de Resend porque no requiere
- * verificación de dominio para enviar a cualquier address. Límite
- * práctico ~500 emails/día por cuenta gratuita (suficiente para
- * webhooks de billing en escala media).
+ * Decisión: Resend en lugar de Gmail SMTP para poder enviar con
+ * remitente del dominio propio verificado (noreply@hdglabs.com) en vez
+ * de una cuenta gmail. Resend expone SMTP estándar (smtp.resend.com),
+ * así que reutilizamos nodemailer y todo el manejo de errores SMTP.
  *
  * El transporter se cachea entre llamadas (un solo socket pool).
  * Para tests existe _resetMailerForTests().
@@ -27,19 +28,22 @@ import { getEffectiveSecret } from "@/lib/secretCatalog"
 import { captureAppException } from "@/lib/sentryUser"
 import { shouldNotifyOnce } from "@/lib/sentryThrottle"
 
+/** Sender por defecto si no se define MAIL_FROM ni un from per-email. */
+const DEFAULT_FROM = "DGT-TESTS <noreply@hdglabs.com>"
+
 /**
- * Códigos de error SISTÉMICOS de nodemailer/Gmail SMTP — el mismo
- * error se reproducirá en cada send hasta que se arregle la config
- * o vuelva el servicio. Aplicamos throttle (1 evento por 30min) para
- * no spamear Sentry con 200 eventos idénticos durante un fallo.
+ * Códigos de error SISTÉMICOS de nodemailer/SMTP — el mismo error se
+ * reproducirá en cada send hasta que se arregle la config o vuelva el
+ * servicio. Aplicamos throttle (1 evento por 30min) para no spamear
+ * Sentry con 200 eventos idénticos durante un fallo.
  *
- *   EAUTH       → password incorrecto / 2FA cambió / app password revocada
- *   ECONNECTION → no podemos conectar a smtp.gmail.com (red, DNS, firewall)
- *   ETIMEDOUT   → conexión abierta pero Gmail no responde (rate limit
+ *   EAUTH       → API key incorrecta / revocada / sin permiso de envío
+ *   ECONNECTION → no podemos conectar a smtp.resend.com (red, DNS, firewall)
+ *   ETIMEDOUT   → conexión abierta pero Resend no responde (rate limit
  *                 oculto, servidor sobrecargado)
  *
  * Códigos PER-EMAIL (no throttle, queremos cada uno):
- *   EENVELOPE   → email destinatario mal formateado / rebotado por Gmail
+ *   EENVELOPE   → email destinatario mal formateado / rebotado
  *   EMESSAGE    → mensaje rechazado (spam, demasiado grande)
  *   ESTREAM     → fallo al leer body, raro
  */
@@ -49,13 +53,14 @@ let _transporter: Transporter | null = null
 
 async function getTransporter(): Promise<Transporter | null> {
   if (_transporter) return _transporter
-  const user = process.env.GMAIL_USER
-  // GMAIL_APP_PASSWORD pasa por el helper: BBDD (cifrado) gana, fallback env.
-  const pass = await getEffectiveSecret("GMAIL_APP_PASSWORD")
-  if (!user || !pass) return null
+  // RESEND_API_KEY pasa por el helper: BBDD (cifrado) gana, fallback env.
+  const apiKey = await getEffectiveSecret("RESEND_API_KEY")
+  if (!apiKey) return null
   _transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: { user, pass },
+    host:   "smtp.resend.com",
+    port:   465,
+    secure: true,
+    auth:   { user: "resend", pass: apiKey },
   })
   return _transporter
 }
@@ -69,7 +74,7 @@ export interface SendMailOpts {
   to:      string
   subject: string
   html:    string
-  /** Override del sender. Si no se pasa, usa GMAIL_FROM o GMAIL_USER. */
+  /** Override del sender. Si no se pasa, usa MAIL_FROM o DEFAULT_FROM. */
   from?:   string
 }
 
@@ -84,7 +89,7 @@ export async function sendMail(opts: SendMailOpts): Promise<boolean> {
   const transporter = await getTransporter()
   if (!transporter) {
     console.warn(
-      "[mailer] GMAIL_USER/GMAIL_APP_PASSWORD no configurados — email omitido:",
+      "[mailer] RESEND_API_KEY no configurada — email omitido:",
       opts.subject,
       "→",
       opts.to
@@ -93,8 +98,8 @@ export async function sendMail(opts: SendMailOpts): Promise<boolean> {
   }
 
   const from = opts.from
-    ?? process.env.GMAIL_FROM
-    ?? process.env.GMAIL_USER!
+    ?? process.env.MAIL_FROM
+    ?? DEFAULT_FROM
 
   try {
     await transporter.sendMail({
@@ -111,17 +116,17 @@ export async function sendMail(opts: SendMailOpts): Promise<boolean> {
     // los emails fallidos serían silenciosos.
     const code          = (err as { code?: string })?.code ?? "unknown"
     const isSystemic    = SYSTEMIC_SMTP_CODES.has(code)
-    // Throttle: si Gmail se cae o se cambió la app password, los próximos
+    // Throttle: si Resend se cae o se revocó la API key, los próximos
     // 200 emails fallarán todos con el MISMO código → 1 evento basta.
     // Per-email (EENVELOPE etc.) siempre capturamos para diagnosticar
     // emails inválidos concretos.
-    const shouldCapture = !isSystemic || shouldNotifyOnce(`mailer:gmail:${code}`)
+    const shouldCapture = !isSystemic || shouldNotifyOnce(`mailer:resend:${code}`)
     if (shouldCapture) {
       const recipientHash = await hashEmailForLog(opts.to)
       captureAppException(err, {
         category: "email",
         tags: {
-          provider:  "gmail-smtp",
+          provider:  "resend-smtp",
           errorCode: code,
         },
         extra: {
@@ -132,7 +137,7 @@ export async function sendMail(opts: SendMailOpts): Promise<boolean> {
         // Sistémicos = warning (condición temporal infra).
         // Per-email = error (algo concreto que se debería arreglar).
         level:       isSystemic ? "warning" : "error",
-        fingerprint: isSystemic ? ["mailer-systemic", "gmail", code] : undefined,
+        fingerprint: isSystemic ? ["mailer-systemic", "resend", code] : undefined,
       })
     }
     return false

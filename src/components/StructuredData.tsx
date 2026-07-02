@@ -13,7 +13,7 @@
  *    sitio de exámenes y diferencia de competidores que no lo declaran.
  *
  * Validar tras deploy:
- *   https://search.google.com/test/rich-results?url=https://dgt-tests.vercel.app
+ *   https://search.google.com/test/rich-results?url=https://dgt-tests.hdglabs.com
  *
  * Schemas server-rendered como <script type="application/ld+json"> en el
  * <head>. Sin JS necesario en cliente — Google los procesa al crawlear.
@@ -60,12 +60,12 @@ export function StructuredDataHome({ appUrl }: StructuredDataProps) {
     founder: {
       "@type": "Person",
       name:    "Luis Hidalgo",
-      url:     "https://luishidalgoa.vercel.app/",
+      url:     "https://portfolio.hdglabs.com/",
     },
     // sameAs: links a redes oficiales. Vacío de momento; cuando tengas
     // Twitter/Instagram/LinkedIn oficial de DGT Tests, los añades aquí.
     sameAs: [
-      "https://luishidalgoa.vercel.app/",
+      "https://portfolio.hdglabs.com/",
     ],
   }
 
@@ -166,7 +166,7 @@ export function StructuredDataHome({ appUrl }: StructuredDataProps) {
  * BreadcrumbList schema para páginas internas. Google lo usa para mostrar
  * la "miga de pan" debajo del título en SERPs:
  *
- *   dgt-tests.vercel.app › Permiso B › Test 3
+ *   dgt-tests.hdglabs.com › Permiso B › Test 3
  *
  * en vez de la URL cruda. Mejora CTR notablemente — la miga es más legible
  * que la URL y orienta al usuario sobre dónde aterriza al hacer click.

@@ -15,7 +15,7 @@ import type { MetadataRoute } from "next"
  * que devuelven 4xx.
  */
 export default function robots(): MetadataRoute.Robots {
-  const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app"
+  const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.hdglabs.com"
   return {
     rules: {
       userAgent: "*",

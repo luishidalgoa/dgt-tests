@@ -5,7 +5,7 @@ import { ChevronLeft, Clock, ArrowRight, BookOpen } from "lucide-react"
 import { RECURSOS, findRecurso, relatedRecursos } from "@/content/recursos/_registry"
 import { StructuredDataBreadcrumb } from "@/components/StructuredData"
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app"
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.hdglabs.com"
 
 interface PageProps {
   params: Promise<{ slug: string }>
@@ -39,7 +39,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       description:   entry.meta.description,
       publishedTime: entry.meta.publishedAt,
       modifiedTime:  entry.meta.updatedAt,
-      authors:       ["https://luishidalgoa.vercel.app/"],
+      authors:       ["https://portfolio.hdglabs.com/"],
     },
   }
 }
@@ -84,7 +84,7 @@ export default async function RecursoArticlePage({ params }: PageProps) {
     author: {
       "@type": "Person",
       name:    "Luis Hidalgo",
-      url:     "https://luishidalgoa.vercel.app/",
+      url:     "https://portfolio.hdglabs.com/",
     },
     publisher: {
       "@type": "Organization",

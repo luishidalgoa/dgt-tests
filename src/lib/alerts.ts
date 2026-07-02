@@ -1,10 +1,10 @@
 /**
  * Avisos por email al admin cuando algo crítico falla en el servidor.
  *
- * Usa el mailer central (src/lib/mailer.ts → nodemailer + Gmail).
+ * Usa el mailer central (src/lib/mailer.ts → nodemailer + Resend SMTP).
  * Env vars que esto necesita:
- *   ALERT_EMAIL   → email del admin (a dónde llegan las alertas)
- *   GMAIL_USER, GMAIL_APP_PASSWORD → ver src/lib/mailer.ts
+ *   ALERT_EMAIL     → email del admin (a dónde llegan las alertas)
+ *   RESEND_API_KEY  → ver src/lib/mailer.ts
  *
  * Rate-limit en memoria: máximo 1 email por hora por tipo, para no
  * spamear cuando la cuota está rota y cada request falla.

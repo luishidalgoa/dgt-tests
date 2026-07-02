@@ -26,7 +26,7 @@ import type { AnalyticsEvent, AnalyticsProps } from "@/lib/analytics"
 
 const WEBSITE_ID = process.env.NEXT_PUBLIC_ANALYTICS_WEBSITE_ID ?? ""
 const SCRIPT_URL = process.env.NEXT_PUBLIC_ANALYTICS_SCRIPT_URL ?? ""
-const APP_URL    = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app"
+const APP_URL    = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.hdglabs.com"
 
 const HOSTNAME = APP_URL
   .replace(/^https?:\/\//, "")

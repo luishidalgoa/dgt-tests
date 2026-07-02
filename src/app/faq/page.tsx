@@ -103,7 +103,7 @@ const FAQS: { question: string; answer: string }[] = [
   },
 ]
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app"
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.hdglabs.com"
 
 export default function FAQPage() {
   // Schema.org FAQPage: cada Question/Answer es una entry independiente

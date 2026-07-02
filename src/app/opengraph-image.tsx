@@ -10,7 +10,7 @@ import { ImageResponse } from "next/og"
  * build — usa la fuente system del runtime de Vercel (Inter equivalente).
  *
  * Cómo previsualizar tras commit: abre
- *   https://dgt-tests.vercel.app/opengraph-image
+ *   https://dgt-tests.hdglabs.com/opengraph-image
  * Pruébala en https://www.opengraph.xyz/url/<URL_ENCODED>
  */
 
@@ -106,7 +106,7 @@ export default async function OpengraphImage() {
             letterSpacing: "0.04em",
           }}
         >
-          dgt-tests.vercel.app
+          dgt-tests.hdglabs.com
         </div>
       </div>
     ),

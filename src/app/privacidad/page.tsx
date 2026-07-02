@@ -169,12 +169,12 @@ export default function PrivacidadPage() {
       <p style={{ fontSize: 12, color: "var(--slate-500)", textAlign: "center", marginTop: 22 }}>
         ¿Dudas? Escríbeme desde{" "}
         <a
-          href="https://luishidalgoa.vercel.app/"
+          href="https://portfolio.hdglabs.com/"
           target="_blank"
           rel="noopener noreferrer"
           style={{ color: "var(--orange-600)", textDecoration: "underline" }}
         >
-          luishidalgoa.vercel.app
+          portfolio.hdglabs.com
           <ExternalLink className="h-3 w-3 inline ml-0.5" />
         </a>
         .

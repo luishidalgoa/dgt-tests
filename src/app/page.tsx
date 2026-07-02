@@ -15,7 +15,7 @@ import { RandomExamButton } from "@/components/RandomExamButton"
 import { computeRestoreTargetDays, getLevel, getStreakState } from "@/lib/xp"
 import { computeStreakState } from "@/lib/streak"
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app"
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.hdglabs.com"
 
 export const dynamic = "force-dynamic"
 

@@ -8,7 +8,7 @@ import { isSeoExposeProQuestions } from "@/lib/configCatalog"
 import { QUESTION_VISIBLE_WHERE } from "@/lib/questions"
 import { StructuredDataBreadcrumb } from "@/components/StructuredData"
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.vercel.app"
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://dgt-tests.hdglabs.com"
 
 // 24h de caché. Cuando se publican preguntas nuevas o se cambian de tier,
 // se regenera el listado al día siguiente sin redeploy.
