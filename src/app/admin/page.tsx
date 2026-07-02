@@ -5,7 +5,7 @@ import { getEffectiveSecret } from "@/lib/secretCatalog"
 import { db } from "@/lib/db"
 import { QUESTION_APPROVED_AI_WHERE, QUESTION_PENDING_REVIEW_WHERE } from "@/lib/questions"
 import { ConfigForm } from "./ConfigForm"
-import { Sliders, ToggleLeft, MessageSquareText, Sparkles, ListChecks, ArrowRight, Pencil, MessageSquareWarning, BarChart3, Bug, Cloud, ExternalLink, Image as ImageIcon } from "lucide-react"
+import { Sliders, ToggleLeft, MessageSquareText, Sparkles, Mail, ListChecks, ArrowRight, Pencil, MessageSquareWarning, BarChart3, Bug, Cloud, ExternalLink, Image as ImageIcon } from "lucide-react"
 
 export const dynamic = "force-dynamic"
 
@@ -70,6 +70,12 @@ export default async function AdminPage() {
       title:    "Integraciones IA",
       icon:     <Sparkles className="h-5 w-5" />,
       entries:  CONFIG_CATALOG.filter((c) => c.category === "integrations"),
+    },
+    {
+      category: "email",
+      title:    "Email / SMTP",
+      icon:     <Mail className="h-5 w-5" />,
+      entries:  CONFIG_CATALOG.filter((c) => c.category === "email"),
     },
   ]
 

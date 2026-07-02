@@ -39,7 +39,7 @@ describe("CONFIG_CATALOG", () => {
       expect(entry.type).toMatch(/^(number|boolean|string)$/)
       expect(entry.default).toBeDefined()
       expect(entry.label).toBeTruthy()
-      expect(entry.category).toMatch(/^(quotas|features|messages|integrations)$/)
+      expect(entry.category).toMatch(/^(quotas|features|messages|integrations|email)$/)
     }
   })
 })

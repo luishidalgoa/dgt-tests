@@ -17,7 +17,7 @@
  */
 import { getConfig } from "@/lib/appConfig"
 
-export type ConfigCategory = "quotas" | "features" | "messages" | "integrations"
+export type ConfigCategory = "quotas" | "features" | "messages" | "integrations" | "email"
 
 export interface ConfigOption {
   /** Valor que se guarda en BBDD. */
@@ -234,7 +234,7 @@ export const CONFIG_CATALOG: ConfigEntry[] = [
     default:     "DGT-TESTS <noreply@hdglabs.com>",
     label:       "Remitente (From) de los emails",
     description: "Dirección + nombre visible del remitente, formato 'Nombre <email@dominio>'. El dominio DEBE estar verificado en el proveedor SMTP (Resend). Se aplica a emails de usuario y alertas admin.",
-    category:    "integrations",
+    category:    "email",
   },
   {
     key:         "SMTP_HOST",
@@ -242,7 +242,7 @@ export const CONFIG_CATALOG: ConfigEntry[] = [
     default:     "smtp.resend.com",
     label:       "SMTP · Host",
     description: "Servidor SMTP de salida. Por defecto Resend. Cámbialo para usar otro proveedor sin redeploy (p.ej. Gmail: smtp.gmail.com).",
-    category:    "integrations",
+    category:    "email",
   },
   {
     key:         "SMTP_PORT",
@@ -250,7 +250,7 @@ export const CONFIG_CATALOG: ConfigEntry[] = [
     default:     465,
     label:       "SMTP · Puerto",
     description: "465 = TLS implícito (recomendado). 587 / 2587 = STARTTLS. El mailer activa 'secure' automáticamente cuando el puerto es 465.",
-    category:    "integrations",
+    category:    "email",
   },
   {
     key:         "SMTP_USER",
@@ -258,7 +258,7 @@ export const CONFIG_CATALOG: ConfigEntry[] = [
     default:     "resend",
     label:       "SMTP · Usuario",
     description: "Usuario de autenticación SMTP. En Resend es literalmente 'resend' (la API key hace de contraseña). En Gmail sería tu dirección completa.",
-    category:    "integrations",
+    category:    "email",
   },
 ]
 
